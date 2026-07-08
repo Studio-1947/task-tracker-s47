@@ -1,4 +1,4 @@
-import type { Role } from './enums';
+import type { AuditAction, Priority, Role, TaskStatus } from './enums';
 
 /** Shape of the authenticated user echoed by the API (never includes passwordHash). */
 export interface AuthUser {
@@ -62,4 +62,59 @@ export interface WorkspaceSummary {
   isArchived: boolean;
   createdAt: string;
   memberCount?: number;
+}
+
+export interface UserRef {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface LabelRef {
+  id: string;
+  name: string;
+  color: string | null;
+}
+
+/** Row shape for List / Table / Kanban — all three render from this. */
+export interface TaskListItem {
+  id: string;
+  workspaceId: string;
+  number: number;
+  /** Human-readable reference, e.g. "ENG-142" (prefix + number). */
+  ref: string;
+  title: string;
+  status: TaskStatus;
+  priority: Priority;
+  dueDate: string | null;
+  assignees: UserRef[];
+  labels: LabelRef[];
+  commentCount: number;
+  isArchived: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskDetail extends TaskListItem {
+  description: string | null;
+  createdBy: UserRef;
+}
+
+export interface TaskComment {
+  id: string;
+  body: string;
+  user: UserRef;
+  createdAt: string;
+}
+
+/** One audit/history entry as returned to the client. */
+export interface AuditEntry {
+  id: string;
+  action: AuditAction;
+  taskId: string | null;
+  taskRef: string | null;
+  user: UserRef;
+  beforeValue: unknown;
+  afterValue: unknown;
+  createdAt: string;
 }

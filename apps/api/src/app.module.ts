@@ -8,6 +8,8 @@ import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
+import { TasksModule } from './tasks/tasks.module';
+import { AuditModule } from './audit/audit.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -28,6 +30,8 @@ import { HealthController } from './health/health.controller';
     AuthModule,
     UsersModule,
     WorkspacesModule,
+    TasksModule,
+    AuditModule,
   ],
   controllers: [HealthController],
   providers: [

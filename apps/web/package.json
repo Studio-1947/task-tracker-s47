@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.62.11",
+    "@tanstack/react-table": "^8.20.6",
     "@task-tracker/shared": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

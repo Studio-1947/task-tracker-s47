@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ApiRequestError } from '../lib/api';
 import { useCreateWorkspace, useWorkspaces } from '../hooks/useWorkspaces';
 import { useAuth } from '../stores/auth';
@@ -57,17 +58,19 @@ export function WorkspacesPage() {
         ) : data && data.length > 0 ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {data.map((w) => (
-              <Card key={w.id} className="p-5">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="font-medium text-slate-800">{w.name}</div>
-                    <div className="mt-0.5 text-xs text-slate-400">{w.taskPrefix}</div>
+              <Link key={w.id} to={`/workspaces/${w.id}`} className="block">
+                <Card className="p-5 transition hover:border-indigo-300 hover:shadow-sm">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="font-medium text-slate-800">{w.name}</div>
+                      <div className="mt-0.5 text-xs text-slate-400">{w.taskPrefix}</div>
+                    </div>
+                    {w.isArchived ? <Badge tone="amber">Archived</Badge> : <Badge tone="green">Active</Badge>}
                   </div>
-                  {w.isArchived ? <Badge tone="amber">Archived</Badge> : <Badge tone="green">Active</Badge>}
-                </div>
-                {w.description ? <p className="mt-3 text-sm text-slate-500">{w.description}</p> : null}
-                <div className="mt-4 text-xs text-slate-400">{w.memberCount ?? 0} members</div>
-              </Card>
+                  {w.description ? <p className="mt-3 text-sm text-slate-500">{w.description}</p> : null}
+                  <div className="mt-4 text-xs text-slate-400">{w.memberCount ?? 0} members</div>
+                </Card>
+              </Link>
             ))}
           </div>
         ) : (

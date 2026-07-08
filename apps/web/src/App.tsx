@@ -6,6 +6,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { UsersPage } from './pages/UsersPage';
 import { WorkspacesPage } from './pages/WorkspacesPage';
+import { WorkspaceTasksPage } from './pages/WorkspaceTasksPage';
 import { useAuth } from './stores/auth';
 
 function RequireAuth() {
@@ -39,6 +40,7 @@ export default function App() {
         <Route element={<AppShell />}>
           <Route index element={<DashboardPage />} />
           <Route path="workspaces" element={<WorkspacesPage />} />
+          <Route path="workspaces/:id" element={<WorkspaceTasksPage />} />
           <Route element={<RequireAdmin />}>
             <Route path="users" element={<UsersPage />} />
           </Route>

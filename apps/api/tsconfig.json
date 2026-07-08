@@ -14,6 +14,9 @@
     "sourceMap": true,
     "types": ["node"],
     "noUncheckedIndexedAccess": false
+    // NOTE: do NOT enable "incremental" here. `nest build` sets deleteOutDir=true;
+    // with incremental, tsc trusts .tsbuildinfo and re-emits only changed files
+    // after the dir is wiped, leaving a partial dist (missing main.js).
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]

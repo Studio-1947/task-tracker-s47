@@ -66,21 +66,26 @@ Open http://localhost:5173 and sign in with the seeded admin.
 | `pnpm db:studio` | Open Drizzle Studio |
 | `pnpm db:seed` | Seed the admin user |
 
-## What's built (foundation)
+## What's built
 
 - ✅ Monorepo + Docker Postgres + Drizzle schema & migrations (all core entities)
 - ✅ Auth: login / refresh / logout, RBAC guards, `tokenVersion` instant lockout,
   temp-password onboarding, forced password change
 - ✅ Users (admin CRUD) + Workspaces (CRUD, membership, task-prefix)
-- ✅ Web: auth flow, dashboard, workspaces, users admin — with loading/empty/error states
+- ✅ **Tasks**: create (atomic `ENG-142` refs), list with filter/search/sort/paginate,
+  detail, update, archive (soft-delete), multi-assignee, comments
+- ✅ **Audit log**: every task mutation writes one immutable row *in the same
+  transaction* (one row per changed field); per-task history + workspace/global
+  activity feeds
+- ✅ Web: auth flow, dashboard, workspaces, users admin, and a **workspace task board
+  with List + Table (TanStack Table) views** + a task detail drawer (inline edit,
+  comments, history timeline) — all with loading/empty/error states
 
 ## Next (per PRD §12 build order)
 
-2. Task CRUD + List/Table views
-3. Audit-log interceptor wiring
-4. Kanban (dnd-kit + optimistic updates)
-5. Dashboards (admin global + member home)
-6. Polish: comments, labels, filters
+4. Kanban view (dnd-kit + optimistic status updates) — reuses the same task API
+5. Dashboards (admin global stats + member "my tasks" home)
+6. Polish: labels, saved filters, richer empty states
 
 ## Deployment
 
