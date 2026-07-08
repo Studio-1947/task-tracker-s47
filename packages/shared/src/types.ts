@@ -107,6 +107,37 @@ export interface TaskComment {
   createdAt: string;
 }
 
+/** Compact task row for the member "my tasks" home. */
+export interface MyTaskItem {
+  id: string;
+  ref: string;
+  title: string;
+  status: TaskStatus;
+  priority: Priority;
+  dueDate: string | null;
+  workspaceId: string;
+  workspaceName: string;
+}
+
+export type StatusCounts = Record<TaskStatus, number>;
+
+export interface AdminDashboard {
+  totalWorkspaces: number;
+  totalUsers: number;
+  tasksByStatus: StatusCounts;
+  overdueTasks: number;
+  mostActiveWorkspace: { id: string; name: string; activityCount: number } | null;
+  recentActivity: AuditEntry[];
+}
+
+export interface MemberDashboard {
+  myTasks: MyTaskItem[];
+  myWorkspaceCount: number;
+  myWorkspaceTaskCount: number;
+  tasksByStatus: StatusCounts;
+  recentActivity: AuditEntry[];
+}
+
 /** One audit/history entry as returned to the client. */
 export interface AuditEntry {
   id: string;

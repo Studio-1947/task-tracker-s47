@@ -77,15 +77,17 @@ Open http://localhost:5173 and sign in with the seeded admin.
 - ✅ **Audit log**: every task mutation writes one immutable row *in the same
   transaction* (one row per changed field); per-task history + workspace/global
   activity feeds
-- ✅ Web: auth flow, dashboard, workspaces, users admin, and a **workspace task board
-  with List + Table (TanStack Table) views** + a task detail drawer (inline edit,
-  comments, history timeline) — all with loading/empty/error states
+- ✅ **Kanban** view (dnd-kit) with drag-to-change-status + optimistic updates
+- ✅ **Dashboards**: admin global stats (workspaces/users/overdue/tasks-by-status/most-active
+  + activity feed) and member "my tasks" home (scoped to your workspaces)
+- ✅ Web: auth flow, workspaces, users admin, a **workspace task board with
+  List + Table (TanStack Table) + Kanban views** + a task detail drawer (inline edit,
+  comments, history timeline), and role-aware dashboards — all with loading/empty/error
+  states, **mobile-responsive** throughout
 
 ## Next (per PRD §12 build order)
 
-4. Kanban view (dnd-kit + optimistic status updates) — reuses the same task API
-5. Dashboards (admin global stats + member "my tasks" home)
-6. Polish: labels, saved filters, richer empty states
+6. Polish: labels + label management UI, saved filters, richer empty states, subtasks (fast-follow)
 
 ## Deployment
 
