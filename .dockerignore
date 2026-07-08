@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+**/build
+**/.turbo
+**/coverage
+**/*.tsbuildinfo
+.git
+.github
+.data
+**/.env
+**/.env.*
+!**/.env.example
+*.md

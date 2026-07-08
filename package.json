@@ -1,0 +1,31 @@
+{
+  "name": "task-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Inhouse Task Tracker — self-hosted Kanban/List/Table task management",
+  "packageManager": "pnpm@10.13.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:generate": "pnpm --filter @task-tracker/api db:generate",
+    "db:migrate": "pnpm --filter @task-tracker/api db:migrate",
+    "db:studio": "pnpm --filter @task-tracker/api db:studio",
+    "db:seed": "pnpm --filter @task-tracker/api db:seed"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.3",
+    "prettier": "^3.4.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["argon2", "esbuild"]
+  }
+}
