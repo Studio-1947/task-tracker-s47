@@ -1,5 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CreatedUserWithTempPassword, CreateUserInput, UserSummary } from '@task-tracker/shared';
+import type {
+  CreatedUserWithTempPassword,
+  CreateUserInput,
+  UpdateUserInput,
+  UserSummary,
+} from '@task-tracker/shared';
 import { http } from '../lib/api';
 
 export function useUsers() {
@@ -20,8 +25,14 @@ export function useCreateUser() {
 export function useUpdateUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
-      http.patch<UserSummary>(`/users/${id}`, { isActive }),
+    mutationFn: ({ id, patch }: { id: string; patch: UpdateUserInput }) =>
+      http.patch<UserSummary>(`/users/${id}`, patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+}
+
+export function useResetPassword() {
+  return useMutation({
+    mutationFn: (id: string) => http.post<{ tempPassword: string }>(`/users/${id}/reset-password`),
   });
 }

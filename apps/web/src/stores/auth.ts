@@ -7,6 +7,7 @@ interface AuthState {
   status: 'loading' | 'authenticated' | 'anonymous';
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   /** Attempt silent session restore via the refresh cookie on app load. */
   bootstrap: () => Promise<void>;
 }
@@ -33,6 +34,13 @@ export const useAuth = create<AuthState>((set) => ({
       setAccessToken(null);
       set({ user: null, status: 'anonymous' });
     }
+  },
+
+  changePassword: async (currentPassword, newPassword) => {
+    // Returns fresh tokens (server bumps tokenVersion), so we stay signed in.
+    const res = await http.post<LoginResp>('/auth/change-password', { currentPassword, newPassword });
+    setAccessToken(res.accessToken);
+    set({ user: res.user, status: 'authenticated' });
   },
 
   bootstrap: async () => {

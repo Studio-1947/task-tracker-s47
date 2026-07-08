@@ -17,11 +17,14 @@ import {
   type TaskFilters,
 } from '../hooks/useTasks';
 import { useLabels } from '../hooks/useLabels';
+import { useAuth } from '../stores/auth';
 import { formatDate, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
 import { ApiRequestError } from '../lib/api';
 import { Badge, Button, Card, EmptyState, ErrorState, Input, LabelChip, Spinner } from '../components/ui';
 import { TaskDrawer } from '../components/TaskDrawer';
 import { KanbanView } from '../components/KanbanView';
+import { CreateTaskModal } from '../components/CreateTaskModal';
+import { WorkspaceSettings } from '../components/WorkspaceSettings';
 
 type View = 'list' | 'table' | 'kanban';
 
@@ -45,18 +48,28 @@ function loadFilters(workspaceId: string): TaskFilters {
 }
 
 function Board({ workspaceId }: { workspaceId: string }) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
   const { data: workspace } = useWorkspace(workspaceId);
   const { data: members } = useWorkspaceMembers(workspaceId);
   const { data: labels } = useLabels(workspaceId);
   const [view, setView] = useState<View>('list');
   const [filters, setFilters] = useState<TaskFilters>(() => loadFilters(workspaceId));
+  const [page, setPage] = useState(1);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
-  const { data, isLoading, error } = useTasks(workspaceId, filters);
+  const [showCreate, setShowCreate] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const { data, isLoading, error } = useTasks(workspaceId, { ...filters, page });
 
   // Persist filters per workspace (saved filters).
   useEffect(() => {
     localStorage.setItem(`tt.filters.${workspaceId}`, JSON.stringify(filters));
   }, [filters, workspaceId]);
+
+  // Reset to page 1 whenever a filter changes.
+  useEffect(() => {
+    setPage(1);
+  }, [filters.status, filters.assigneeId, filters.labelId, filters.search, filters.sort, filters.order]);
 
   const createTask = useCreateTask(workspaceId);
   const [newTitle, setNewTitle] = useState('');
@@ -68,6 +81,9 @@ function Board({ workspaceId }: { workspaceId: string }) {
 
   const filtersActive =
     !!filters.search || !!filters.status || !!filters.assigneeId || !!filters.labelId;
+
+  const pageSize = data?.pageSize ?? 50;
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / pageSize)) : 1;
 
   const onCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,19 +100,26 @@ function Board({ workspaceId }: { workspaceId: string }) {
           </Link>
           <h1 className="mt-1 text-2xl font-semibold text-slate-800">{workspace?.name ?? 'Tasks'}</h1>
         </div>
-        <div className="inline-flex self-start overflow-hidden rounded-md border border-slate-300 sm:self-auto">
-          {(['list', 'table', 'kanban'] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setView(v)}
-              className={`px-3 py-1.5 text-sm font-medium capitalize ${
-                view === v ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              {v}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex overflow-hidden rounded-md border border-slate-300">
+            {(['list', 'table', 'kanban'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setView(v)}
+                className={`px-3 py-1.5 text-sm font-medium capitalize ${
+                  view === v ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+          {isAdmin ? (
+            <Button variant="ghost" onClick={() => setShowSettings(true)}>
+              Manage
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -104,13 +127,16 @@ function Board({ workspaceId }: { workspaceId: string }) {
       <Card className="mt-6 p-4">
         <form className="flex flex-wrap items-center gap-3" onSubmit={onCreate}>
           <Input
-            className="flex-1 min-w-[220px]"
-            placeholder="New task title…"
+            className="flex-1 min-w-[200px]"
+            placeholder="Quick add — task title…"
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
           />
           <Button type="submit" disabled={createTask.isPending}>
-            {createTask.isPending ? 'Adding…' : 'Add task'}
+            {createTask.isPending ? 'Adding…' : 'Add'}
+          </Button>
+          <Button type="button" variant="ghost" onClick={() => setShowCreate(true)}>
+            + Detailed task
           </Button>
         </form>
         <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -191,7 +217,24 @@ function Board({ workspaceId }: { workspaceId: string }) {
         ) : (
           <KanbanView workspaceId={workspaceId} tasks={data.items} onOpen={setOpenTaskId} />
         )}
-        {data ? <p className="mt-3 text-xs text-slate-400">{data.total} task(s)</p> : null}
+        {data ? (
+          <div className="mt-3 flex items-center justify-between">
+            <p className="text-xs text-slate-400">{data.total} task(s)</p>
+            {view !== 'kanban' && totalPages > 1 ? (
+              <div className="flex items-center gap-2 text-sm">
+                <Button variant="ghost" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                  Prev
+                </Button>
+                <span className="text-slate-500">
+                  {page} / {totalPages}
+                </span>
+                <Button variant="ghost" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                  Next
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {openTaskId ? (
@@ -202,6 +245,17 @@ function Board({ workspaceId }: { workspaceId: string }) {
           labels={labels ?? []}
           onClose={() => setOpenTaskId(null)}
         />
+      ) : null}
+      {showCreate ? (
+        <CreateTaskModal
+          workspaceId={workspaceId}
+          members={memberRefs}
+          labels={labels ?? []}
+          onClose={() => setShowCreate(false)}
+        />
+      ) : null}
+      {showSettings ? (
+        <WorkspaceSettings workspaceId={workspaceId} onClose={() => setShowSettings(false)} />
       ) : null}
     </div>
   );

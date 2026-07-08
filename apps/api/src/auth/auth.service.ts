@@ -53,6 +53,14 @@ export class AuthService {
     return u;
   }
 
+  /** Build an access token + refresh token pair for a user row. */
+  private makeSession(user: UserRow): { tokens: LoginResponse; refreshToken: string } {
+    return {
+      tokens: { accessToken: this.signAccess(user), user: this.toAuthUser(user) },
+      refreshToken: this.signRefresh(user),
+    };
+  }
+
   /** Verify credentials; returns { access token, refresh token, user }. */
   async login(email: string, password: string): Promise<{ tokens: LoginResponse; refreshToken: string }> {
     const user = await this.findByEmail(email);
@@ -97,8 +105,16 @@ export class AuthService {
     return this.toAuthUser(user);
   }
 
-  /** Change own password; bumps tokenVersion so other sessions are invalidated. */
-  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+  /**
+   * Change own password; bumps tokenVersion so OTHER sessions are invalidated, and
+   * returns a fresh token pair so the caller's own session continues seamlessly
+   * (important for the forced first-login reset — otherwise the user is logged out).
+   */
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<{ tokens: LoginResponse; refreshToken: string }> {
     const user = await this.findById(userId);
     if (!user) throw new UnauthorizedException();
 
@@ -106,7 +122,7 @@ export class AuthService {
     if (!ok) throw new UnauthorizedException('Current password is incorrect');
 
     const passwordHash = await argon2.hash(newPassword, { type: argon2.argon2id });
-    await this.db
+    const [updated] = await this.db
       .update(users)
       .set({
         passwordHash,
@@ -114,6 +130,8 @@ export class AuthService {
         tokenVersion: user.tokenVersion + 1,
         updatedAt: new Date(),
       })
-      .where(eq(users.id, userId));
+      .where(eq(users.id, userId))
+      .returning();
+    return this.makeSession(updated!);
   }
 }

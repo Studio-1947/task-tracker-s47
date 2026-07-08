@@ -19,6 +19,7 @@ export interface TaskFilters {
   search?: string;
   sort?: string;
   order?: 'asc' | 'desc';
+  page?: number;
 }
 
 function toQueryString(filters: TaskFilters): string {

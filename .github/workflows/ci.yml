@@ -59,3 +59,21 @@ jobs:
 
       - name: Build all
         run: pnpm build
+
+      - name: Seed admin
+        run: pnpm --filter @task-tracker/api db:seed
+
+      - name: Start API + run e2e smoke
+        run: |
+          node apps/api/dist/main.js &
+          API_PID=$!
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000/api/health && break
+            sleep 1
+          done
+          node scripts/e2e-smoke.mjs
+          RESULT=$?
+          kill $API_PID || true
+          exit $RESULT
+        env:
+          API_PORT: 3000

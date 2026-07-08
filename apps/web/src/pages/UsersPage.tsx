@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import type { Role } from '@task-tracker/shared';
+import { ROLES, type Role } from '@task-tracker/shared';
 import { ApiRequestError } from '../lib/api';
-import { useCreateUser, useUpdateUser, useUsers } from '../hooks/useUsers';
+import { useCreateUser, useResetPassword, useUpdateUser, useUsers } from '../hooks/useUsers';
 import { Badge, Button, Card, EmptyState, ErrorState, Input, Spinner } from '../components/ui';
 
 export function UsersPage() {
   const { data, isLoading, error } = useUsers();
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
+  const resetPassword = useResetPassword();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -80,7 +81,7 @@ export function UsersPage() {
           <ErrorState message={error instanceof ApiRequestError ? error.message : 'Failed to load'} />
         ) : data && data.length > 0 ? (
           <Card className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm">
+            <table className="w-full min-w-[860px] text-sm">
               <thead className="bg-slate-50 text-left text-slate-500">
                 <tr>
                   <th className="px-4 py-2 font-medium">Name</th>
@@ -99,20 +100,49 @@ export function UsersPage() {
                     <td className="px-4 py-2.5 font-medium text-slate-700">{u.name}</td>
                     <td className="px-4 py-2.5 text-slate-500">{u.email}</td>
                     <td className="px-4 py-2.5">
-                      <Badge>{u.role}</Badge>
+                      <select
+                        aria-label={`Role for ${u.name}`}
+                        className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                        value={u.role}
+                        onChange={(e) => updateUser.mutate({ id: u.id, patch: { role: e.target.value as Role } })}
+                        disabled={updateUser.isPending}
+                      >
+                        {ROLES.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     <td className="px-4 py-2.5 text-slate-500">{u.workspaceCount ?? 0}</td>
                     <td className="px-4 py-2.5">
                       {u.isActive ? <Badge tone="green">Active</Badge> : <Badge tone="amber">Inactive</Badge>}
                     </td>
-                    <td className="px-4 py-2.5 text-right">
-                      <Button
-                        variant={u.isActive ? 'danger' : 'ghost'}
-                        onClick={() => updateUser.mutate({ id: u.id, isActive: !u.isActive })}
-                        disabled={updateUser.isPending}
-                      >
-                        {u.isActive ? 'Deactivate' : 'Reactivate'}
-                      </Button>
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          disabled={resetPassword.isPending}
+                          onClick={async () => {
+                            setFormError(null);
+                            try {
+                              const res = await resetPassword.mutateAsync(u.id);
+                              setTempPassword({ email: u.email, password: res.tempPassword });
+                            } catch (err) {
+                              setFormError(err instanceof ApiRequestError ? err.message : 'Failed to reset');
+                            }
+                          }}
+                        >
+                          Reset password
+                        </Button>
+                        <Button
+                          variant={u.isActive ? 'danger' : 'ghost'}
+                          onClick={() => updateUser.mutate({ id: u.id, patch: { isActive: !u.isActive } })}
+                          disabled={updateUser.isPending}
+                        >
+                          {u.isActive ? 'Deactivate' : 'Reactivate'}
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}

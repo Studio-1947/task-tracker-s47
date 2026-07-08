@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, Req, Res, UsePipes } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { CookieOptions, Request, Response } from 'express';
 import {
@@ -38,8 +38,10 @@ export class AuthController {
   @Public()
   @Post('login')
   @HttpCode(200)
-  @UsePipes(new ZodValidationPipe(loginSchema))
-  async login(@Body() body: LoginInput, @Res({ passthrough: true }) res: Response): Promise<LoginResponse> {
+  async login(
+    @Body(new ZodValidationPipe(loginSchema)) body: LoginInput,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<LoginResponse> {
     const { tokens, refreshToken } = await this.auth.login(body.email, body.password);
     res.cookie(REFRESH_COOKIE, refreshToken, this.refreshCookieOptions());
     return tokens;
@@ -68,9 +70,18 @@ export class AuthController {
   }
 
   @Post('change-password')
-  @HttpCode(204)
-  @UsePipes(new ZodValidationPipe(changePasswordSchema))
-  async changePassword(@CurrentUser('id') userId: string, @Body() body: ChangePasswordInput): Promise<void> {
-    await this.auth.changePassword(userId, body.currentPassword, body.newPassword);
+  @HttpCode(200)
+  async changePassword(
+    @CurrentUser('id') userId: string,
+    @Body(new ZodValidationPipe(changePasswordSchema)) body: ChangePasswordInput,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<LoginResponse> {
+    const { tokens, refreshToken } = await this.auth.changePassword(
+      userId,
+      body.currentPassword,
+      body.newPassword,
+    );
+    res.cookie(REFRESH_COOKIE, refreshToken, this.refreshCookieOptions());
+    return tokens;
   }
 }
