@@ -45,17 +45,28 @@ export function WorkspaceSettings({ workspaceId, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
-      <button type="button" aria-label="Close" className="flex-1 bg-slate-900/20" onClick={onClose} />
-      <div className="flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-slate-200 bg-white shadow-xl">
+      {/* Backdrop */}
+      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs animate-fade-in" onClick={onClose} />
+
+      {/* Drawer content */}
+      <div className="relative z-50 flex h-full w-[calc(100%-3rem)] sm:w-full sm:max-w-md flex-col overflow-y-auto border-l border-slate-200 bg-white shadow-xl animate-slide-in">
         {isLoading || !workspace ? (
           <Spinner />
         ) : (
           <div className="flex flex-col gap-6 p-4 sm:p-6">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
               <h2 className="text-lg font-semibold text-slate-800">Workspace settings</h2>
-              <Button variant="ghost" onClick={onClose}>
-                Close
-              </Button>
+              <button
+                type="button"
+                aria-label="Close"
+                className="shrink-0 rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition"
+                onClick={onClose}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
             </div>
 
             {/* Details */}

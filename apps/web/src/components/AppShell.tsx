@@ -80,11 +80,24 @@ export function AppShell() {
           <button
             type="button"
             aria-label="Close menu"
-            className="flex-1 bg-slate-900/30"
+            className="flex-1 bg-slate-900/30 animate-fade-in"
             onClick={() => setMobileOpen(false)}
           />
-          <div className="flex w-64 flex-col bg-white shadow-xl">
-            <div className="px-5 py-4 text-lg font-semibold text-slate-800">Task Tracker</div>
+          <div className="flex w-64 flex-col bg-white shadow-xl animate-slide-in-left">
+            <div className="flex items-center justify-between px-5 py-4">
+              <span className="text-lg font-semibold text-slate-800">Task Tracker</span>
+              <button
+                type="button"
+                aria-label="Close menu"
+                className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                onClick={() => setMobileOpen(false)}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
             <nav className="flex-1 space-y-1 px-3">
               <NavItems onNavigate={() => setMobileOpen(false)} />
             </nav>

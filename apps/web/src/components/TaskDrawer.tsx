@@ -38,20 +38,31 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose }: Pr
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
-      <button type="button" aria-label="Close" className="flex-1 bg-slate-900/20" onClick={onClose} />
-      <div className="flex h-full w-full max-w-xl flex-col overflow-y-auto border-l border-slate-200 bg-white shadow-xl">
+      {/* Backdrop */}
+      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs animate-fade-in" onClick={onClose} />
+
+      {/* Drawer content */}
+      <div className="relative z-50 flex h-full w-[calc(100%-3rem)] sm:w-[36rem] max-w-xl flex-col overflow-y-auto border-l border-slate-200 bg-white shadow-xl animate-slide-in">
         {isLoading || !task ? (
           <Spinner />
         ) : (
           <div className="flex flex-col gap-6 p-4 sm:p-6">
-            <div className="flex items-start justify-between">
-              <div>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
                 <div className="text-xs font-medium text-slate-400">{task.ref}</div>
-                <h2 className="mt-1 text-lg font-semibold text-slate-800">{task.title}</h2>
+                <h2 className="mt-1 text-lg font-semibold text-slate-800 break-words">{task.title}</h2>
               </div>
-              <Button variant="ghost" onClick={onClose}>
-                Close
-              </Button>
+              <button
+                type="button"
+                aria-label="Close"
+                className="shrink-0 rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition"
+                onClick={onClose}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

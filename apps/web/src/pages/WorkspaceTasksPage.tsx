@@ -125,30 +125,32 @@ function Board({ workspaceId }: { workspaceId: string }) {
 
       {/* Create + filters */}
       <Card className="mt-6 p-4">
-        <form className="flex flex-wrap items-center gap-3" onSubmit={onCreate}>
+        <form className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3" onSubmit={onCreate}>
           <Input
-            className="flex-1 min-w-[200px]"
+            className="flex-1"
             placeholder="Quick add — task title…"
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
           />
-          <Button type="submit" disabled={createTask.isPending}>
-            {createTask.isPending ? 'Adding…' : 'Add'}
-          </Button>
-          <Button type="button" variant="ghost" onClick={() => setShowCreate(true)}>
-            + Detailed task
-          </Button>
+          <div className="flex gap-2 shrink-0">
+            <Button type="submit" className="flex-1 sm:flex-initial" disabled={createTask.isPending}>
+              {createTask.isPending ? 'Adding…' : 'Add'}
+            </Button>
+            <Button type="button" className="flex-1 sm:flex-initial" variant="ghost" onClick={() => setShowCreate(true)}>
+              + Detailed task
+            </Button>
+          </div>
         </form>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-3">
           <Input
-            className="w-full sm:w-56"
+            className="w-full lg:w-56"
             placeholder="Search title/description…"
             value={filters.search ?? ''}
             onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
           />
           <select
             aria-label="Filter by status"
-            className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm bg-white lg:w-auto"
             value={filters.status ?? ''}
             onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value || undefined }))}
           >
@@ -161,7 +163,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
           </select>
           <select
             aria-label="Filter by assignee"
-            className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm bg-white lg:w-auto"
             value={filters.assigneeId ?? ''}
             onChange={(e) => setFilters((f) => ({ ...f, assigneeId: e.target.value || undefined }))}
           >
@@ -174,7 +176,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
           </select>
           <select
             aria-label="Filter by label"
-            className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm bg-white lg:w-auto"
             value={filters.labelId ?? ''}
             onChange={(e) => setFilters((f) => ({ ...f, labelId: e.target.value || undefined }))}
           >
@@ -186,7 +188,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
             ))}
           </select>
           {filtersActive ? (
-            <Button variant="ghost" onClick={() => setFilters({ ...DEFAULT_FILTERS })}>
+            <Button variant="ghost" className="w-full lg:w-auto" onClick={() => setFilters({ ...DEFAULT_FILTERS })}>
               Reset filters
             </Button>
           ) : null}
@@ -276,29 +278,45 @@ function ListView({ tasks, onOpen }: { tasks: TaskListItem[]; onOpen: (id: strin
           key={t.id}
           type="button"
           onClick={() => onOpen(t.id)}
-          className="flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-3 text-left hover:border-indigo-300 hover:shadow-sm sm:gap-3 sm:px-4"
+          className="w-full rounded-lg border border-slate-200 bg-white p-3 text-left hover:border-indigo-300 hover:shadow-sm sm:flex sm:items-center sm:gap-3 sm:px-4"
         >
-          <span className="hidden w-16 shrink-0 font-mono text-xs text-slate-400 sm:inline">{t.ref}</span>
-          <span className="min-w-0 flex-1 truncate font-medium text-slate-700">{t.title}</span>
-          {t.labels.slice(0, 2).map((l) => (
-            <span key={l.id} className="hidden lg:inline">
-              <LabelChip name={l.name} color={l.color} />
-            </span>
-          ))}
-          {t.assignees[0] ? (
-            <span className="hidden md:inline-flex">
-              <Badge>{t.assignees[0].name}</Badge>
-            </span>
-          ) : null}
-          <span
-            className={`hidden text-xs sm:inline ${isOverdue(t.dueDate) ? 'font-medium text-red-600' : 'text-slate-400'}`}
-          >
-            {formatDate(t.dueDate)}
-          </span>
-          <span className="hidden sm:inline">
-            <PriorityBadge t={t} />
-          </span>
-          <StatusBadge t={t} />
+          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3 sm:flex-1 min-w-0">
+            {/* Primary Row: Ref, Title, Mobile Status */}
+            <div className="flex items-center justify-between sm:justify-start gap-2 min-w-0 sm:flex-1">
+              <span className="font-mono text-xs text-slate-400 w-12 sm:w-16 shrink-0">{t.ref}</span>
+              <span className="min-w-0 flex-1 truncate font-medium text-slate-700">{t.title}</span>
+              <span className="sm:hidden shrink-0">
+                <StatusBadge t={t} />
+              </span>
+            </div>
+
+            {/* Metadata Row: labels, assignee, due date, priority, status */}
+            <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:shrink-0 sm:gap-3">
+              {t.labels.length > 0 ? (
+                <div className="flex flex-wrap gap-1 sm:hidden lg:flex">
+                  {t.labels.slice(0, 2).map((l) => (
+                    <LabelChip key={l.id} name={l.name} color={l.color} />
+                  ))}
+                </div>
+              ) : null}
+              {t.assignees[0] ? (
+                <span className="sm:hidden md:inline-flex">
+                  <Badge>{t.assignees[0].name}</Badge>
+                </span>
+              ) : null}
+              {t.dueDate ? (
+                <span
+                  className={`text-xs ${isOverdue(t.dueDate) ? 'font-medium text-red-600' : 'text-slate-400'}`}
+                >
+                  {formatDate(t.dueDate)}
+                </span>
+              ) : null}
+              <PriorityBadge t={t} />
+              <span className="hidden sm:inline">
+                <StatusBadge t={t} />
+              </span>
+            </div>
+          </div>
         </button>
       ))}
     </div>

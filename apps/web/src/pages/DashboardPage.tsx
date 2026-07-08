@@ -84,7 +84,7 @@ function AdminView() {
 
   return (
     <div className="mt-6 space-y-6">
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Workspaces" value={data.totalWorkspaces} />
         <Stat label="Users" value={data.totalUsers} />
         <Stat label="Overdue tasks" value={data.overdueTasks} tone={data.overdueTasks > 0 ? 'danger' : undefined} />
@@ -106,7 +106,7 @@ function MemberView() {
 
   return (
     <div className="mt-6 space-y-6">
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Stat label="Assigned to me" value={data.myTasks.length} />
         <Stat label="My workspaces" value={data.myWorkspaceCount} />
         <Stat label="Workspace tasks" value={data.myWorkspaceTaskCount} />
@@ -122,16 +122,32 @@ function MemberView() {
               <Link
                 key={t.id}
                 to={`/workspaces/${t.workspaceId}`}
-                className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 hover:border-indigo-300 sm:gap-3"
+                className="block rounded-lg border border-slate-200 bg-white p-3 hover:border-indigo-300 hover:shadow-sm sm:flex sm:items-center sm:gap-3 sm:px-4"
               >
-                <span className="hidden w-16 shrink-0 font-mono text-xs text-slate-400 sm:inline">{t.ref}</span>
-                <span className="min-w-0 flex-1 truncate font-medium text-slate-700">{t.title}</span>
-                <span className="hidden text-xs text-slate-400 md:inline">{t.workspaceName}</span>
-                <span className={`hidden text-xs sm:inline ${isOverdue(t.dueDate) ? 'font-medium text-red-600' : 'text-slate-400'}`}>
-                  {formatDate(t.dueDate)}
-                </span>
-                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${priorityClasses[t.priority]}`}>{t.priority}</span>
-                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusClasses[t.status]}`}>{statusLabel(t.status)}</span>
+                <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3 sm:flex-1 min-w-0">
+                  {/* Primary Row: Ref, Title, Mobile Status */}
+                  <div className="flex items-center justify-between sm:justify-start gap-2 min-w-0 sm:flex-1">
+                    <span className="font-mono text-xs text-slate-400 w-12 sm:w-16 shrink-0">{t.ref}</span>
+                    <span className="min-w-0 flex-1 truncate font-medium text-slate-700">{t.title}</span>
+                    <span className="sm:hidden shrink-0">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusClasses[t.status]}`}>{statusLabel(t.status)}</span>
+                    </span>
+                  </div>
+
+                  {/* Metadata Row */}
+                  <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:shrink-0 sm:gap-3">
+                    <span className="text-xs text-slate-400">{t.workspaceName}</span>
+                    {t.dueDate ? (
+                      <span className={`text-xs ${isOverdue(t.dueDate) ? 'font-medium text-red-600' : 'text-slate-400'}`}>
+                        {formatDate(t.dueDate)}
+                      </span>
+                    ) : null}
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${priorityClasses[t.priority]}`}>{t.priority}</span>
+                    <span className="hidden sm:inline">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusClasses[t.status]}`}>{statusLabel(t.status)}</span>
+                    </span>
+                  </div>
+                </div>
               </Link>
             ))}
           </div>
