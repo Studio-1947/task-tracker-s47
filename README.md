@@ -97,3 +97,8 @@ explicit fast-follows from PRD §8: subtasks/checklists, notifications, realtime
 ## Deployment
 
 See [`deploy/README.md`](./deploy/README.md).
+
+## CI/CD Status
+
+- CI checks: Enabled (formatting, typescript typecheck, unit tests, e2e smoke tests)
+- CD deployment: Enabled (auto-deploys to Hostinger VPS on push to main branch)
