@@ -1,76 +1,120 @@
-# Deployment (VPS)
+# Deployment & CI/CD Documentation
 
-Boring, single-VM deployment via Docker Compose. Postgres + API + web (nginx),
-all on one internal Docker network; only the web container publishes a port.
+This project is configured for automated deployment (CI/CD) to a Hostinger VPS. Every push to the `main` branch undergoes automated testing and, if successful, triggers a secure deployment to the server.
 
-## Prerequisites on the VPS
+---
 
-- Docker + Docker Compose plugin
-- A domain pointing at the VPS (for TLS)
-- Ports 80/443 open
+## 🏗️ Architecture Overview
 
-## First deploy
+The application runs inside Docker containers via Docker Compose on the VPS:
+- **Postgres**: Database service (internal network only, no exposed ports for security).
+- **API**: NestJS backend service (internal network only, runs migrations on startup).
+- **Web**: Nginx serving static Vite frontend files and reverse-proxying `/api` requests (exposes port `8080` to the host).
+- **Nginx (VPS Host)**: Master reverse proxy listening on ports `80` and `443` to route traffic to the Docker container and manage SSL certificates.
 
-```bash
-git clone <your-repo> task-tracker && cd task-tracker
-cp .env.example .env
-# Edit .env — set STRONG secrets:
-#   POSTGRES_PASSWORD, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET
-#   COOKIE_DOMAIN=your.domain, CORS_ORIGIN=https://your.domain
-# Generate secrets:
-node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+---
 
-docker compose -f docker-compose.prod.yml up -d --build
+## 🚀 Continuous Deployment (GitHub Actions)
 
-# Seed the first admin (uses SEED_ADMIN_* from .env). Migrations run automatically
-# when the api container boots.
-docker compose -f docker-compose.prod.yml exec api node dist/database/seed.js
-```
+We have added a `deploy` job in the [ci.yml](file:///c:/Users/soumi/Desktop/task-tracker-s47/.github/workflows/ci.yml) workflow. 
 
-The web container listens on `${WEB_PORT:-8080}`. Put a TLS terminator in front of it.
+### Deployment Flow:
+1. Code pushed to `main` branch.
+2. GitHub runner spins up and runs test suite:
+   - Typescript typechecks
+   - Database migrations and seed verification
+   - Unit tests
+   - End-to-End smoke test
+3. If all tests pass, the `deploy` job runs:
+   - Uses `appleboy/ssh-action` to connect to the VPS via SSH.
+   - Pulls the latest commits.
+   - Rebuilds and starts the containers with zero-downtime recreation.
 
-## TLS / reverse proxy
+### Required GitHub Secrets:
+To configure the connection, the following Secrets must be present in the GitHub repository (**Settings -> Secrets and variables -> Actions**):
+- `VPS_HOST`: Public IP of the VPS (`187.127.185.82`).
+- `VPS_USERNAME`: The SSH user (`deploy`).
+- `VPS_SSH_KEY`: Private SSH key authorized on the VPS (`~/.ssh/github_actions_deploy`).
+- `VPS_PORT`: SSH port (`22` or custom).
 
-Simplest is Caddy on the host (automatic Let's Encrypt):
+---
 
-```
-# /etc/caddy/Caddyfile
-your.domain {
-    reverse_proxy localhost:8080
+## 🔒 Host Nginx Reverse Proxy & SSL Setup
+
+Since the VPS runs other live products, the host Nginx server manages port `80`/`443` traffic.
+
+### 1. Site Configuration
+File path on VPS: `/etc/nginx/sites-available/s47-task.duckdns.org`
+```nginx
+server {
+    server_name s47-task.duckdns.org;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 }
 ```
 
-Because the API sets `secure` cookies in production, **TLS is required** for login
-to work in prod (the refresh cookie won't be sent over plain HTTP).
-
-## Updating
-
+### 2. Enabling and securing:
 ```bash
-git pull
-docker compose -f docker-compose.prod.yml up -d --build
-# migrations are applied automatically on api container start
+# Symlink site configuration
+sudo ln -s /etc/nginx/sites-available/s47-task.duckdns.org /etc/nginx/sites-enabled/
+
+# Verify config syntax & reload Nginx
+sudo nginx -t
+sudo systemctl reload nginx
+
+# Run Certbot to generate/install Let's Encrypt SSL certificates
+sudo certbot --nginx -d s47-task.duckdns.org
 ```
 
-## Backups (PRD §11.8)
+---
 
-`deploy/backup.sh` runs `pg_dump` against the compose Postgres and keeps the last
-14 days. Wire it into cron on the host:
+## ⚙️ Initial VPS Manual Setup
+If you need to set up a new environment manually:
 
+1. Clone using the SSH URL to utilize the server's Git deploy keys:
+   ```bash
+   git clone git@github.com:Studio-1947/task-tracker-s47.git /var/www/task-tracker-s47
+   ```
+2. Copy and configure the environment variables:
+   ```bash
+   cp .env.example .env
+   nano .env # Set Database passwords, JWT keys, and domain CORS configurations
+   ```
+3. Run the initial build:
+   ```bash
+   docker compose -f docker-compose.prod.yml up -d --build
+   ```
+4. Run the database seed script to set up the default administrator:
+   ```bash
+   docker compose -f docker-compose.prod.yml exec api node dist/database/seed.js
+   ```
+
+---
+
+## 💾 Backups
+
+Daily backups are handled via a Cron job calling `deploy/backup.sh`, which runs `pg_dump` and retains the last 14 days of data.
+
+### Setup Backup Cron Job:
 ```bash
-# crontab -e  — daily at 02:30
-30 2 * * * /path/to/task-tracker/deploy/backup.sh >> /var/log/tt-backup.log 2>&1
+# Open crontab editor (runs daily at 02:30 AM)
+crontab -e
+30 2 * * * /var/www/task-tracker-s47/deploy/backup.sh >> /var/log/tt-backup.log 2>&1
 ```
 
-Restore:
-
+### Restoring Database:
 ```bash
 gunzip -c backups/task_tracker-YYYY-MM-DD.sql.gz | \
   docker compose -f docker-compose.prod.yml exec -T postgres \
   psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
 ```
-
-## Environments
-
-- **dev** — `docker-compose.yml` (Postgres only) + `pnpm dev` on the host.
-- **staging / prod** — `docker-compose.prod.yml`. Keep separate `.env` files (and
-  ideally separate hosts). Never commit real secrets — only `.env.example` is tracked.
