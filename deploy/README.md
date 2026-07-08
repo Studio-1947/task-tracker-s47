@@ -94,7 +94,7 @@ If you need to set up a new environment manually:
    ```bash
    docker compose -f docker-compose.prod.yml up -d --build
    ```
-4. Run the database seed script to set up the default administrator:
+4. Run the database seed script to set up the administrator accounts (including admin2):
    ```bash
    docker compose -f docker-compose.prod.yml exec api node dist/database/seed.js
    ```
