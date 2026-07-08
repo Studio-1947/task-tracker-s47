@@ -27,15 +27,15 @@ async function main(): Promise<void> {
 
   const admins = [
     {
-      email: (process.env.SEED_ADMIN_EMAIL ?? 'admin@example.com').toLowerCase(),
-      password: process.env.SEED_ADMIN_PASSWORD ?? 'admin12345',
-      name: process.env.SEED_ADMIN_NAME ?? 'Admin',
+      email: (process.env.SEED_ADMIN_EMAIL || 'admin@example.com').toLowerCase(),
+      password: process.env.SEED_ADMIN_PASSWORD || 'admin12345',
+      name: process.env.SEED_ADMIN_NAME || 'Admin',
       envVar: 'SEED_ADMIN_PASSWORD',
     },
     {
-      email: (process.env.SEED_ADMIN2_EMAIL ?? 'admin2@example.com').toLowerCase(),
-      password: process.env.SEED_ADMIN2_PASSWORD ?? 'admin2_12345',
-      name: process.env.SEED_ADMIN2_NAME ?? 'Admin 2',
+      email: (process.env.SEED_ADMIN2_EMAIL || 'admin2@example.com').toLowerCase(),
+      password: process.env.SEED_ADMIN2_PASSWORD || 'admin2_12345',
+      name: process.env.SEED_ADMIN2_NAME || 'Admin 2',
       envVar: 'SEED_ADMIN2_PASSWORD',
     },
   ];
@@ -44,6 +44,9 @@ async function main(): Promise<void> {
   const db = drizzle(pool, { schema, casing: 'snake_case' });
 
   try {
+    // Clean up any accidentally created blank-email admin accounts
+    await db.delete(users).where(eq(users.email, ''));
+
     for (const admin of admins) {
       const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, admin.email)).limit(1);
       if (existing) {
