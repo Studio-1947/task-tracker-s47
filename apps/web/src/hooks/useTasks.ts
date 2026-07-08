@@ -88,9 +88,36 @@ export function useUpdateTask(workspaceId: string) {
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: UpdateTaskInput }) =>
       http.patch<TaskDetail>(`/tasks/${id}`, patch),
-    onSuccess: (task) => {
+    // Optimistic: patch the task in every cached list immediately (critical for
+    // drag-and-drop Kanban feel), roll back on error, reconcile on settle.
+    onMutate: async ({ id, patch }) => {
+      await qc.cancelQueries({ queryKey: ['tasks', workspaceId] });
+      const snapshots = qc.getQueriesData<Paginated<TaskListItem>>({ queryKey: ['tasks', workspaceId] });
+      for (const [key, data] of snapshots) {
+        if (!data) continue;
+        qc.setQueryData<Paginated<TaskListItem>>(key, {
+          ...data,
+          items: data.items.map((t) =>
+            t.id === id
+              ? {
+                  ...t,
+                  ...(patch.status !== undefined ? { status: patch.status } : {}),
+                  ...(patch.priority !== undefined ? { priority: patch.priority } : {}),
+                  ...(patch.title !== undefined ? { title: patch.title } : {}),
+                  ...(patch.dueDate !== undefined ? { dueDate: patch.dueDate } : {}),
+                }
+              : t,
+          ),
+        });
+      }
+      return { snapshots };
+    },
+    onError: (_err, _vars, ctx) => {
+      ctx?.snapshots.forEach(([key, data]) => qc.setQueryData(key, data));
+    },
+    onSettled: (task) => {
       qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
-      qc.invalidateQueries({ queryKey: ['task', task.id] });
+      if (task) qc.invalidateQueries({ queryKey: ['task', task.id] });
     },
   });
 }

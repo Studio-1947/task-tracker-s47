@@ -79,8 +79,8 @@ export function UsersPage() {
         ) : error ? (
           <ErrorState message={error instanceof ApiRequestError ? error.message : 'Failed to load'} />
         ) : data && data.length > 0 ? (
-          <Card className="overflow-hidden">
-            <table className="w-full text-sm">
+          <Card className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-slate-50 text-left text-slate-500">
                 <tr>
                   <th className="px-4 py-2 font-medium">Name</th>

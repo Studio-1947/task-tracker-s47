@@ -34,7 +34,7 @@ export function TaskDrawer({ workspaceId, taskId, members, onClose }: Props) {
         {isLoading || !task ? (
           <Spinner />
         ) : (
-          <div className="flex flex-col gap-6 p-6">
+          <div className="flex flex-col gap-6 p-4 sm:p-6">
             <div className="flex items-start justify-between">
               <div>
                 <div className="text-xs font-medium text-slate-400">{task.ref}</div>
@@ -45,7 +45,7 @@ export function TaskDrawer({ workspaceId, taskId, members, onClose }: Props) {
               </Button>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <label className="text-sm">
                 <span className="mb-1 block font-medium text-slate-600">Status</span>
                 <select

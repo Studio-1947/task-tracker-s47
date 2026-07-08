@@ -20,8 +20,9 @@ import { formatDate, isOverdue, priorityClasses, statusClasses, statusLabel } fr
 import { ApiRequestError } from '../lib/api';
 import { Badge, Button, Card, EmptyState, ErrorState, Input, Spinner } from '../components/ui';
 import { TaskDrawer } from '../components/TaskDrawer';
+import { KanbanView } from '../components/KanbanView';
 
-type View = 'list' | 'table';
+type View = 'list' | 'table' | 'kanban';
 
 export function WorkspaceTasksPage() {
   const { id = '' } = useParams();
@@ -45,15 +46,15 @@ export function WorkspaceTasksPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Link to="/workspaces" className="text-sm text-slate-400 hover:text-slate-600">
             ← Workspaces
           </Link>
           <h1 className="mt-1 text-2xl font-semibold text-slate-800">{workspace?.name ?? 'Tasks'}</h1>
         </div>
-        <div className="inline-flex overflow-hidden rounded-md border border-slate-300">
-          {(['list', 'table'] as const).map((v) => (
+        <div className="inline-flex self-start overflow-hidden rounded-md border border-slate-300 sm:self-auto">
+          {(['list', 'table', 'kanban'] as const).map((v) => (
             <button
               key={v}
               type="button"
@@ -126,8 +127,10 @@ export function WorkspaceTasksPage() {
           <EmptyState title="No tasks" hint="Add your first task above." />
         ) : view === 'list' ? (
           <ListView tasks={data.items} onOpen={setOpenTaskId} />
-        ) : (
+        ) : view === 'table' ? (
           <TableView tasks={data.items} onOpen={setOpenTaskId} />
+        ) : (
+          <KanbanView workspaceId={id} tasks={data.items} onOpen={setOpenTaskId} />
         )}
         {data ? <p className="mt-3 text-xs text-slate-400">{data.total} task(s)</p> : null}
       </div>
@@ -159,15 +162,23 @@ function ListView({ tasks, onOpen }: { tasks: TaskListItem[]; onOpen: (id: strin
           key={t.id}
           type="button"
           onClick={() => onOpen(t.id)}
-          className="flex w-full items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left hover:border-indigo-300 hover:shadow-sm"
+          className="flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-3 text-left hover:border-indigo-300 hover:shadow-sm sm:gap-3 sm:px-4"
         >
-          <span className="w-16 shrink-0 font-mono text-xs text-slate-400">{t.ref}</span>
-          <span className="flex-1 font-medium text-slate-700">{t.title}</span>
-          {t.assignees[0] ? <Badge>{t.assignees[0].name}</Badge> : null}
-          <span className={`text-xs ${isOverdue(t.dueDate) ? 'font-medium text-red-600' : 'text-slate-400'}`}>
+          <span className="hidden w-16 shrink-0 font-mono text-xs text-slate-400 sm:inline">{t.ref}</span>
+          <span className="min-w-0 flex-1 truncate font-medium text-slate-700">{t.title}</span>
+          {t.assignees[0] ? (
+            <span className="hidden md:inline-flex">
+              <Badge>{t.assignees[0].name}</Badge>
+            </span>
+          ) : null}
+          <span
+            className={`hidden text-xs sm:inline ${isOverdue(t.dueDate) ? 'font-medium text-red-600' : 'text-slate-400'}`}
+          >
             {formatDate(t.dueDate)}
           </span>
-          <PriorityBadge t={t} />
+          <span className="hidden sm:inline">
+            <PriorityBadge t={t} />
+          </span>
           <StatusBadge t={t} />
         </button>
       ))}
