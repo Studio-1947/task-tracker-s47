@@ -67,6 +67,18 @@ export class TasksService {
     }
   }
 
+  private async assertLabelsInWorkspace(workspaceId: string, labelIds: string[]): Promise<void> {
+    if (labelIds.length === 0) return;
+    const unique = [...new Set(labelIds)];
+    const rows = await this.db
+      .select({ id: labels.id })
+      .from(labels)
+      .where(and(eq(labels.workspaceId, workspaceId), inArray(labels.id, unique)));
+    if (rows.length !== unique.length) {
+      throw new NotFoundException('One or more labels do not belong to this workspace');
+    }
+  }
+
   /** Bulk-load assignees, labels and comment counts for a set of task ids. */
   private async loadRelations(taskIds: string[]): Promise<{
     assignees: Map<string, UserRef[]>;
@@ -148,7 +160,9 @@ export class TasksService {
   async create(workspaceId: string, actor: Actor, input: CreateTaskInput): Promise<TaskDetail> {
     await this.workspaces.assertCanAccess(workspaceId, actor);
     const assigneeIds = input.assigneeIds ?? [];
+    const labelIds = input.labelIds ?? [];
     await this.assertAssigneesAreMembers(workspaceId, assigneeIds);
+    await this.assertLabelsInWorkspace(workspaceId, labelIds);
 
     const created = await this.db.transaction(async (tx) => {
       // Atomically claim the next per-workspace number for the human-readable ref.
@@ -176,6 +190,9 @@ export class TasksService {
 
       if (assigneeIds.length) {
         await tx.insert(taskAssignees).values(assigneeIds.map((userId) => ({ taskId: task.id, userId })));
+      }
+      if (labelIds.length) {
+        await tx.insert(taskLabels).values(labelIds.map((labelId) => ({ taskId: task.id, labelId })));
       }
 
       await this.audit.record(
@@ -229,6 +246,13 @@ export class TasksService {
         .from(taskAssignees)
         .where(eq(taskAssignees.userId, query.assigneeId));
       conds.push(inArray(tasks.id, assigned));
+    }
+    if (query.labelId) {
+      const labelled = this.db
+        .select({ id: taskLabels.taskId })
+        .from(taskLabels)
+        .where(eq(taskLabels.labelId, query.labelId));
+      conds.push(inArray(tasks.id, labelled));
     }
     const where = and(...conds);
 
@@ -287,6 +311,16 @@ export class TasksService {
       .sort();
 
     if (input.assigneeIds) await this.assertAssigneesAreMembers(current.workspaceId, input.assigneeIds);
+    if (input.labelIds) await this.assertLabelsInWorkspace(current.workspaceId, input.labelIds);
+
+    const currentLabels = (
+      await this.db
+        .select({ labelId: taskLabels.labelId })
+        .from(taskLabels)
+        .where(eq(taskLabels.taskId, taskId))
+    )
+      .map((r) => r.labelId)
+      .sort();
 
     await this.db.transaction(async (tx) => {
       const patch: Partial<TaskRow> = {};
@@ -339,7 +373,21 @@ export class TasksService {
         }
       }
 
-      if (Object.keys(patch).length > 0 || assigneesChanged) {
+      // Labels are lightweight metadata — replaced wholesale, not audited (no
+      // LABEL_CHANGED action; avoids a pgEnum migration).
+      let labelsChanged = false;
+      if (input.labelIds) {
+        const next = [...new Set(input.labelIds)].sort();
+        if (JSON.stringify(next) !== JSON.stringify(currentLabels)) {
+          labelsChanged = true;
+          await tx.delete(taskLabels).where(eq(taskLabels.taskId, taskId));
+          if (next.length) {
+            await tx.insert(taskLabels).values(next.map((labelId) => ({ taskId, labelId })));
+          }
+        }
+      }
+
+      if (Object.keys(patch).length > 0 || assigneesChanged || labelsChanged) {
         await tx
           .update(tasks)
           .set({ ...patch, updatedAt: new Date() })

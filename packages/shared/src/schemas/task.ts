@@ -12,6 +12,7 @@ export const createTaskSchema = z.object({
   /** ISO datetime string, or null for no due date. */
   dueDate: z.string().datetime().nullable().optional(),
   assigneeIds: z.array(z.string().uuid()).optional(),
+  labelIds: z.array(z.string().uuid()).optional(),
 });
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 
@@ -27,6 +28,7 @@ export const updateTaskSchema = z
     priority: priorityEnum.optional(),
     dueDate: z.string().datetime().nullable().optional(),
     assigneeIds: z.array(z.string().uuid()).optional(),
+    labelIds: z.array(z.string().uuid()).optional(),
   })
   .strict()
   .refine((v) => Object.keys(v).length > 0, { message: 'No fields to update' });
@@ -41,6 +43,7 @@ export type CreateCommentInput = z.infer<typeof createCommentSchema>;
 export const taskQuerySchema = z.object({
   status: statusEnum.optional(),
   assigneeId: z.string().uuid().optional(),
+  labelId: z.string().uuid().optional(),
   priority: priorityEnum.optional(),
   dueBefore: z.string().datetime().optional(),
   dueAfter: z.string().datetime().optional(),

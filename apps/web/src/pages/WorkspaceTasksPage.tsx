@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   createColumnHelper,
@@ -16,27 +16,58 @@ import {
   useWorkspaceMembers,
   type TaskFilters,
 } from '../hooks/useTasks';
+import { useLabels } from '../hooks/useLabels';
 import { formatDate, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
 import { ApiRequestError } from '../lib/api';
-import { Badge, Button, Card, EmptyState, ErrorState, Input, Spinner } from '../components/ui';
+import { Badge, Button, Card, EmptyState, ErrorState, Input, LabelChip, Spinner } from '../components/ui';
 import { TaskDrawer } from '../components/TaskDrawer';
 import { KanbanView } from '../components/KanbanView';
 
 type View = 'list' | 'table' | 'kanban';
 
+const DEFAULT_FILTERS: TaskFilters = { sort: 'createdAt', order: 'desc' };
+
 export function WorkspaceTasksPage() {
   const { id = '' } = useParams();
-  const { data: workspace } = useWorkspace(id);
-  const { data: members } = useWorkspaceMembers(id);
-  const [view, setView] = useState<View>('list');
-  const [filters, setFilters] = useState<TaskFilters>({ sort: 'createdAt', order: 'desc' });
-  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
-  const { data, isLoading, error } = useTasks(id, filters);
+  // Key by workspace id so filter state (persisted per workspace) resets cleanly
+  // when navigating between boards.
+  return <Board key={id} workspaceId={id} />;
+}
 
-  const createTask = useCreateTask(id);
+function loadFilters(workspaceId: string): TaskFilters {
+  try {
+    const raw = localStorage.getItem(`tt.filters.${workspaceId}`);
+    if (raw) return { ...DEFAULT_FILTERS, ...(JSON.parse(raw) as TaskFilters) };
+  } catch {
+    /* ignore malformed storage */
+  }
+  return DEFAULT_FILTERS;
+}
+
+function Board({ workspaceId }: { workspaceId: string }) {
+  const { data: workspace } = useWorkspace(workspaceId);
+  const { data: members } = useWorkspaceMembers(workspaceId);
+  const { data: labels } = useLabels(workspaceId);
+  const [view, setView] = useState<View>('list');
+  const [filters, setFilters] = useState<TaskFilters>(() => loadFilters(workspaceId));
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const { data, isLoading, error } = useTasks(workspaceId, filters);
+
+  // Persist filters per workspace (saved filters).
+  useEffect(() => {
+    localStorage.setItem(`tt.filters.${workspaceId}`, JSON.stringify(filters));
+  }, [filters, workspaceId]);
+
+  const createTask = useCreateTask(workspaceId);
   const [newTitle, setNewTitle] = useState('');
 
-  const memberRefs = useMemo(() => (members ?? []).map((m) => ({ id: m.id, name: m.name, email: m.email })), [members]);
+  const memberRefs = useMemo(
+    () => (members ?? []).map((m) => ({ id: m.id, name: m.name, email: m.email })),
+    [members],
+  );
+
+  const filtersActive =
+    !!filters.search || !!filters.status || !!filters.assigneeId || !!filters.labelId;
 
   const onCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,7 +115,7 @@ export function WorkspaceTasksPage() {
         </form>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <Input
-            className="w-56"
+            className="w-full sm:w-56"
             placeholder="Search title/description…"
             value={filters.search ?? ''}
             onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
@@ -115,6 +146,24 @@ export function WorkspaceTasksPage() {
               </option>
             ))}
           </select>
+          <select
+            aria-label="Filter by label"
+            className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+            value={filters.labelId ?? ''}
+            onChange={(e) => setFilters((f) => ({ ...f, labelId: e.target.value || undefined }))}
+          >
+            <option value="">All labels</option>
+            {(labels ?? []).map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+          {filtersActive ? (
+            <Button variant="ghost" onClick={() => setFilters({ ...DEFAULT_FILTERS })}>
+              Reset filters
+            </Button>
+          ) : null}
         </div>
       </Card>
 
@@ -124,22 +173,33 @@ export function WorkspaceTasksPage() {
         ) : error ? (
           <ErrorState message={error instanceof ApiRequestError ? error.message : 'Failed to load tasks'} />
         ) : !data || data.items.length === 0 ? (
-          <EmptyState title="No tasks" hint="Add your first task above." />
+          <EmptyState
+            title={filtersActive ? 'No tasks match your filters' : 'No tasks yet'}
+            hint={filtersActive ? 'Try clearing filters to see everything.' : 'Add your first task above.'}
+            action={
+              filtersActive ? (
+                <Button variant="ghost" onClick={() => setFilters({ ...DEFAULT_FILTERS })}>
+                  Reset filters
+                </Button>
+              ) : null
+            }
+          />
         ) : view === 'list' ? (
           <ListView tasks={data.items} onOpen={setOpenTaskId} />
         ) : view === 'table' ? (
           <TableView tasks={data.items} onOpen={setOpenTaskId} />
         ) : (
-          <KanbanView workspaceId={id} tasks={data.items} onOpen={setOpenTaskId} />
+          <KanbanView workspaceId={workspaceId} tasks={data.items} onOpen={setOpenTaskId} />
         )}
         {data ? <p className="mt-3 text-xs text-slate-400">{data.total} task(s)</p> : null}
       </div>
 
       {openTaskId ? (
         <TaskDrawer
-          workspaceId={id}
+          workspaceId={workspaceId}
           taskId={openTaskId}
           members={memberRefs}
+          labels={labels ?? []}
           onClose={() => setOpenTaskId(null)}
         />
       ) : null}
@@ -166,6 +226,11 @@ function ListView({ tasks, onOpen }: { tasks: TaskListItem[]; onOpen: (id: strin
         >
           <span className="hidden w-16 shrink-0 font-mono text-xs text-slate-400 sm:inline">{t.ref}</span>
           <span className="min-w-0 flex-1 truncate font-medium text-slate-700">{t.title}</span>
+          {t.labels.slice(0, 2).map((l) => (
+            <span key={l.id} className="hidden lg:inline">
+              <LabelChip name={l.name} color={l.color} />
+            </span>
+          ))}
           {t.assignees[0] ? (
             <span className="hidden md:inline-flex">
               <Badge>{t.assignees[0].name}</Badge>
@@ -224,7 +289,7 @@ function TableView({ tasks, onOpen }: { tasks: TaskListItem[]; onOpen: (id: stri
 
   return (
     <Card className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full min-w-[640px] text-sm">
         <thead className="bg-slate-50 text-left text-slate-500">
           {table.getHeaderGroups().map((hg) => (
             <tr key={hg.id}>

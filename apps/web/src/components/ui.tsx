@@ -41,12 +41,37 @@ export function Spinner() {
   );
 }
 
-export function EmptyState({ title, hint }: { title: string; hint?: string }) {
+export function EmptyState({
+  title,
+  hint,
+  icon,
+  action,
+}: {
+  title: string;
+  hint?: string;
+  icon?: ReactNode;
+  action?: ReactNode;
+}) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center">
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
+      {icon ? <div className="mb-3 text-slate-300">{icon}</div> : null}
       <p className="text-sm font-medium text-slate-700">{title}</p>
-      {hint ? <p className="mt-1 text-sm text-slate-400">{hint}</p> : null}
+      {hint ? <p className="mt-1 max-w-sm text-sm text-slate-400">{hint}</p> : null}
+      {action ? <div className="mt-4">{action}</div> : null}
     </div>
+  );
+}
+
+/** Small colored label chip. */
+export function LabelChip({ name, color }: { name: string; color?: string | null }) {
+  const c = color ?? '#64748b';
+  return (
+    <span
+      className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
+      style={{ backgroundColor: `${c}1a`, color: c }}
+    >
+      {name}
+    </span>
   );
 }
 

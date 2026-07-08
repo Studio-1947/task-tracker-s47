@@ -80,14 +80,19 @@ Open http://localhost:5173 and sign in with the seeded admin.
 - ✅ **Kanban** view (dnd-kit) with drag-to-change-status + optimistic updates
 - ✅ **Dashboards**: admin global stats (workspaces/users/overdue/tasks-by-status/most-active
   + activity feed) and member "my tasks" home (scoped to your workspaces)
+- ✅ **Labels**: per-workspace label CRUD, assign/toggle on tasks (chips on rows +
+  Kanban cards, inline create in the drawer), filter tasks by label
+- ✅ **Saved filters** persisted per workspace + reset; richer empty states
 - ✅ Web: auth flow, workspaces, users admin, a **workspace task board with
   List + Table (TanStack Table) + Kanban views** + a task detail drawer (inline edit,
-  comments, history timeline), and role-aware dashboards — all with loading/empty/error
-  states, **mobile-responsive** throughout
+  labels, comments, history timeline), and role-aware dashboards — all with
+  loading/empty/error states, **mobile-responsive** throughout
 
-## Next (per PRD §12 build order)
+## Status
 
-6. Polish: labels + label management UI, saved filters, richer empty states, subtasks (fast-follow)
+All of the PRD §12 build order (steps 1–6) is complete. Remaining work is the
+explicit fast-follows from PRD §8: subtasks/checklists, notifications, realtime
+(websockets), file attachments, per-workspace custom statuses/roles, self-signup/SSO.
 
 ## Deployment
 

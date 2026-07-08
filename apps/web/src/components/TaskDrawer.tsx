@@ -1,5 +1,12 @@
 import { useState } from 'react';
-import { PRIORITIES, TASK_STATUSES, type Priority, type TaskStatus, type UserRef } from '@task-tracker/shared';
+import {
+  PRIORITIES,
+  TASK_STATUSES,
+  type LabelRef,
+  type Priority,
+  type TaskStatus,
+  type UserRef,
+} from '@task-tracker/shared';
 import {
   useAddComment,
   useTask,
@@ -7,6 +14,7 @@ import {
   useTaskHistory,
   useUpdateTask,
 } from '../hooks/useTasks';
+import { useCreateLabel } from '../hooks/useLabels';
 import { describeAudit, formatDate, formatDateTime, priorityClasses, statusClasses, statusLabel } from '../lib/format';
 import { Button, Spinner } from './ui';
 
@@ -14,10 +22,11 @@ interface Props {
   workspaceId: string;
   taskId: string;
   members: UserRef[];
+  labels: LabelRef[];
   onClose: () => void;
 }
 
-export function TaskDrawer({ workspaceId, taskId, members, onClose }: Props) {
+export function TaskDrawer({ workspaceId, taskId, members, labels, onClose }: Props) {
   const { data: task, isLoading } = useTask(taskId);
   const { data: comments } = useTaskComments(taskId);
   const { data: history } = useTaskHistory(taskId);
@@ -114,6 +123,13 @@ export function TaskDrawer({ workspaceId, taskId, members, onClose }: Props) {
               />
             </div>
 
+            <LabelPicker
+              workspaceId={workspaceId}
+              allLabels={labels}
+              selected={task.labels}
+              onChange={(labelIds) => patch({ labelIds })}
+            />
+
             <section>
               <h3 className="mb-2 text-sm font-semibold text-slate-700">Comments</h3>
               <div className="space-y-3">
@@ -173,6 +189,80 @@ export function TaskDrawer({ workspaceId, taskId, members, onClose }: Props) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function LabelPicker({
+  workspaceId,
+  allLabels,
+  selected,
+  onChange,
+}: {
+  workspaceId: string;
+  allLabels: LabelRef[];
+  selected: LabelRef[];
+  onChange: (labelIds: string[]) => void;
+}) {
+  const createLabel = useCreateLabel(workspaceId);
+  const [newName, setNewName] = useState('');
+  const selectedIds = new Set(selected.map((l) => l.id));
+
+  const toggle = (labelId: string) => {
+    const next = selectedIds.has(labelId)
+      ? [...selectedIds].filter((x) => x !== labelId)
+      : [...selectedIds, labelId];
+    onChange(next);
+  };
+
+  const onCreate = (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = newName.trim();
+    if (!name) return;
+    createLabel.mutate(
+      { name },
+      {
+        onSuccess: (label) => {
+          setNewName('');
+          onChange([...selectedIds, label.id]);
+        },
+      },
+    );
+  };
+
+  return (
+    <div>
+      <div className="mb-1 text-sm font-medium text-slate-600">Labels</div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {allLabels.length === 0 ? <span className="text-sm text-slate-400">No labels yet.</span> : null}
+        {allLabels.map((l) => {
+          const on = selectedIds.has(l.id);
+          return (
+            <button
+              key={l.id}
+              type="button"
+              onClick={() => toggle(l.id)}
+              className={`rounded-full border px-2 py-0.5 text-[11px] font-medium transition ${
+                on ? 'border-transparent' : 'border-slate-200 text-slate-400 hover:border-slate-300'
+              }`}
+              style={on ? { backgroundColor: `${l.color ?? '#64748b'}1a`, color: l.color ?? '#64748b' } : undefined}
+            >
+              {l.name}
+            </button>
+          );
+        })}
+      </div>
+      <form className="mt-2 flex gap-2" onSubmit={onCreate}>
+        <input
+          className="w-40 rounded-md border border-slate-300 px-2 py-1 text-sm"
+          placeholder="New label…"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+        />
+        <Button type="submit" variant="ghost" disabled={createLabel.isPending}>
+          Add
+        </Button>
+      </form>
     </div>
   );
 }

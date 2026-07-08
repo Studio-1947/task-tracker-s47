@@ -14,6 +14,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { TASK_STATUSES, type TaskListItem, type TaskStatus } from '@task-tracker/shared';
 import { useUpdateTask } from '../hooks/useTasks';
 import { formatDate, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
+import { LabelChip } from './ui';
 
 interface Props {
   workspaceId: string;
@@ -124,6 +125,13 @@ function Card({ task, overlay = false }: { task: TaskListItem; overlay?: boolean
         </span>
       </div>
       <p className="mt-1 text-sm font-medium text-slate-700">{task.title}</p>
+      {task.labels.length ? (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {task.labels.slice(0, 3).map((l) => (
+            <LabelChip key={l.id} name={l.name} color={l.color} />
+          ))}
+        </div>
+      ) : null}
       <div className="mt-2 flex items-center justify-between text-xs">
         <span className="truncate text-slate-500">{task.assignees[0]?.name ?? 'Unassigned'}</span>
         {task.dueDate ? (

@@ -15,6 +15,7 @@ import { http } from '../lib/api';
 export interface TaskFilters {
   status?: string;
   assigneeId?: string;
+  labelId?: string;
   search?: string;
   sort?: string;
   order?: 'asc' | 'desc';
