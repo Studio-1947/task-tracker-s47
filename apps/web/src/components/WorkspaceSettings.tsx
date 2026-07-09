@@ -3,6 +3,7 @@ import { useUsers } from '../hooks/useUsers';
 import { useWorkspace, useWorkspaceMembers } from '../hooks/useTasks';
 import { useUpdateWorkspace, useUpdateWorkspaceMembers } from '../hooks/useWorkspaces';
 import { ApiRequestError } from '../lib/api';
+import { Avatar } from './Avatar';
 import { Badge, Button, Input, Spinner } from './ui';
 
 interface Props {
@@ -132,9 +133,12 @@ export function WorkspaceSettings({ workspaceId, onClose }: Props) {
               <ul className="mt-3 divide-y divide-slate-100">
                 {(members ?? []).map((m) => (
                   <li key={m.id} className="flex items-center justify-between py-2.5">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-slate-700">{m.name}</div>
-                      <div className="truncate text-xs text-slate-400">{m.email}</div>
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <Avatar user={m} size="sm" />
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-slate-700">{m.name}</div>
+                        <div className="truncate text-xs text-slate-400">{m.email}</div>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge>{m.role}</Badge>

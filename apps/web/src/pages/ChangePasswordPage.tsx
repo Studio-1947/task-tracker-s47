@@ -4,7 +4,14 @@ import { ApiRequestError } from '../lib/api';
 import { useAuth } from '../stores/auth';
 import { Button, Card, Input } from '../components/ui';
 
-export function ChangePasswordPage({ forced = false }: { forced?: boolean }) {
+export function ChangePasswordPage({
+  forced = false,
+  embedded = false,
+}: {
+  forced?: boolean;
+  /** Render just the password card (no page heading) for use inside SettingsPage. */
+  embedded?: boolean;
+}) {
   const { changePassword } = useAuth();
   const navigate = useNavigate();
   const [current, setCurrent] = useState('');
@@ -70,6 +77,15 @@ export function ChangePasswordPage({ forced = false }: { forced?: boolean }) {
           <div className="mt-6">{form}</div>
         </Card>
       </div>
+    );
+  }
+
+  if (embedded) {
+    return (
+      <Card className="p-6">
+        <h2 className="text-sm font-medium text-slate-600">Change password</h2>
+        <div className="mt-4">{form}</div>
+      </Card>
     );
   }
 

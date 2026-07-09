@@ -4,4 +4,5 @@ export * from './schemas/user';
 export * from './schemas/workspace';
 export * from './schemas/task';
 export * from './schemas/label';
+export * from './schemas/search';
 export * from './types';

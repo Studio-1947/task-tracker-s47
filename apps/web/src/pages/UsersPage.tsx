@@ -2,7 +2,42 @@ import { useState } from 'react';
 import { ROLES, type Role } from '@task-tracker/shared';
 import { ApiRequestError } from '../lib/api';
 import { useCreateUser, useResetPassword, useUpdateUser, useUsers } from '../hooks/useUsers';
+import { Avatar } from '../components/Avatar';
 import { Badge, Button, Card, EmptyState, ErrorState, Input, Spinner } from '../components/ui';
+
+/** Inline-editable designation: commits on blur or Enter, only when changed. */
+function DesignationCell({
+  value,
+  userName,
+  disabled,
+  onCommit,
+}: {
+  value: string | null;
+  userName: string;
+  disabled: boolean;
+  onCommit: (next: string | null) => void;
+}) {
+  const [draft, setDraft] = useState(value ?? '');
+  const commit = () => {
+    const next = draft.trim() || null;
+    if (next !== (value ?? null)) onCommit(next);
+  };
+  return (
+    <input
+      aria-label={`Designation for ${userName}`}
+      className="w-36 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm text-slate-600 hover:border-slate-300 focus:border-indigo-500 focus:bg-white focus:outline-none"
+      value={draft}
+      placeholder="—"
+      maxLength={120}
+      disabled={disabled}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+      }}
+    />
+  );
+}
 
 export function UsersPage() {
   const { data, isLoading, error } = useUsers();
@@ -13,6 +48,7 @@ export function UsersPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>('MEMBER');
+  const [designation, setDesignation] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [tempPassword, setTempPassword] = useState<{ email: string; password: string } | null>(null);
 
@@ -21,11 +57,17 @@ export function UsersPage() {
     setFormError(null);
     setTempPassword(null);
     try {
-      const created = await createUser.mutateAsync({ name, email, role });
+      const created = await createUser.mutateAsync({
+        name,
+        email,
+        role,
+        designation: designation.trim() || undefined,
+      });
       setTempPassword({ email: created.email, password: created.tempPassword });
       setName('');
       setEmail('');
       setRole('MEMBER');
+      setDesignation('');
     } catch (err) {
       setFormError(err instanceof ApiRequestError ? err.message : 'Failed to create user');
     }
@@ -36,7 +78,7 @@ export function UsersPage() {
       <h1 className="text-2xl font-semibold text-slate-800">Users</h1>
 
       <Card className="mt-6 p-5">
-        <form className="grid grid-cols-1 gap-3 sm:grid-cols-4 sm:items-end" onSubmit={onCreate}>
+        <form className="grid grid-cols-1 gap-3 sm:grid-cols-5 sm:items-end" onSubmit={onCreate}>
           <div className="sm:col-span-1">
             <label className="mb-1 block text-sm font-medium text-slate-600">Name</label>
             <Input value={name} onChange={(e) => setName(e.target.value)} required />
@@ -44,6 +86,17 @@ export function UsersPage() {
           <div className="sm:col-span-1">
             <label className="mb-1 block text-sm font-medium text-slate-600">Email</label>
             <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </div>
+          <div className="sm:col-span-1">
+            <label className="mb-1 block text-sm font-medium text-slate-600">
+              Designation <span className="font-normal text-slate-400">(optional)</span>
+            </label>
+            <Input
+              value={designation}
+              onChange={(e) => setDesignation(e.target.value)}
+              placeholder="e.g. Designer"
+              maxLength={120}
+            />
           </div>
           <div className="sm:col-span-1">
             <label className="mb-1 block text-sm font-medium text-slate-600">Role</label>
@@ -81,12 +134,13 @@ export function UsersPage() {
           <ErrorState message={error instanceof ApiRequestError ? error.message : 'Failed to load'} />
         ) : data && data.length > 0 ? (
           <Card className="overflow-x-auto">
-            <table className="w-full min-w-[860px] text-sm">
+            <table className="w-full min-w-[1000px] text-sm">
               <thead className="bg-slate-50 text-left text-slate-500">
                 <tr>
                   <th className="px-4 py-2 font-medium">Name</th>
                   <th className="px-4 py-2 font-medium">Email</th>
                   <th className="px-4 py-2 font-medium">Role</th>
+                  <th className="px-4 py-2 font-medium">Designation</th>
                   <th className="px-4 py-2 font-medium">Workspaces</th>
                   <th className="px-4 py-2 font-medium">Status</th>
                   <th className="px-4 py-2">
@@ -97,7 +151,12 @@ export function UsersPage() {
               <tbody className="divide-y divide-slate-100">
                 {data.map((u) => (
                   <tr key={u.id}>
-                    <td className="px-4 py-2.5 font-medium text-slate-700">{u.name}</td>
+                    <td className="px-4 py-2.5 font-medium text-slate-700">
+                      <span className="flex items-center gap-2">
+                        <Avatar user={u} size="sm" />
+                        {u.name}
+                      </span>
+                    </td>
                     <td className="px-4 py-2.5 text-slate-500">{u.email}</td>
                     <td className="px-4 py-2.5">
                       <select
@@ -113,6 +172,17 @@ export function UsersPage() {
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <DesignationCell
+                        key={`${u.id}-${u.designation ?? ''}`}
+                        value={u.designation}
+                        userName={u.name}
+                        disabled={updateUser.isPending}
+                        onCommit={(next) =>
+                          updateUser.mutate({ id: u.id, patch: { designation: next } })
+                        }
+                      />
                     </td>
                     <td className="px-4 py-2.5 text-slate-500">{u.workspaceCount ?? 0}</td>
                     <td className="px-4 py-2.5">

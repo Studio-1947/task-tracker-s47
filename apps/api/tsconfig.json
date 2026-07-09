@@ -12,7 +12,7 @@
     "declaration": false,
     "declarationMap": false,
     "sourceMap": true,
-    "types": ["node"],
+    "types": ["node", "multer"],
     "noUncheckedIndexedAccess": false
     // NOTE: do NOT enable "incremental" here. `nest build` sets deleteOutDir=true;
     // with incremental, tsc trusts .tsbuildinfo and re-emits only changed files

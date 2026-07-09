@@ -3,6 +3,7 @@ import type {
   AuditEntry,
   CreateTaskInput,
   Paginated,
+  TaskAttachment,
   TaskComment,
   TaskDetail,
   TaskListItem,
@@ -129,6 +130,43 @@ export function useArchiveTask(workspaceId: string) {
   return useMutation({
     mutationFn: (id: string) => http.del<{ id: string }>(`/tasks/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tasks', workspaceId] }),
+  });
+}
+
+export function useTaskAttachments(taskId: string | null) {
+  return useQuery({
+    queryKey: ['task', taskId, 'attachments'],
+    queryFn: () => http.get<TaskAttachment[]>(`/tasks/${taskId}/attachments`),
+    enabled: !!taskId,
+  });
+}
+
+export function useUploadAttachment(taskId: string, workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return http.upload<TaskAttachment>(`/tasks/${taskId}/attachments`, form);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'attachments'] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });
+      qc.invalidateQueries({ queryKey: ['tasks', workspaceId] }); // attachmentCount
+    },
+  });
+}
+
+export function useDeleteAttachment(taskId: string, workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (attachmentId: string) =>
+      http.del<{ id: string }>(`/tasks/${taskId}/attachments/${attachmentId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'attachments'] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });
+      qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
+    },
   });
 }
 

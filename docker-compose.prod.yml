@@ -46,6 +46,9 @@ services:
       SEED_ADMIN2_EMAIL: ${SEED_ADMIN2_EMAIL}
       SEED_ADMIN2_PASSWORD: ${SEED_ADMIN2_PASSWORD}
       SEED_ADMIN2_NAME: ${SEED_ADMIN2_NAME}
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - uploads:/data/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -69,6 +72,7 @@ services:
 
 volumes:
   pgdata:
+  uploads:
 
 networks:
   internal:

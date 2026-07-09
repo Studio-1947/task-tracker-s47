@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   createColumnHelper,
   flexRender,
@@ -56,10 +56,27 @@ function Board({ workspaceId }: { workspaceId: string }) {
   const [view, setView] = useState<View>('list');
   const [filters, setFilters] = useState<TaskFilters>(() => loadFilters(workspaceId));
   const [page, setPage] = useState(1);
-  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  // Deep-link support (?task=<id>) so search results and dashboard widgets can
+  // open the drawer directly.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [openTaskId, setOpenTaskId] = useState<string | null>(() => searchParams.get('task'));
   const [showCreate, setShowCreate] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const { data, isLoading, error } = useTasks(workspaceId, { ...filters, page });
+
+  const paramTaskId = searchParams.get('task');
+  useEffect(() => {
+    if (paramTaskId) setOpenTaskId(paramTaskId);
+  }, [paramTaskId]);
+
+  const closeTask = () => {
+    setOpenTaskId(null);
+    if (searchParams.has('task')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('task');
+      setSearchParams(next, { replace: true });
+    }
+  };
 
   // Persist filters per workspace (saved filters).
   useEffect(() => {
@@ -75,7 +92,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
   const [newTitle, setNewTitle] = useState('');
 
   const memberRefs = useMemo(
-    () => (members ?? []).map((m) => ({ id: m.id, name: m.name, email: m.email })),
+    () => (members ?? []).map((m) => ({ id: m.id, name: m.name, email: m.email, avatarKey: m.avatarKey ?? null })),
     [members],
   );
 
@@ -245,7 +262,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
           taskId={openTaskId}
           members={memberRefs}
           labels={labels ?? []}
-          onClose={() => setOpenTaskId(null)}
+          onClose={closeTask}
         />
       ) : null}
       {showCreate ? (

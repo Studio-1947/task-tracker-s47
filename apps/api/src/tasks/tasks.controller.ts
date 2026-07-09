@@ -1,14 +1,25 @@
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
   Get,
+  NotFoundException,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  Res,
+  StreamableFile,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
+import { memoryStorage } from 'multer';
 import {
   createCommentSchema,
   createTaskSchema,
@@ -21,6 +32,8 @@ import {
 } from '@task-tracker/shared';
 import { CurrentUser, type RequestUser } from '../common/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { ATTACHMENT_MAX_BYTES, INLINE_MIMES } from '../files/files.constants';
+import { FilesService } from '../files/files.service';
 import { TasksService } from './tasks.service';
 
 /** Workspace-scoped: create + list (the shared query layer for all views). */
@@ -88,5 +101,70 @@ export class TasksController {
   @Get(':id/history')
   history(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
     return this.tasks.history(id, user);
+  }
+
+  @Get(':id/attachments')
+  listAttachments(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.tasks.listAttachments(id, user);
+  }
+
+  @Post(':id/attachments')
+  @UseInterceptors(
+    FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: ATTACHMENT_MAX_BYTES } }),
+  )
+  addAttachment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: RequestUser,
+  ) {
+    if (!file) throw new BadRequestException('No file provided');
+    return this.tasks.addAttachment(id, user, file);
+  }
+
+  @Delete(':id/attachments/:attachmentId')
+  removeAttachment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('attachmentId', ParseUUIDPipe) attachmentId: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.tasks.removeAttachment(id, attachmentId, user);
+  }
+}
+
+/**
+ * Serves attachment bytes with per-task authorization (the requester must have
+ * access to the attachment's workspace). Lives here rather than FilesController
+ * because the authz check needs the tasks domain.
+ */
+@Controller('files')
+export class AttachmentFilesController {
+  constructor(
+    private readonly tasks: TasksService,
+    private readonly files: FilesService,
+  ) {}
+
+  @Get('attachments/:name')
+  async serve(
+    @Param('name') name: string,
+    @CurrentUser() user: RequestUser,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const key = `attachments/${name}`;
+    const attachment = await this.tasks.attachmentByStorageKey(key, user);
+    const path = this.files.resolvePath(key);
+    const info = await stat(path).catch(() => null);
+    if (!info?.isFile()) throw new NotFoundException('File not found');
+
+    // Original filename is client-supplied — strip anything header-hostile.
+    const safeName = attachment.fileName.replace(/[^\w.\- ]+/g, '_');
+    const disposition = INLINE_MIMES.has(attachment.mimeType)
+      ? 'inline'
+      : `attachment; filename="${safeName}"`;
+    res.setHeader('Content-Type', attachment.mimeType);
+    res.setHeader('Content-Length', info.size);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.setHeader('Content-Disposition', disposition);
+    return new StreamableFile(createReadStream(path));
   }
 }

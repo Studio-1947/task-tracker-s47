@@ -128,6 +128,7 @@ export class WorkspacesService {
         name: users.name,
         email: users.email,
         role: users.role,
+        avatarKey: users.avatarKey,
         joinedAt: workspaceMembers.joinedAt,
       })
       .from(workspaceMembers)

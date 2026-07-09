@@ -29,7 +29,8 @@ async function raw(path: string, init: RequestInit): Promise<Response> {
     ...init,
     credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
+      // FormData bodies must set their own multipart boundary — don't override.
+      ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...(init.headers ?? {}),
     },
@@ -85,4 +86,25 @@ export const http = {
   patch: <T>(path: string, body?: unknown) =>
     api<T>(path, { method: 'PATCH', body: body === undefined ? undefined : JSON.stringify(body) }),
   del: <T>(path: string) => api<T>(path, { method: 'DELETE' }),
+  /** Multipart upload — the browser sets the boundary Content-Type itself. */
+  upload: <T>(path: string, form: FormData) => api<T>(path, { method: 'POST', body: form }),
 };
+
+/** Authenticated binary fetch (avatars, attachments) with the same one-shot refresh retry. */
+export async function apiBlob(path: string): Promise<Blob> {
+  let res = await raw(path, { method: 'GET' });
+  if (res.status === 401) {
+    const ok = await tryRefresh();
+    if (ok) res = await raw(path, { method: 'GET' });
+  }
+  if (!res.ok) {
+    let body: Partial<ApiError> = {};
+    try {
+      body = (await res.json()) as ApiError;
+    } catch {
+      /* non-JSON error */
+    }
+    throw new ApiRequestError(res.status, body.message ?? res.statusText, body.details, body.error);
+  }
+  return res.blob();
+}

@@ -11,6 +11,8 @@ const envSchema = z.object({
   JWT_REFRESH_TTL: z.string().default('7d'),
   COOKIE_DOMAIN: z.string().default('localhost'),
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
+  /** Directory for uploaded files (avatars, attachments); relative paths resolve against cwd. */
+  UPLOAD_DIR: z.string().default('uploads'),
 });
 
 export type Env = z.infer<typeof envSchema>;

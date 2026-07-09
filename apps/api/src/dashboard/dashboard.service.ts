@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, desc, eq, inArray, isNotNull, lt, ne, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, lt, ne, sql } from 'drizzle-orm';
 import {
   TASK_STATUSES,
   type AdminDashboard,
@@ -7,6 +7,10 @@ import {
   type MyTaskItem,
   type StatusCounts,
   type TaskStatus,
+  type UpcomingDeadline,
+  type WeeklyCompletionPoint,
+  type WorkloadEntry,
+  type WorkspacePerformance,
 } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
 import { auditLogs, taskAssignees, tasks, users, workspaces } from '../database/schema';
@@ -57,6 +61,131 @@ export class DashboardService {
     return Number(c);
   }
 
+  /** Tasks completed per day for the current Mon–Sun week (UTC), zero-filled. */
+  private async weeklyCompletion(): Promise<WeeklyCompletionPoint[]> {
+    const now = new Date();
+    const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    // getUTCDay(): Sun=0..Sat=6 — shift so the week starts on Monday.
+    monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
+
+    const rows = await this.db
+      .select({
+        day: sql<string>`to_char(date_trunc('day', ${tasks.completedAt} at time zone 'UTC'), 'YYYY-MM-DD')`,
+        c: count(),
+      })
+      .from(tasks)
+      .where(and(eq(tasks.isArchived, false), gte(tasks.completedAt, monday)))
+      .groupBy(sql`1`);
+    const byDate = new Map(rows.map((r) => [r.day, Number(r.c)]));
+
+    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return labels.map((day, i) => {
+      const d = new Date(monday);
+      d.setUTCDate(d.getUTCDate() + i);
+      const date = d.toISOString().slice(0, 10);
+      return { date, day, completed: byDate.get(date) ?? 0 };
+    });
+  }
+
+  /** Open tasks currently assigned per user, busiest first. */
+  private async teamWorkload(): Promise<WorkloadEntry[]> {
+    const rows = await this.db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        avatarKey: users.avatarKey,
+        c: count(),
+      })
+      .from(taskAssignees)
+      .innerJoin(tasks, eq(tasks.id, taskAssignees.taskId))
+      .innerJoin(users, eq(users.id, taskAssignees.userId))
+      .where(and(eq(tasks.isArchived, false), ne(tasks.status, 'DONE'), eq(users.isActive, true)))
+      .groupBy(users.id, users.name, users.email, users.avatarKey)
+      .orderBy(desc(count()))
+      .limit(10);
+    return rows.map((r) => ({
+      user: { id: r.id, name: r.name, email: r.email, avatarKey: r.avatarKey },
+      openTasks: Number(r.c),
+    }));
+  }
+
+  /** Per-workspace task totals + completion %, with a recent-activity flag. */
+  private async workspacePerformance(): Promise<WorkspacePerformance[]> {
+    const [rows, activeRows] = await Promise.all([
+      this.db
+        .select({
+          id: workspaces.id,
+          name: workspaces.name,
+          color: workspaces.color,
+          total: sql<number>`count(${tasks.id}) filter (where ${tasks.isArchived} = false)`,
+          completed: sql<number>`count(${tasks.id}) filter (where ${tasks.isArchived} = false and ${tasks.status} = 'DONE')`,
+        })
+        .from(workspaces)
+        .leftJoin(tasks, eq(tasks.workspaceId, workspaces.id))
+        .where(eq(workspaces.isArchived, false))
+        .groupBy(workspaces.id, workspaces.name, workspaces.color)
+        .orderBy(asc(workspaces.name)),
+      this.db
+        .select({ workspaceId: auditLogs.workspaceId })
+        .from(auditLogs)
+        .where(sql`${auditLogs.createdAt} > now() - interval '7 days'`)
+        .groupBy(auditLogs.workspaceId),
+    ]);
+    const activeIds = new Set(activeRows.map((r) => r.workspaceId));
+    return rows.map((r) => {
+      const total = Number(r.total);
+      const completed = Number(r.completed);
+      return {
+        id: r.id,
+        name: r.name,
+        color: r.color,
+        totalTasks: total,
+        completedTasks: completed,
+        completionPct: total > 0 ? Math.round((completed / total) * 100) : 0,
+        isActive: activeIds.has(r.id),
+      };
+    });
+  }
+
+  /** Open tasks due within the next 14 days, soonest first. */
+  private async upcomingDeadlines(): Promise<UpcomingDeadline[]> {
+    const now = new Date();
+    const horizon = new Date(now.getTime() + 14 * 86_400_000);
+    const rows = await this.db
+      .select({
+        id: tasks.id,
+        number: tasks.number,
+        title: tasks.title,
+        dueDate: tasks.dueDate,
+        workspaceId: tasks.workspaceId,
+        workspaceName: workspaces.name,
+        prefix: workspaces.taskPrefix,
+      })
+      .from(tasks)
+      .innerJoin(workspaces, eq(workspaces.id, tasks.workspaceId))
+      .where(
+        and(
+          eq(tasks.isArchived, false),
+          ne(tasks.status, 'DONE'),
+          isNotNull(tasks.dueDate),
+          gte(tasks.dueDate, now),
+          lt(tasks.dueDate, horizon),
+        ),
+      )
+      .orderBy(asc(tasks.dueDate))
+      .limit(8);
+    return rows.map((r) => ({
+      id: r.id,
+      ref: `${r.prefix}-${r.number}`,
+      title: r.title,
+      dueDate: r.dueDate!.toISOString(),
+      workspaceId: r.workspaceId,
+      workspaceName: r.workspaceName,
+      dueInDays: Math.max(0, Math.ceil((r.dueDate!.getTime() - now.getTime()) / 86_400_000)),
+    }));
+  }
+
   async admin(): Promise<AdminDashboard> {
     const [[{ totalWorkspaces } = { totalWorkspaces: 0 }], [{ totalUsers } = { totalUsers: 0 }]] =
       await Promise.all([
@@ -64,7 +193,16 @@ export class DashboardService {
         this.db.select({ totalUsers: count() }).from(users).where(eq(users.isActive, true)),
       ]);
 
-    const [tasksByStatus, overdueTasks, recentActivity, activeRows] = await Promise.all([
+    const [
+      tasksByStatus,
+      overdueTasks,
+      recentActivity,
+      activeRows,
+      weeklyCompletion,
+      teamWorkload,
+      workspacePerformance,
+      upcomingDeadlines,
+    ] = await Promise.all([
       this.statusCounts(),
       this.overdueCount(),
       this.audit.globalActivity(1, 10),
@@ -74,6 +212,10 @@ export class DashboardService {
         .groupBy(auditLogs.workspaceId)
         .orderBy(desc(count()))
         .limit(1),
+      this.weeklyCompletion(),
+      this.teamWorkload(),
+      this.workspacePerformance(),
+      this.upcomingDeadlines(),
     ]);
 
     let mostActiveWorkspace: AdminDashboard['mostActiveWorkspace'] = null;
@@ -93,6 +235,10 @@ export class DashboardService {
       overdueTasks,
       mostActiveWorkspace,
       recentActivity,
+      weeklyCompletion,
+      teamWorkload,
+      workspacePerformance,
+      upcomingDeadlines,
     };
   }
 

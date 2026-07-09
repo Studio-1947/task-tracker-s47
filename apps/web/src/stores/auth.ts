@@ -10,6 +10,8 @@ interface AuthState {
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   /** Attempt silent session restore via the refresh cookie on app load. */
   bootstrap: () => Promise<void>;
+  /** Replace the cached user (e.g. after an avatar change). */
+  setUser: (user: AuthUser) => void;
 }
 
 interface LoginResp {
@@ -42,6 +44,8 @@ export const useAuth = create<AuthState>((set) => ({
     setAccessToken(res.accessToken);
     set({ user: res.user, status: 'authenticated' });
   },
+
+  setUser: (user) => set({ user }),
 
   bootstrap: async () => {
     try {

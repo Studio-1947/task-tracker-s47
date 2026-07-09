@@ -16,6 +16,8 @@ import {
 } from '../hooks/useTasks';
 import { useCreateLabel } from '../hooks/useLabels';
 import { describeAudit, formatDate, formatDateTime, priorityClasses, statusClasses, statusLabel } from '../lib/format';
+import { Attachments } from './Attachments';
+import { Avatar } from './Avatar';
 import { Button, Spinner } from './ui';
 
 interface Props {
@@ -141,15 +143,20 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose }: Pr
               onChange={(labelIds) => patch({ labelIds })}
             />
 
+            <Attachments taskId={taskId} workspaceId={workspaceId} />
+
             <section>
               <h3 className="mb-2 text-sm font-semibold text-slate-700">Comments</h3>
               <div className="space-y-3">
                 {comments?.length ? (
                   comments.map((c) => (
                     <div key={c.id} className="rounded-md bg-slate-50 px-3 py-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="font-medium text-slate-700">{c.user.name}</span>
-                        <span className="text-xs text-slate-400">{formatDateTime(c.createdAt)}</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <Avatar user={c.user} size="sm" />
+                          <span className="truncate font-medium text-slate-700">{c.user.name}</span>
+                        </span>
+                        <span className="shrink-0 text-xs text-slate-400">{formatDateTime(c.createdAt)}</span>
                       </div>
                       <p className="mt-1 whitespace-pre-wrap text-slate-600">{c.body}</p>
                     </div>

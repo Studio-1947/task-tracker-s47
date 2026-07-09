@@ -5,6 +5,7 @@ import type {
   CreateTaskInput,
   LabelRef,
   Paginated,
+  TaskAttachment,
   TaskComment,
   TaskDetail,
   TaskListItem,
@@ -12,11 +13,12 @@ import type {
   UpdateTaskInput,
   UserRef,
 } from '@task-tracker/shared';
-import { AuditAction } from '@task-tracker/shared';
+import { AuditAction, Role } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
 import {
   labels,
   taskAssignees,
+  taskAttachments,
   taskComments,
   taskLabels,
   tasks,
@@ -26,6 +28,7 @@ import {
   type TaskRow,
 } from '../database/schema';
 import { AuditService } from '../audit/audit.service';
+import { FilesService } from '../files/files.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 
 type Actor = { id: string; role: string };
@@ -36,6 +39,7 @@ export class TasksService {
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly workspaces: WorkspacesService,
     private readonly audit: AuditService,
+    private readonly files: FilesService,
   ) {}
 
   // ── helpers ───────────────────────────────────────────────────────────────
@@ -79,20 +83,29 @@ export class TasksService {
     }
   }
 
-  /** Bulk-load assignees, labels and comment counts for a set of task ids. */
+  /** Bulk-load assignees, labels, comment + attachment counts for a set of task ids. */
   private async loadRelations(taskIds: string[]): Promise<{
     assignees: Map<string, UserRef[]>;
     labels: Map<string, LabelRef[]>;
     commentCounts: Map<string, number>;
+    attachmentCounts: Map<string, number>;
   }> {
     const assigneeMap = new Map<string, UserRef[]>();
     const labelMap = new Map<string, LabelRef[]>();
     const commentCounts = new Map<string, number>();
-    if (taskIds.length === 0) return { assignees: assigneeMap, labels: labelMap, commentCounts };
+    const attachmentCounts = new Map<string, number>();
+    if (taskIds.length === 0)
+      return { assignees: assigneeMap, labels: labelMap, commentCounts, attachmentCounts };
 
-    const [assigneeRows, labelRows, commentRows] = await Promise.all([
+    const [assigneeRows, labelRows, commentRows, attachmentRows] = await Promise.all([
       this.db
-        .select({ taskId: taskAssignees.taskId, id: users.id, name: users.name, email: users.email })
+        .select({
+          taskId: taskAssignees.taskId,
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          avatarKey: users.avatarKey,
+        })
         .from(taskAssignees)
         .innerJoin(users, eq(users.id, taskAssignees.userId))
         .where(inArray(taskAssignees.taskId, taskIds)),
@@ -106,11 +119,16 @@ export class TasksService {
         .from(taskComments)
         .where(inArray(taskComments.taskId, taskIds))
         .groupBy(taskComments.taskId),
+      this.db
+        .select({ taskId: taskAttachments.taskId, c: count() })
+        .from(taskAttachments)
+        .where(inArray(taskAttachments.taskId, taskIds))
+        .groupBy(taskAttachments.taskId),
     ]);
 
     for (const r of assigneeRows) {
       const list = assigneeMap.get(r.taskId) ?? [];
-      list.push({ id: r.id, name: r.name, email: r.email });
+      list.push({ id: r.id, name: r.name, email: r.email, avatarKey: r.avatarKey });
       assigneeMap.set(r.taskId, list);
     }
     for (const r of labelRows) {
@@ -119,14 +137,20 @@ export class TasksService {
       labelMap.set(r.taskId, list);
     }
     for (const r of commentRows) commentCounts.set(r.taskId, Number(r.c));
+    for (const r of attachmentRows) attachmentCounts.set(r.taskId, Number(r.c));
 
-    return { assignees: assigneeMap, labels: labelMap, commentCounts };
+    return { assignees: assigneeMap, labels: labelMap, commentCounts, attachmentCounts };
   }
 
   private toListItem(
     t: TaskRow,
     prefix: string,
-    rel: { assignees: Map<string, UserRef[]>; labels: Map<string, LabelRef[]>; commentCounts: Map<string, number> },
+    rel: {
+      assignees: Map<string, UserRef[]>;
+      labels: Map<string, LabelRef[]>;
+      commentCounts: Map<string, number>;
+      attachmentCounts: Map<string, number>;
+    },
   ): TaskListItem {
     return {
       id: t.id,
@@ -140,6 +164,7 @@ export class TasksService {
       assignees: rel.assignees.get(t.id) ?? [],
       labels: rel.labels.get(t.id) ?? [],
       commentCount: rel.commentCounts.get(t.id) ?? 0,
+      attachmentCount: rel.attachmentCounts.get(t.id) ?? 0,
       isArchived: t.isArchived,
       createdAt: t.createdAt.toISOString(),
       updatedAt: t.updatedAt.toISOString(),
@@ -148,11 +173,11 @@ export class TasksService {
 
   private async userRef(userId: string): Promise<UserRef> {
     const [u] = await this.db
-      .select({ id: users.id, name: users.name, email: users.email })
+      .select({ id: users.id, name: users.name, email: users.email, avatarKey: users.avatarKey })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
-    return u ?? { id: userId, name: 'Unknown', email: '' };
+    return u ?? { id: userId, name: 'Unknown', email: '', avatarKey: null };
   }
 
   // ── commands ──────────────────────────────────────────────────────────────
@@ -183,6 +208,7 @@ export class TasksService {
           status: input.status ?? 'TODO',
           priority: input.priority ?? 'MEDIUM',
           dueDate: input.dueDate ? new Date(input.dueDate) : null,
+          completedAt: input.status === 'DONE' ? new Date() : null,
           createdById: actor.id,
         })
         .returning();
@@ -340,6 +366,8 @@ export class TasksService {
       }
       if (input.status !== undefined && input.status !== current.status) {
         patch.status = input.status;
+        // Track completion time for analytics; a re-opened task no longer counts as completed.
+        patch.completedAt = input.status === 'DONE' ? new Date() : null;
         audits.push({ action: AuditAction.STATUS_CHANGED, before: current.status, after: input.status });
       }
       if (input.priority !== undefined && input.priority !== current.priority) {
@@ -468,6 +496,7 @@ export class TasksService {
         userId: users.id,
         userName: users.name,
         userEmail: users.email,
+        userAvatarKey: users.avatarKey,
       })
       .from(taskComments)
       .innerJoin(users, eq(users.id, taskComments.userId))
@@ -476,7 +505,7 @@ export class TasksService {
     return rows.map((r) => ({
       id: r.id,
       body: r.body,
-      user: { id: r.userId, name: r.userName, email: r.userEmail },
+      user: { id: r.userId, name: r.userName, email: r.userEmail, avatarKey: r.userAvatarKey },
       createdAt: r.createdAt.toISOString(),
     }));
   }
@@ -485,5 +514,133 @@ export class TasksService {
     const current = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(current.workspaceId, actor);
     return this.audit.taskHistory(taskId);
+  }
+
+  // ── attachments ───────────────────────────────────────────────────────────
+
+  async listAttachments(taskId: string, actor: Actor): Promise<TaskAttachment[]> {
+    const current = await this.loadTaskOrThrow(taskId);
+    await this.workspaces.assertCanAccess(current.workspaceId, actor);
+    const rows = await this.db
+      .select({
+        id: taskAttachments.id,
+        fileName: taskAttachments.fileName,
+        mimeType: taskAttachments.mimeType,
+        sizeBytes: taskAttachments.sizeBytes,
+        storageKey: taskAttachments.storageKey,
+        createdAt: taskAttachments.createdAt,
+        userId: users.id,
+        userName: users.name,
+        userEmail: users.email,
+        userAvatarKey: users.avatarKey,
+      })
+      .from(taskAttachments)
+      .innerJoin(users, eq(users.id, taskAttachments.uploaderId))
+      .where(eq(taskAttachments.taskId, taskId))
+      .orderBy(asc(taskAttachments.createdAt));
+    return rows.map((r) => ({
+      id: r.id,
+      fileName: r.fileName,
+      mimeType: r.mimeType,
+      sizeBytes: r.sizeBytes,
+      storageKey: r.storageKey,
+      uploader: { id: r.userId, name: r.userName, email: r.userEmail, avatarKey: r.userAvatarKey },
+      createdAt: r.createdAt.toISOString(),
+    }));
+  }
+
+  async addAttachment(taskId: string, actor: Actor, file: Express.Multer.File): Promise<TaskAttachment> {
+    const current = await this.loadTaskOrThrow(taskId);
+    await this.workspaces.assertCanAccess(current.workspaceId, actor);
+
+    const saved = await this.files.save('attachments', file);
+    // Keep the original name for display but never trust it for storage.
+    const fileName = file.originalname.slice(0, 255);
+    try {
+      const row = await this.db.transaction(async (tx) => {
+        const [inserted] = await tx
+          .insert(taskAttachments)
+          .values({
+            taskId,
+            uploaderId: actor.id,
+            fileName,
+            storageKey: saved.key,
+            mimeType: saved.mimeType,
+            sizeBytes: saved.sizeBytes,
+          })
+          .returning();
+        if (!inserted) throw new Error('Failed to save attachment');
+        await this.audit.record(
+          {
+            workspaceId: current.workspaceId,
+            taskId,
+            userId: actor.id,
+            action: AuditAction.ATTACHMENT_ADDED,
+            afterValue: { attachmentId: inserted.id, fileName },
+          },
+          tx,
+        );
+        return inserted;
+      });
+      const uploader = await this.userRef(actor.id);
+      return {
+        id: row.id,
+        fileName: row.fileName,
+        mimeType: row.mimeType,
+        sizeBytes: row.sizeBytes,
+        storageKey: row.storageKey,
+        uploader,
+        createdAt: row.createdAt.toISOString(),
+      };
+    } catch (err) {
+      // The DB row is the source of truth — don't leave an orphaned file behind.
+      await this.files.remove(saved.key).catch(() => undefined);
+      throw err;
+    }
+  }
+
+  async removeAttachment(taskId: string, attachmentId: string, actor: Actor): Promise<{ id: string }> {
+    const current = await this.loadTaskOrThrow(taskId);
+    await this.workspaces.assertCanAccess(current.workspaceId, actor);
+
+    const [attachment] = await this.db
+      .select()
+      .from(taskAttachments)
+      .where(and(eq(taskAttachments.id, attachmentId), eq(taskAttachments.taskId, taskId)))
+      .limit(1);
+    if (!attachment) throw new NotFoundException('Attachment not found');
+    if (attachment.uploaderId !== actor.id && actor.role !== Role.ADMIN) {
+      throw new ForbiddenException('Only the uploader or an admin can delete an attachment');
+    }
+
+    await this.db.transaction(async (tx) => {
+      await tx.delete(taskAttachments).where(eq(taskAttachments.id, attachmentId));
+      await this.audit.record(
+        {
+          workspaceId: current.workspaceId,
+          taskId,
+          userId: actor.id,
+          action: AuditAction.ATTACHMENT_REMOVED,
+          beforeValue: { attachmentId, fileName: attachment.fileName },
+        },
+        tx,
+      );
+    });
+    // After commit; missing files are tolerated.
+    await this.files.remove(attachment.storageKey).catch(() => undefined);
+    return { id: attachmentId };
+  }
+
+  /** Authorized lookup used by the file-serving route. */
+  async attachmentByStorageKey(storageKey: string, actor: Actor) {
+    const [row] = await this.db
+      .select({ attachment: taskAttachments, workspaceId: tasks.workspaceId })
+      .from(taskAttachments)
+      .innerJoin(tasks, eq(tasks.id, taskAttachments.taskId))
+      .where(eq(taskAttachments.storageKey, storageKey))
+      .limit(1);
+    if (!row) throw new NotFoundException('File not found');
+    await this.workspaces.assertCanAccess(row.workspaceId, actor);
+    return row.attachment;
   }
 }

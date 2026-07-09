@@ -3,6 +3,7 @@ import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { AppShell } from './components/AppShell';
 import { Spinner } from './components/ui';
 import { ChangePasswordPage } from './pages/ChangePasswordPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { UsersPage } from './pages/UsersPage';
@@ -64,7 +65,7 @@ export default function App() {
           <Route index element={<DashboardPage />} />
           <Route path="workspaces" element={<WorkspacesPage />} />
           <Route path="workspaces/:id" element={<WorkspaceTasksPage />} />
-          <Route path="settings" element={<ChangePasswordPage />} />
+          <Route path="settings" element={<SettingsPage />} />
           <Route element={<RequireAdmin />}>
             <Route path="users" element={<UsersPage />} />
           </Route>

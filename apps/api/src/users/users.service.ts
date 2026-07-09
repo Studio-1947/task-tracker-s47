@@ -2,6 +2,7 @@ import { ConflictException, Inject, Injectable, NotFoundException } from '@nestj
 import * as argon2 from 'argon2';
 import { and, count, eq, inArray } from 'drizzle-orm';
 import type {
+  AuthUser,
   CreatedUserWithTempPassword,
   CreateUserInput,
   UpdateUserInput,
@@ -10,10 +11,14 @@ import type {
 import { DRIZZLE, type Database } from '../database/database.module';
 import { users, workspaceMembers, type UserRow } from '../database/schema';
 import { generateTempPassword } from '../common/util/password';
+import { FilesService } from '../files/files.service';
 
 @Injectable()
 export class UsersService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly files: FilesService,
+  ) {}
 
   private toSummary(u: UserRow, workspaceCount?: number): UserSummary {
     return {
@@ -21,6 +26,8 @@ export class UsersService {
       name: u.name,
       email: u.email,
       role: u.role as UserSummary['role'],
+      avatarKey: u.avatarKey,
+      designation: u.designation,
       isActive: u.isActive,
       createdAt: u.createdAt.toISOString(),
       ...(workspaceCount !== undefined ? { workspaceCount } : {}),
@@ -53,6 +60,7 @@ export class UsersService {
           email,
           passwordHash,
           role: input.role,
+          designation: input.designation ?? null,
           mustChangePassword: true,
         })
         .returning();
@@ -77,6 +85,7 @@ export class UsersService {
     const patch: Partial<UserRow> = { updatedAt: new Date() };
     if (input.name !== undefined) patch.name = input.name;
     if (input.role !== undefined) patch.role = input.role;
+    if (input.designation !== undefined) patch.designation = input.designation;
     if (input.isActive !== undefined) {
       patch.isActive = input.isActive;
       // Deactivation must lock the user out immediately — invalidate refresh tokens (PRD §11.2).
@@ -106,6 +115,49 @@ export class UsersService {
       })
       .where(eq(users.id, id));
     return { tempPassword };
+  }
+
+  private toAuthUser(u: UserRow): AuthUser {
+    return {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role as AuthUser['role'],
+      avatarKey: u.avatarKey,
+      designation: u.designation,
+      isActive: u.isActive,
+      mustChangePassword: u.mustChangePassword,
+    };
+  }
+
+  /** Self-service: set the caller's profile picture. */
+  async setAvatar(userId: string, file: Express.Multer.File): Promise<AuthUser> {
+    const [current] = await this.db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!current) throw new NotFoundException('User not found');
+
+    const saved = await this.files.save('avatars', file);
+    const [updated] = await this.db
+      .update(users)
+      .set({ avatarKey: saved.key, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    // Best-effort cleanup of the previous picture; the DB row is the source of truth.
+    if (current.avatarKey) await this.files.remove(current.avatarKey).catch(() => undefined);
+    return this.toAuthUser(updated!);
+  }
+
+  /** Self-service: remove the caller's profile picture. */
+  async removeAvatar(userId: string): Promise<AuthUser> {
+    const [current] = await this.db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!current) throw new NotFoundException('User not found');
+
+    const [updated] = await this.db
+      .update(users)
+      .set({ avatarKey: null, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    if (current.avatarKey) await this.files.remove(current.avatarKey).catch(() => undefined);
+    return this.toAuthUser(updated!);
   }
 
   async assertUsersExist(ids: string[]): Promise<void> {

@@ -49,8 +49,14 @@ export class AuditService {
     userId: string;
     userName: string;
     userEmail: string;
+    userAvatarKey: string | null;
   }): AuditEntry {
-    const user: UserRef = { id: row.userId, name: row.userName, email: row.userEmail };
+    const user: UserRef = {
+      id: row.userId,
+      name: row.userName,
+      email: row.userEmail,
+      avatarKey: row.userAvatarKey,
+    };
     const taskRef =
       row.taskPrefix && row.taskNumber !== null ? `${row.taskPrefix}-${row.taskNumber}` : null;
     return {
@@ -79,6 +85,7 @@ export class AuditService {
         userId: users.id,
         userName: users.name,
         userEmail: users.email,
+        userAvatarKey: users.avatarKey,
       })
       .from(auditLogs)
       .innerJoin(users, eq(users.id, auditLogs.userId))

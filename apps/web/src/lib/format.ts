@@ -36,6 +36,12 @@ export function formatDateTime(iso: string): string {
   });
 }
 
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function isOverdue(iso: string | null): boolean {
   return !!iso && new Date(iso).getTime() < Date.now();
 }
@@ -65,6 +71,10 @@ export function describeAudit(e: AuditEntry): string {
       return `${who} changed assignees`;
     case AuditAction.COMMENTED:
       return `${who} commented`;
+    case AuditAction.ATTACHMENT_ADDED:
+      return `${who} added an attachment`;
+    case AuditAction.ATTACHMENT_REMOVED:
+      return `${who} removed an attachment`;
     case AuditAction.ARCHIVED:
       return `${who} archived the task`;
     case AuditAction.DELETED:

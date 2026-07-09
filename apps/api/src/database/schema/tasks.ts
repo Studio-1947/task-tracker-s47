@@ -1,5 +1,6 @@
 import {
   boolean,
+  index,
   integer,
   pgTable,
   primaryKey,
@@ -27,6 +28,8 @@ export const tasks = pgTable(
     status: taskStatusEnum('status').notNull().default('TODO'),
     priority: priorityEnum('priority').notNull().default('MEDIUM'),
     dueDate: timestamp('due_date', { withTimezone: true }),
+    /** Set when status transitions to DONE, cleared when it leaves DONE (weekly completion analytics). */
+    completedAt: timestamp('completed_at', { withTimezone: true }),
     createdById: uuid('created_by_id')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
@@ -34,7 +37,10 @@ export const tasks = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex('tasks_workspace_number_uq').on(t.workspaceId, t.number)],
+  (t) => [
+    uniqueIndex('tasks_workspace_number_uq').on(t.workspaceId, t.number),
+    index('tasks_completed_at_idx').on(t.completedAt),
+  ],
 );
 
 export type TaskRow = typeof tasks.$inferSelect;
@@ -75,6 +81,25 @@ export const taskLabels = pgTable(
   },
   (t) => [primaryKey({ columns: [t.taskId, t.labelId] })],
 );
+
+export const taskAttachments = pgTable('task_attachments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  taskId: uuid('task_id')
+    .notNull()
+    .references(() => tasks.id, { onDelete: 'cascade' }),
+  uploaderId: uuid('uploader_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'restrict' }),
+  /** Original client filename — display/download only, never used on disk. */
+  fileName: varchar('file_name', { length: 255 }).notNull(),
+  /** Server-generated key under UPLOAD_DIR, e.g. "attachments/<uuid>.png". */
+  storageKey: varchar('storage_key', { length: 255 }).notNull().unique(),
+  mimeType: varchar('mime_type', { length: 100 }).notNull(),
+  sizeBytes: integer('size_bytes').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type TaskAttachmentRow = typeof taskAttachments.$inferSelect;
 
 export const taskComments = pgTable('task_comments', {
   id: uuid('id').primaryKey().defaultRandom(),

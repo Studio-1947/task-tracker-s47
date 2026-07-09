@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../stores/auth';
+import { Avatar } from './Avatar';
+import { GlobalSearch } from './GlobalSearch';
+import { Topbar } from './Topbar';
 import { Button } from './ui';
 
 const nav = [
@@ -13,6 +16,7 @@ export function AppShell() {
   const { user, logout } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const items = nav.filter((n) => !n.adminOnly || isAdmin);
 
   const NavItems = ({ onNavigate }: { onNavigate?: () => void }) => (
@@ -37,9 +41,14 @@ export function AppShell() {
 
   const UserFooter = ({ onNavigate }: { onNavigate?: () => void }) => (
     <div className="border-t border-slate-200 p-3">
-      <div className="mb-2 px-2 text-sm">
-        <div className="font-medium text-slate-700">{user?.name}</div>
-        <div className="text-xs text-slate-400">{user?.role}</div>
+      <div className="mb-2 flex items-center gap-2 px-2 text-sm">
+        {user ? <Avatar user={user} size="sm" /> : null}
+        <div className="min-w-0">
+          <div className="truncate font-medium text-slate-700">{user?.name}</div>
+          <div className="truncate text-xs text-slate-400">
+            {user?.designation ?? (user?.role === 'ADMIN' ? 'Admin' : 'Member')}
+          </div>
+        </div>
       </div>
       <NavLink
         to="/settings"
@@ -59,20 +68,55 @@ export function AppShell() {
       {/* Mobile top bar */}
       <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 md:hidden">
         <span className="text-lg font-semibold text-slate-800">Task Tracker</span>
-        <button
-          type="button"
-          aria-label="Open menu"
-          aria-expanded={mobileOpen ? 'true' : 'false'}
-          className="rounded-md border border-slate-300 p-2 text-slate-600"
-          onClick={() => setMobileOpen(true)}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="3" y1="6" x2="21" y2="6" />
-            <line x1="3" y1="12" x2="21" y2="12" />
-            <line x1="3" y1="18" x2="21" y2="18" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label="Search"
+            className="rounded-md border border-slate-300 p-2 text-slate-600"
+            onClick={() => setMobileSearchOpen(true)}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="7" />
+              <line x1="21" y1="21" x2="16.5" y2="16.5" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            aria-label="Open menu"
+            aria-expanded={mobileOpen ? 'true' : 'false'}
+            className="rounded-md border border-slate-300 p-2 text-slate-600"
+            onClick={() => setMobileOpen(true)}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+        </div>
       </header>
+
+      {/* Mobile full-screen search overlay */}
+      {mobileSearchOpen ? (
+        <div className="fixed inset-0 z-50 bg-white p-4 md:hidden">
+          <div className="flex items-center gap-2">
+            <div className="flex-1">
+              <GlobalSearch autoFocus onNavigated={() => setMobileSearchOpen(false)} />
+            </div>
+            <button
+              type="button"
+              aria-label="Close search"
+              className="rounded-md p-2 text-slate-500 hover:bg-slate-100"
+              onClick={() => setMobileSearchOpen(false)}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {/* Mobile slide-in drawer */}
       {mobileOpen ? (
@@ -115,11 +159,14 @@ export function AppShell() {
         <UserFooter />
       </aside>
 
-      <main className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          <Outlet />
-        </div>
-      </main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <Topbar />
+        <main className="flex-1 overflow-auto">
+          <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+            <Outlet />
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
