@@ -7,7 +7,10 @@ export const createWorkspaceSchema = z.object({
     .string()
     .regex(/^#([0-9a-fA-F]{6})$/, 'Must be a hex color like #4f46e5')
     .optional(),
-  /** Short uppercase prefix for human-readable task IDs, e.g. "ENG" -> ENG-142 (PRD §3.3). */
+  /**
+   * Optional prefix for the auto-created "General" project's task IDs, e.g.
+   * "ENG" -> ENG-142. Task prefixes now live on projects, not workspaces.
+   */
   taskPrefix: z
     .string()
     .regex(/^[A-Z]{2,6}$/, 'Prefix must be 2-6 uppercase letters')

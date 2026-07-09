@@ -5,6 +5,8 @@ const statusEnum = z.enum(TASK_STATUSES as [TaskStatus, ...TaskStatus[]]);
 const priorityEnum = z.enum(PRIORITIES as [Priority, ...Priority[]]);
 
 export const createTaskSchema = z.object({
+  /** Project the task belongs to (must be a project of the target workspace). */
+  projectId: z.string().uuid(),
   title: z.string().min(1).max(300),
   description: z.string().max(20000).optional(),
   status: statusEnum.optional(),
@@ -42,6 +44,7 @@ export type CreateCommentInput = z.infer<typeof createCommentSchema>;
 /** Query params for the shared task list (Kanban/List/Table all read this). */
 export const taskQuerySchema = z.object({
   status: statusEnum.optional(),
+  projectId: z.string().uuid().optional(),
   assigneeId: z.string().uuid().optional(),
   labelId: z.string().uuid().optional(),
   priority: priorityEnum.optional(),

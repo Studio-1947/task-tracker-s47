@@ -63,7 +63,9 @@ export function WorkspacesPage() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <div className="font-bold text-slate-800 dark:text-slate-100 text-lg truncate">{w.name}</div>
-                      <div className="mt-1.5 inline-block font-mono bg-slate-100 dark:bg-slate-800 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded text-slate-500 dark:text-slate-455">{w.taskPrefix}</div>
+                      <div className="mt-1.5 inline-block bg-slate-100 dark:bg-slate-800 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded text-slate-500 dark:text-slate-455">
+                        {w.projectCount ?? 0} project{(w.projectCount ?? 0) === 1 ? '' : 's'}
+                      </div>
                     </div>
                     {w.isArchived ? (
                       <span className="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 border border-amber-100/50 dark:border-amber-900/30">

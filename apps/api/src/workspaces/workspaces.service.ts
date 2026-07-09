@@ -8,7 +8,7 @@ import {
   type WorkspaceSummary,
 } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
-import { users, workspaceMembers, workspaces, type WorkspaceRow } from '../database/schema';
+import { projects, users, workspaceMembers, workspaces, type WorkspaceRow } from '../database/schema';
 import { UsersService } from '../users/users.service';
 
 @Injectable()
@@ -18,20 +18,20 @@ export class WorkspacesService {
     private readonly usersService: UsersService,
   ) {}
 
-  private toSummary(w: WorkspaceRow, memberCount?: number): WorkspaceSummary {
+  private toSummary(w: WorkspaceRow, memberCount?: number, projectCount?: number): WorkspaceSummary {
     return {
       id: w.id,
       name: w.name,
       description: w.description,
       color: w.color,
-      taskPrefix: w.taskPrefix,
       isArchived: w.isArchived,
       createdAt: w.createdAt.toISOString(),
       ...(memberCount !== undefined ? { memberCount } : {}),
+      ...(projectCount !== undefined ? { projectCount } : {}),
     };
   }
 
-  /** Derive a task prefix from the workspace name when not supplied, e.g. "Engineering" -> "ENG". */
+  /** Derive a task prefix from a name when not supplied, e.g. "Engineering" -> "ENG". */
   private derivePrefix(name: string): string {
     const letters = name.replace(/[^a-zA-Z]/g, '').toUpperCase();
     return (letters.slice(0, 3) || 'WS').padEnd(2, 'X');
@@ -64,15 +64,23 @@ export class WorkspacesService {
   }
 
   async list(actor: { id: string; role: string }): Promise<WorkspaceSummary[]> {
-    const memberCounts = await this.db
-      .select({ workspaceId: workspaceMembers.workspaceId, c: count() })
-      .from(workspaceMembers)
-      .groupBy(workspaceMembers.workspaceId);
+    const [memberCounts, projectCounts] = await Promise.all([
+      this.db
+        .select({ workspaceId: workspaceMembers.workspaceId, c: count() })
+        .from(workspaceMembers)
+        .groupBy(workspaceMembers.workspaceId),
+      this.db
+        .select({ workspaceId: projects.workspaceId, c: count() })
+        .from(projects)
+        .where(eq(projects.isArchived, false))
+        .groupBy(projects.workspaceId),
+    ]);
     const countByWs = new Map(memberCounts.map((r) => [r.workspaceId, Number(r.c)]));
+    const projectByWs = new Map(projectCounts.map((r) => [r.workspaceId, Number(r.c)]));
 
     if (actor.role === Role.ADMIN) {
       const rows = await this.db.select().from(workspaces).orderBy(workspaces.createdAt);
-      return rows.map((w) => this.toSummary(w, countByWs.get(w.id) ?? 0));
+      return rows.map((w) => this.toSummary(w, countByWs.get(w.id) ?? 0, projectByWs.get(w.id) ?? 0));
     }
 
     const ids = await this.membershipIds(actor.id);
@@ -81,32 +89,47 @@ export class WorkspacesService {
       .select()
       .from(workspaces)
       .where(and(inArray(workspaces.id, ids), eq(workspaces.isArchived, false)));
-    return rows.map((w) => this.toSummary(w, countByWs.get(w.id) ?? 0));
+    return rows.map((w) => this.toSummary(w, countByWs.get(w.id) ?? 0, projectByWs.get(w.id) ?? 0));
   }
 
   async getOne(id: string, actor: { id: string; role: string }): Promise<WorkspaceSummary> {
     await this.assertCanAccess(id, actor);
     const [w] = await this.db.select().from(workspaces).where(eq(workspaces.id, id)).limit(1);
     if (!w) throw new NotFoundException('Workspace not found');
-    const [{ c } = { c: 0 }] = await this.db
-      .select({ c: count() })
-      .from(workspaceMembers)
-      .where(eq(workspaceMembers.workspaceId, id));
-    return this.toSummary(w, Number(c));
+    const [[{ c: memberCount } = { c: 0 }], [{ c: projectCount } = { c: 0 }]] = await Promise.all([
+      this.db.select({ c: count() }).from(workspaceMembers).where(eq(workspaceMembers.workspaceId, id)),
+      this.db
+        .select({ c: count() })
+        .from(projects)
+        .where(and(eq(projects.workspaceId, id), eq(projects.isArchived, false))),
+    ]);
+    return this.toSummary(w, Number(memberCount), Number(projectCount));
   }
 
   async create(input: CreateWorkspaceInput, createdById: string): Promise<WorkspaceSummary> {
-    const [w] = await this.db
-      .insert(workspaces)
-      .values({
-        name: input.name,
-        description: input.description ?? null,
+    const w = await this.db.transaction(async (tx) => {
+      const [workspace] = await tx
+        .insert(workspaces)
+        .values({
+          name: input.name,
+          description: input.description ?? null,
+          color: input.color ?? null,
+          createdById,
+        })
+        .returning();
+      if (!workspace) throw new Error('Failed to create workspace');
+      // Every workspace starts with a default "General" project so quick-add
+      // always has a target and task refs are always project-scoped.
+      await tx.insert(projects).values({
+        workspaceId: workspace.id,
+        name: 'General',
         color: input.color ?? null,
         taskPrefix: input.taskPrefix ?? this.derivePrefix(input.name),
         createdById,
-      })
-      .returning();
-    return this.toSummary(w!, 0);
+      });
+      return workspace;
+    });
+    return this.toSummary(w, 0, 1);
   }
 
   async update(id: string, input: UpdateWorkspaceInput): Promise<WorkspaceSummary> {

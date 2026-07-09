@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { useUsers } from '../hooks/useUsers';
 import { useWorkspace, useWorkspaceMembers } from '../hooks/useTasks';
 import { useUpdateWorkspace, useUpdateWorkspaceMembers } from '../hooks/useWorkspaces';
+import { useProjects, useUpdateProject } from '../hooks/useProjects';
 import { ApiRequestError } from '../lib/api';
 import { Avatar } from './Avatar';
+import { CreateProjectModal } from './CreateProjectModal';
 import { Badge, Button, Input, Spinner } from './ui';
 
 interface Props {
@@ -15,12 +17,15 @@ export function WorkspaceSettings({ workspaceId, onClose }: Props) {
   const { data: workspace, isLoading } = useWorkspace(workspaceId);
   const { data: members } = useWorkspaceMembers(workspaceId);
   const { data: allUsers } = useUsers();
+  const { data: projects } = useProjects(workspaceId);
   const updateWorkspace = useUpdateWorkspace(workspaceId);
   const updateMembers = useUpdateWorkspaceMembers(workspaceId);
+  const updateProject = useUpdateProject(workspaceId);
 
   const [name, setName] = useState<string | null>(null);
   const [description, setDescription] = useState<string | null>(null);
   const [addUserId, setAddUserId] = useState('');
+  const [showCreateProject, setShowCreateProject] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Seed local edit state from the loaded workspace once.
@@ -157,9 +162,57 @@ export function WorkspaceSettings({ workspaceId, onClose }: Props) {
                 ) : null}
               </ul>
             </section>
+
+            {/* Projects */}
+            <section>
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  Projects ({projects?.length ?? 0})
+                </h3>
+                <Button className="py-1.5 px-3 text-xs" onClick={() => setShowCreateProject(true)}>
+                  + New project
+                </Button>
+              </div>
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                {(projects ?? []).map((p) => (
+                  <li key={p.id} className="flex items-center justify-between gap-3 py-2.5">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: p.color ?? '#6366f1' }}
+                      />
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">
+                          {p.name}
+                          {p.isArchived ? <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">archived</span> : null}
+                        </div>
+                        <div className="truncate text-xs text-slate-400 dark:text-slate-500">
+                          <span className="font-mono">{p.taskPrefix}</span> · {p.taskCount ?? 0} task(s)
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      variant={p.isArchived ? 'ghost' : 'danger'}
+                      className="py-1 px-2.5 text-xs"
+                      disabled={updateProject.isPending}
+                      onClick={() => updateProject.mutate({ id: p.id, patch: { isArchived: !p.isArchived } })}
+                    >
+                      {p.isArchived ? 'Unarchive' : 'Archive'}
+                    </Button>
+                  </li>
+                ))}
+                {projects?.length === 0 ? (
+                  <li className="py-3 text-sm text-slate-400 dark:text-slate-500">No projects yet.</li>
+                ) : null}
+              </ul>
+            </section>
           </div>
         )}
       </div>
+
+      {showCreateProject ? (
+        <CreateProjectModal workspaceId={workspaceId} onClose={() => setShowCreateProject(false)} />
+      ) : null}
     </div>
   );
 }

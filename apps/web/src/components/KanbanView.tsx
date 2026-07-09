@@ -20,9 +20,10 @@ interface Props {
   workspaceId: string;
   tasks: TaskListItem[];
   onOpen: (id: string) => void;
+  showProject?: boolean;
 }
 
-export function KanbanView({ workspaceId, tasks, onOpen }: Props) {
+export function KanbanView({ workspaceId, tasks, onOpen, showProject }: Props) {
   const update = useUpdateTask(workspaceId);
   const [activeId, setActiveId] = useState<string | null>(null);
   // A small drag threshold so taps still register as clicks (open drawer) and the
@@ -55,10 +56,16 @@ export function KanbanView({ workspaceId, tasks, onOpen }: Props) {
     <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
       <div className="flex gap-4 overflow-x-auto pb-4 items-start">
         {TASK_STATUSES.map((status) => (
-          <Column key={status} status={status} tasks={byStatus[status] ?? []} onOpen={onOpen} />
+          <Column
+            key={status}
+            status={status}
+            tasks={byStatus[status] ?? []}
+            onOpen={onOpen}
+            showProject={showProject}
+          />
         ))}
       </div>
-      <DragOverlay>{activeTask ? <Card task={activeTask} overlay /> : null}</DragOverlay>
+      <DragOverlay>{activeTask ? <Card task={activeTask} overlay showProject={showProject} /> : null}</DragOverlay>
     </DndContext>
   );
 }
@@ -67,10 +74,12 @@ function Column({
   status,
   tasks,
   onOpen,
+  showProject,
 }: {
   status: TaskStatus;
   tasks: TaskListItem[];
   onOpen: (id: string) => void;
+  showProject?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   return (
@@ -88,7 +97,7 @@ function Column({
         }`}
       >
         {tasks.map((t) => (
-          <DraggableCard key={t.id} task={t} onOpen={onOpen} />
+          <DraggableCard key={t.id} task={t} onOpen={onOpen} showProject={showProject} />
         ))}
         {tasks.length === 0 ? (
           <div className="py-8 text-center text-xs font-semibold uppercase tracking-wider text-slate-350 dark:text-slate-600 border border-dashed border-slate-200/60 dark:border-[#2d2d2d] rounded-xl bg-white/30 dark:bg-[#1a1a1a]/10">Drop target</div>
@@ -98,7 +107,15 @@ function Column({
   );
 }
 
-function DraggableCard({ task, onOpen }: { task: TaskListItem; onOpen: (id: string) => void }) {
+function DraggableCard({
+  task,
+  onOpen,
+  showProject,
+}: {
+  task: TaskListItem;
+  onOpen: (id: string) => void;
+  showProject?: boolean;
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id });
   const style = { transform: CSS.Translate.toString(transform), opacity: isDragging ? 0.4 : 1 };
   return (
@@ -110,16 +127,21 @@ function DraggableCard({ task, onOpen }: { task: TaskListItem; onOpen: (id: stri
       onClick={() => onOpen(task.id)}
       className="cursor-grab touch-none rounded-xl border border-slate-150/60 dark:border-[#2d2d2d] bg-white dark:bg-[#1e1e1e] p-4 shadow-[0_2px_8px_-2px_rgba(15,23,42,0.02)] active:cursor-grabbing hover:border-indigo-400 dark:hover:border-indigo-500/40 transition duration-150"
     >
-      <Card task={task} />
+      <Card task={task} showProject={showProject} />
     </div>
   );
 }
 
-function Card({ task, overlay = false }: { task: TaskListItem; overlay?: boolean }) {
+function Card({ task, overlay = false, showProject }: { task: TaskListItem; overlay?: boolean; showProject?: boolean }) {
   return (
     <div className={overlay ? 'w-64 rounded-xl border border-indigo-400 bg-white dark:bg-[#1e1e1e] p-4 shadow-xl dark:shadow-none' : ''}>
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[10px] font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-[#252525] px-1.5 py-0.5 rounded">{task.ref}</span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="font-mono text-[10px] font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-[#252525] px-1.5 py-0.5 rounded">{task.ref}</span>
+          {showProject ? (
+            <span className="truncate rounded bg-slate-100 dark:bg-[#252525] px-1.5 py-0.5 text-[9px] font-semibold text-slate-500 dark:text-slate-400">{task.projectName}</span>
+          ) : null}
+        </div>
         <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${priorityClasses[task.priority]}`}>
           {task.priority}
         </span>

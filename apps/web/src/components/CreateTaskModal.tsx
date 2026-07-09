@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { PRIORITIES, TASK_STATUSES, type LabelRef, type Priority, type TaskStatus, type UserRef } from '@task-tracker/shared';
+import { PRIORITIES, TASK_STATUSES, type LabelRef, type Priority, type ProjectSummary, type TaskStatus, type UserRef } from '@task-tracker/shared';
 import { useCreateTask } from '../hooks/useTasks';
 import { ApiRequestError } from '../lib/api';
 import { statusLabel } from '../lib/format';
@@ -9,13 +9,16 @@ interface Props {
   workspaceId: string;
   members: UserRef[];
   labels: LabelRef[];
+  projects: ProjectSummary[];
+  defaultProjectId?: string;
   onClose: () => void;
 }
 
-export function CreateTaskModal({ workspaceId, members, labels, onClose }: Props) {
+export function CreateTaskModal({ workspaceId, members, labels, projects, defaultProjectId, onClose }: Props) {
   const createTask = useCreateTask(workspaceId);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [projectId, setProjectId] = useState(defaultProjectId ?? projects[0]?.id ?? '');
   const [status, setStatus] = useState<TaskStatus>('TODO');
   const [priority, setPriority] = useState<Priority>('MEDIUM');
   const [assigneeId, setAssigneeId] = useState('');
@@ -29,9 +32,14 @@ export function CreateTaskModal({ workspaceId, members, labels, onClose }: Props
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
+    if (!projectId) {
+      setError('Please select a project');
+      return;
+    }
     setError(null);
     try {
       await createTask.mutateAsync({
+        projectId,
         title: title.trim(),
         description: description.trim() || undefined,
         status,
@@ -67,6 +75,23 @@ export function CreateTaskModal({ workspaceId, members, labels, onClose }: Props
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Project</label>
+            <select
+              aria-label="Project"
+              className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white"
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+            >
+              {projects.length === 0 ? <option value="">No projects</option> : null}
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.taskPrefix})
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>

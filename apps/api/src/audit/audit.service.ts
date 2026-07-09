@@ -3,7 +3,7 @@ import { desc, eq, inArray } from 'drizzle-orm';
 import type { AuditAction } from '@task-tracker/shared';
 import type { AuditEntry, UserRef } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
-import { auditLogs, tasks, users, workspaces } from '../database/schema';
+import { auditLogs, projects, tasks, users } from '../database/schema';
 
 export interface RecordAuditInput {
   workspaceId: string;
@@ -78,7 +78,7 @@ export class AuditService {
         action: auditLogs.action,
         taskId: auditLogs.taskId,
         taskNumber: tasks.number,
-        taskPrefix: workspaces.taskPrefix,
+        taskPrefix: projects.taskPrefix,
         beforeValue: auditLogs.beforeValue,
         afterValue: auditLogs.afterValue,
         createdAt: auditLogs.createdAt,
@@ -89,8 +89,8 @@ export class AuditService {
       })
       .from(auditLogs)
       .innerJoin(users, eq(users.id, auditLogs.userId))
-      .innerJoin(workspaces, eq(workspaces.id, auditLogs.workspaceId))
-      .leftJoin(tasks, eq(tasks.id, auditLogs.taskId));
+      .leftJoin(tasks, eq(tasks.id, auditLogs.taskId))
+      .leftJoin(projects, eq(projects.id, tasks.projectId));
   }
 
   /** Timeline for a single task (newest first). */

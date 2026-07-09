@@ -1,4 +1,4 @@
-import { boolean, integer, pgTable, primaryKey, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { boolean, pgTable, primaryKey, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { users } from './users';
 
 export const workspaces = pgTable('workspaces', {
@@ -6,10 +6,6 @@ export const workspaces = pgTable('workspaces', {
   name: varchar('name', { length: 120 }).notNull(),
   description: varchar('description', { length: 2000 }),
   color: varchar('color', { length: 7 }),
-  /** Prefix for human-readable task IDs, e.g. "ENG" -> ENG-142 (PRD §3.3). */
-  taskPrefix: varchar('task_prefix', { length: 6 }).notNull(),
-  /** Per-workspace monotonic counter backing the human-readable task IDs. */
-  taskSeq: integer('task_seq').notNull().default(0),
   isArchived: boolean('is_archived').notNull().default(false),
   createdById: uuid('created_by_id')
     .notNull()

@@ -10,6 +10,7 @@ const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigat
 type FlatItem =
   | { kind: 'task'; item: SearchResults['tasks'][number] }
   | { kind: 'workspace'; item: SearchResults['workspaces'][number] }
+  | { kind: 'project'; item: SearchResults['projects'][number] }
   | { kind: 'user'; item: NonNullable<SearchResults['users']>[number] };
 
 function useDebounced(value: string, ms: number): string {
@@ -49,6 +50,7 @@ export function GlobalSearch({
     return [
       ...data.tasks.map((item) => ({ kind: 'task', item }) as FlatItem),
       ...data.workspaces.map((item) => ({ kind: 'workspace', item }) as FlatItem),
+      ...data.projects.map((item) => ({ kind: 'project', item }) as FlatItem),
       ...(data.users ?? []).map((item) => ({ kind: 'user', item }) as FlatItem),
     ];
   }, [data]);
@@ -81,6 +83,7 @@ export function GlobalSearch({
   const go = (entry: FlatItem) => {
     if (entry.kind === 'task') navigate(`/workspaces/${entry.item.workspaceId}?task=${entry.item.id}`);
     else if (entry.kind === 'workspace') navigate(`/workspaces/${entry.item.id}`);
+    else if (entry.kind === 'project') navigate(`/workspaces/${entry.item.workspaceId}?project=${entry.item.id}`);
     else navigate('/users');
     setRaw('');
     setOpen(false);
@@ -113,7 +116,8 @@ export function GlobalSearch({
   // Index offsets of each group within the flattened list (for highlight state).
   const taskOffset = 0;
   const wsOffset = data?.tasks.length ?? 0;
-  const userOffset = wsOffset + (data?.workspaces.length ?? 0);
+  const projectOffset = wsOffset + (data?.workspaces.length ?? 0);
+  const userOffset = projectOffset + (data?.projects.length ?? 0);
 
   return (
     <div ref={containerRef} className="relative w-full">
@@ -189,7 +193,26 @@ export function GlobalSearch({
                     >
                       <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: w.color ?? '#6366f1' }} />
                       <span className="min-w-0 flex-1 truncate text-sm text-slate-700 dark:text-slate-200">{w.name}</span>
-                      <span className="shrink-0 font-mono text-xs text-slate-400 dark:text-slate-500">{w.taskPrefix}</span>
+                    </ResultRow>
+                  ))}
+                </SearchGroup>
+              ) : null}
+
+              {data && data.projects.length > 0 ? (
+                <SearchGroup label="Projects">
+                  {data.projects.map((p, i) => (
+                    <ResultRow
+                      key={p.id}
+                      active={active === projectOffset + i}
+                      onSelect={() => go({ kind: 'project', item: p })}
+                      onHover={() => setActive(projectOffset + i)}
+                    >
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: p.color ?? '#6366f1' }} />
+                      <span className="min-w-0 flex-1 truncate text-sm text-slate-700 dark:text-slate-200">
+                        {p.name}
+                        <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500">{p.workspaceName}</span>
+                      </span>
+                      <span className="shrink-0 font-mono text-xs text-slate-400 dark:text-slate-500">{p.taskPrefix}</span>
                     </ResultRow>
                   ))}
                 </SearchGroup>

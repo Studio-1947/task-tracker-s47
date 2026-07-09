@@ -11,6 +11,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { priorityEnum, taskStatusEnum } from './enums';
+import { projects } from './projects';
 import { users } from './users';
 import { workspaces } from './workspaces';
 
@@ -21,7 +22,11 @@ export const tasks = pgTable(
     workspaceId: uuid('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
-    /** Per-workspace sequential number backing the human-readable ref (e.g. 142 in ENG-142). */
+    /** Owning project. Immutable after creation (keeps per-project numbering coherent). */
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    /** Per-project sequential number backing the human-readable ref (e.g. 12 in WEB-12). */
     number: integer('number').notNull(),
     title: varchar('title', { length: 300 }).notNull(),
     description: text('description'),
@@ -38,7 +43,7 @@ export const tasks = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex('tasks_workspace_number_uq').on(t.workspaceId, t.number),
+    uniqueIndex('tasks_project_number_uq').on(t.projectId, t.number),
     index('tasks_completed_at_idx').on(t.completedAt),
   ],
 );

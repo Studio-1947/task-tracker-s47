@@ -13,7 +13,7 @@ import {
   type WorkspacePerformance,
 } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
-import { auditLogs, taskAssignees, tasks, users, workspaces } from '../database/schema';
+import { auditLogs, projects, taskAssignees, tasks, users, workspaces } from '../database/schema';
 import { AuditService } from '../audit/audit.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 
@@ -160,10 +160,11 @@ export class DashboardService {
         dueDate: tasks.dueDate,
         workspaceId: tasks.workspaceId,
         workspaceName: workspaces.name,
-        prefix: workspaces.taskPrefix,
+        prefix: projects.taskPrefix,
       })
       .from(tasks)
       .innerJoin(workspaces, eq(workspaces.id, tasks.workspaceId))
+      .innerJoin(projects, eq(projects.id, tasks.projectId))
       .where(
         and(
           eq(tasks.isArchived, false),
@@ -260,10 +261,11 @@ export class DashboardService {
                 dueDate: tasks.dueDate,
                 workspaceId: tasks.workspaceId,
                 workspaceName: workspaces.name,
-                prefix: workspaces.taskPrefix,
+                prefix: projects.taskPrefix,
               })
               .from(tasks)
               .innerJoin(workspaces, eq(workspaces.id, tasks.workspaceId))
+              .innerJoin(projects, eq(projects.id, tasks.projectId))
               .where(
                 and(
                   eq(tasks.isArchived, false),

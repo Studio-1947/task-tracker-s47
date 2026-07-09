@@ -51,7 +51,10 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose }: Pr
           <div className="flex flex-col gap-6 p-5 sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
-                <div className="font-mono text-xs font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-850 px-2 py-0.5 rounded w-16 text-center">{task.ref}</div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-850 px-2 py-0.5 rounded text-center">{task.ref}</span>
+                  <span className="truncate text-xs font-semibold text-slate-500 dark:text-slate-400">{task.projectName}</span>
+                </div>
                 <h2 className="mt-2.5 text-lg font-bold text-slate-800 dark:text-white break-words leading-snug">{task.title}</h2>
               </div>
               <button

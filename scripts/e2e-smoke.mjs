@@ -56,15 +56,24 @@ async function main() {
   });
   assert(memRes.ok, `add member (${memRes.status})`);
 
-  // 4. create task
+  // 3b. every workspace is auto-created with a default "General" project
+  const projRes = await fetch(`${API}/workspaces/${ws.id}/projects`, { headers: H });
+  assert(projRes.ok, `list projects (${projRes.status})`);
+  const projects = await json(projRes);
+  assert(Array.isArray(projects) && projects.length === 1, 'workspace has one default project');
+  const project = projects[0];
+  assert(project.name === 'General', 'default project is named "General"');
+
+  // 4. create task (tasks belong to a project)
   const taskRes = await fetch(`${API}/workspaces/${ws.id}/tasks`, {
     method: 'POST',
     headers: H,
-    body: JSON.stringify({ title: 'Smoke task', assigneeIds: [user.id] }),
+    body: JSON.stringify({ projectId: project.id, title: 'Smoke task', assigneeIds: [user.id] }),
   });
   assert(taskRes.ok, `create task (${taskRes.status})`);
   const task = await json(taskRes);
   assert(/^[A-Z]{2,6}-\d+$/.test(task.ref), `task got a human-readable ref (${task.ref})`);
+  assert(task.projectId === project.id, 'task is linked to the project');
 
   // 5. change status
   const patchRes = await fetch(`${API}/tasks/${task.id}`, {

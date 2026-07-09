@@ -53,6 +53,9 @@ importers:
       drizzle-orm:
         specifier: ^0.38.3
         version: 0.38.4(@types/pg@8.20.0)(@types/react@19.2.17)(pg@8.22.0)(react@19.2.7)
+      multer:
+        specifier: ^2.0.0
+        version: 2.2.0
       passport:
         specifier: ^0.7.0
         version: 0.7.0

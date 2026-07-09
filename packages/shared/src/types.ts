@@ -65,10 +65,23 @@ export interface WorkspaceSummary {
   name: string;
   description: string | null;
   color: string | null;
-  taskPrefix: string;
   isArchived: boolean;
   createdAt: string;
   memberCount?: number;
+  projectCount?: number;
+}
+
+/** A project groups tasks inside a workspace and owns its task-ref prefix. */
+export interface ProjectSummary {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description: string | null;
+  color: string | null;
+  taskPrefix: string;
+  isArchived: boolean;
+  createdAt: string;
+  taskCount?: number;
 }
 
 export interface UserRef {
@@ -88,8 +101,10 @@ export interface LabelRef {
 export interface TaskListItem {
   id: string;
   workspaceId: string;
+  projectId: string;
+  projectName: string;
   number: number;
-  /** Human-readable reference, e.g. "ENG-142" (prefix + number). */
+  /** Human-readable reference, e.g. "WEB-12" (project prefix + number). */
   ref: string;
   title: string;
   status: TaskStatus;
@@ -212,7 +227,15 @@ export interface SearchResults {
     workspaceId: string;
     workspaceName: string;
   }[];
-  workspaces: { id: string; name: string; color: string | null; taskPrefix: string }[];
+  workspaces: { id: string; name: string; color: string | null }[];
+  projects: {
+    id: string;
+    name: string;
+    color: string | null;
+    taskPrefix: string;
+    workspaceId: string;
+    workspaceName: string;
+  }[];
   /** Admin-only; null when the requester is not an admin. */
   users: UserSummary[] | null;
 }

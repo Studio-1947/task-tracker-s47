@@ -17,6 +17,7 @@ import {
   type TaskFilters,
 } from '../hooks/useTasks';
 import { useLabels } from '../hooks/useLabels';
+import { useProjects } from '../hooks/useProjects';
 import { useAuth } from '../stores/auth';
 import { formatDate, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
 import { ApiRequestError } from '../lib/api';
@@ -24,6 +25,7 @@ import { Badge, Button, Card, EmptyState, ErrorState, Input, LabelChip, Spinner 
 import { TaskDrawer } from '../components/TaskDrawer';
 import { KanbanView } from '../components/KanbanView';
 import { CreateTaskModal } from '../components/CreateTaskModal';
+import { CreateProjectModal } from '../components/CreateProjectModal';
 import { WorkspaceSettings } from '../components/WorkspaceSettings';
 
 type View = 'list' | 'table' | 'kanban';
@@ -53,16 +55,37 @@ function Board({ workspaceId }: { workspaceId: string }) {
   const { data: workspace } = useWorkspace(workspaceId);
   const { data: members } = useWorkspaceMembers(workspaceId);
   const { data: labels } = useLabels(workspaceId);
+  const { data: projects } = useProjects(workspaceId);
   const [view, setView] = useState<View>('list');
   const [filters, setFilters] = useState<TaskFilters>(() => loadFilters(workspaceId));
   const [page, setPage] = useState(1);
   // Deep-link support (?task=<id>) so search results and dashboard widgets can
-  // open the drawer directly.
+  // open the drawer directly. ?project=<id> scopes the board to one project.
   const [searchParams, setSearchParams] = useSearchParams();
   const [openTaskId, setOpenTaskId] = useState<string | null>(() => searchParams.get('task'));
   const [showCreate, setShowCreate] = useState(false);
+  const [showCreateProject, setShowCreateProject] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const { data, isLoading, error } = useTasks(workspaceId, { ...filters, page });
+
+  // Project scope is navigational (?project=), not a persisted filter.
+  const selectedProjectId = searchParams.get('project') ?? '';
+  const activeProjects = useMemo(() => (projects ?? []).filter((p) => !p.isArchived), [projects]);
+  const selectProject = (id: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (id) next.set('project', id);
+    else next.delete('project');
+    setSearchParams(next, { replace: true });
+    setPage(1);
+  };
+  // Target project for quick-add: the selected one, else the first project.
+  const [quickProjectId, setQuickProjectId] = useState('');
+  const targetProjectId = selectedProjectId || quickProjectId || activeProjects[0]?.id || '';
+
+  const { data, isLoading, error } = useTasks(workspaceId, {
+    ...filters,
+    projectId: selectedProjectId || undefined,
+    page,
+  });
 
   const paramTaskId = searchParams.get('task');
   useEffect(() => {
@@ -104,8 +127,11 @@ function Board({ workspaceId }: { workspaceId: string }) {
 
   const onCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim()) return;
-    createTask.mutate({ title: newTitle }, { onSuccess: () => setNewTitle('') });
+    if (!newTitle.trim() || !targetProjectId) return;
+    createTask.mutate(
+      { projectId: targetProjectId, title: newTitle },
+      { onSuccess: () => setNewTitle('') },
+    );
   };
 
   return (
@@ -147,6 +173,28 @@ function Board({ workspaceId }: { workspaceId: string }) {
           </div>
         </div>
 
+        {/* Project scope selector */}
+        <div className="mt-5 flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+          <ProjectPill active={!selectedProjectId} onClick={() => selectProject('')} label="All projects" />
+          {activeProjects.map((p) => (
+            <ProjectPill
+              key={p.id}
+              active={selectedProjectId === p.id}
+              onClick={() => selectProject(p.id)}
+              label={p.name}
+              prefix={p.taskPrefix}
+              count={p.taskCount}
+            />
+          ))}
+          <button
+            type="button"
+            onClick={() => setShowCreateProject(true)}
+            className="shrink-0 rounded-full border border-dashed border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+          >
+            + New project
+          </button>
+        </div>
+
         {/* Create + filters */}
         <Card className="mt-6 p-5 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
           <form className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-3" onSubmit={onCreate}>
@@ -156,8 +204,22 @@ function Board({ workspaceId }: { workspaceId: string }) {
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
             />
+            {!selectedProjectId && activeProjects.length > 0 ? (
+              <select
+                aria-label="Project for new task"
+                className="w-full sm:w-40 shrink-0 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 px-3 py-2 text-xs text-slate-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all"
+                value={targetProjectId}
+                onChange={(e) => setQuickProjectId(e.target.value)}
+              >
+                {activeProjects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            ) : null}
             <div className="flex gap-2 shrink-0">
-              <Button type="submit" className="flex-1 sm:flex-initial" disabled={createTask.isPending}>
+              <Button type="submit" className="flex-1 sm:flex-initial" disabled={createTask.isPending || !targetProjectId}>
                 {createTask.isPending ? 'Adding…' : 'Add'}
               </Button>
               <Button type="button" className="flex-1 sm:flex-initial" variant="ghost" onClick={() => void setShowCreate(true)}>
@@ -237,11 +299,16 @@ function Board({ workspaceId }: { workspaceId: string }) {
               }
             />
           ) : view === 'list' ? (
-            <ListView tasks={data.items} onOpen={setOpenTaskId} />
+            <ListView tasks={data.items} onOpen={setOpenTaskId} showProject={!selectedProjectId} />
           ) : view === 'table' ? (
-            <TableView tasks={data.items} onOpen={setOpenTaskId} />
+            <TableView tasks={data.items} onOpen={setOpenTaskId} showProject={!selectedProjectId} />
           ) : (
-            <KanbanView workspaceId={workspaceId} tasks={data.items} onOpen={setOpenTaskId} />
+            <KanbanView
+              workspaceId={workspaceId}
+              tasks={data.items}
+              onOpen={setOpenTaskId}
+              showProject={!selectedProjectId}
+            />
           )}
           {data ? (
             <div className="mt-3.5 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between px-1.5">
@@ -295,13 +362,54 @@ function Board({ workspaceId }: { workspaceId: string }) {
           workspaceId={workspaceId}
           members={memberRefs}
           labels={labels ?? []}
+          projects={activeProjects}
+          defaultProjectId={selectedProjectId || undefined}
           onClose={() => void setShowCreate(false)}
+        />
+      ) : null}
+      {showCreateProject ? (
+        <CreateProjectModal
+          workspaceId={workspaceId}
+          onClose={() => void setShowCreateProject(false)}
+          onCreated={(p) => selectProject(p.id)}
         />
       ) : null}
       {showSettings ? (
         <WorkspaceSettings workspaceId={workspaceId} onClose={() => void setShowSettings(false)} />
       ) : null}
     </>
+  );
+}
+
+function ProjectPill({
+  active,
+  onClick,
+  label,
+  prefix,
+  count,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  prefix?: string;
+  count?: number;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`shrink-0 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+        active
+          ? 'border-indigo-500 bg-indigo-50/70 text-indigo-700 dark:border-indigo-500/50 dark:bg-indigo-950/30 dark:text-indigo-300'
+          : 'border-slate-200 bg-white/60 text-slate-600 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300 dark:hover:border-slate-700'
+      }`}
+    >
+      <span className="truncate max-w-[10rem]">{label}</span>
+      {prefix ? <span className="font-mono text-[10px] text-slate-400 dark:text-slate-500">{prefix}</span> : null}
+      {count !== undefined ? (
+        <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-1.5 text-[10px] text-slate-500 dark:text-slate-400">{count}</span>
+      ) : null}
+    </button>
   );
 }
 
@@ -312,7 +420,23 @@ function PriorityBadge({ t }: { t: TaskListItem }) {
   return <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${priorityClasses[t.priority]}`}>{t.priority}</span>;
 }
 
-function ListView({ tasks, onOpen }: { tasks: TaskListItem[]; onOpen: (id: string) => void }) {
+function ProjectTag({ name }: { name: string }) {
+  return (
+    <span className="shrink-0 rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+      {name}
+    </span>
+  );
+}
+
+function ListView({
+  tasks,
+  onOpen,
+  showProject,
+}: {
+  tasks: TaskListItem[];
+  onOpen: (id: string) => void;
+  showProject?: boolean;
+}) {
   return (
     <div className="space-y-2.5">
       {tasks.map((t) => (
@@ -332,8 +456,9 @@ function ListView({ tasks, onOpen }: { tasks: TaskListItem[]; onOpen: (id: strin
               </span>
             </div>
 
-            {/* Metadata Row: labels, assignee, due date, priority, status */}
+            {/* Metadata Row: project, labels, assignee, due date, priority, status */}
             <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:shrink-0 sm:gap-4">
+              {showProject ? <ProjectTag name={t.projectName} /> : null}
               {t.labels.length > 0 ? (
                 <div className="flex flex-wrap gap-1 sm:hidden lg:flex">
                   {t.labels.slice(0, 2).map((l) => (
@@ -367,12 +492,28 @@ function ListView({ tasks, onOpen }: { tasks: TaskListItem[]; onOpen: (id: strin
 
 const columnHelper = createColumnHelper<TaskListItem>();
 
-function TableView({ tasks, onOpen }: { tasks: TaskListItem[]; onOpen: (id: string) => void }) {
+function TableView({
+  tasks,
+  onOpen,
+  showProject,
+}: {
+  tasks: TaskListItem[];
+  onOpen: (id: string) => void;
+  showProject?: boolean;
+}) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const columns = useMemo(
     () => [
       columnHelper.accessor('ref', { header: 'Ref', cell: (c) => <span className="font-mono text-xs text-slate-450 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{c.getValue()}</span> }),
       columnHelper.accessor('title', { header: 'Title', cell: (c) => <span className="font-semibold text-slate-750 dark:text-slate-200">{c.getValue()}</span> }),
+      ...(showProject
+        ? [
+            columnHelper.accessor('projectName', {
+              header: 'Project',
+              cell: (c) => <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{c.getValue()}</span>,
+            }),
+          ]
+        : []),
       columnHelper.accessor('status', { header: 'Status', cell: (c) => <StatusBadge t={c.row.original} /> }),
       columnHelper.accessor('priority', { header: 'Priority', cell: (c) => <PriorityBadge t={c.row.original} /> }),
       columnHelper.accessor((r) => r.assignees[0]?.name ?? '', {
@@ -389,7 +530,7 @@ function TableView({ tasks, onOpen }: { tasks: TaskListItem[]; onOpen: (id: stri
         ),
       }),
     ],
-    [],
+    [showProject],
   );
 
   const table = useReactTable({

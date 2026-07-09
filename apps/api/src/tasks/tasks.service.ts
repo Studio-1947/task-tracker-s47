@@ -17,6 +17,7 @@ import { AuditAction, Role } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
 import {
   labels,
+  projects,
   taskAssignees,
   taskAttachments,
   taskComments,
@@ -24,7 +25,6 @@ import {
   tasks,
   users,
   workspaceMembers,
-  workspaces,
   type TaskRow,
 } from '../database/schema';
 import { AuditService } from '../audit/audit.service';
@@ -48,15 +48,17 @@ export class TasksService {
     return `${prefix}-${number}`;
   }
 
-  private async loadTaskOrThrow(taskId: string): Promise<TaskRow & { taskPrefix: string }> {
+  private async loadTaskOrThrow(
+    taskId: string,
+  ): Promise<TaskRow & { taskPrefix: string; projectName: string }> {
     const [row] = await this.db
-      .select({ task: tasks, taskPrefix: workspaces.taskPrefix })
+      .select({ task: tasks, taskPrefix: projects.taskPrefix, projectName: projects.name })
       .from(tasks)
-      .innerJoin(workspaces, eq(workspaces.id, tasks.workspaceId))
+      .innerJoin(projects, eq(projects.id, tasks.projectId))
       .where(eq(tasks.id, taskId))
       .limit(1);
     if (!row) throw new NotFoundException('Task not found');
-    return { ...row.task, taskPrefix: row.taskPrefix };
+    return { ...row.task, taskPrefix: row.taskPrefix, projectName: row.projectName };
   }
 
   private async assertAssigneesAreMembers(workspaceId: string, userIds: string[]): Promise<void> {
@@ -145,6 +147,7 @@ export class TasksService {
   private toListItem(
     t: TaskRow,
     prefix: string,
+    projectName: string,
     rel: {
       assignees: Map<string, UserRef[]>;
       labels: Map<string, LabelRef[]>;
@@ -155,6 +158,8 @@ export class TasksService {
     return {
       id: t.id,
       workspaceId: t.workspaceId,
+      projectId: t.projectId,
+      projectName,
       number: t.number,
       ref: this.ref(prefix, t.number),
       title: t.title,
@@ -190,18 +195,21 @@ export class TasksService {
     await this.assertLabelsInWorkspace(workspaceId, labelIds);
 
     const created = await this.db.transaction(async (tx) => {
-      // Atomically claim the next per-workspace number for the human-readable ref.
+      // Atomically claim the next per-project number for the human-readable ref.
+      // The workspace guard scopes the WHERE so a project from another workspace
+      // (or a bad id) claims nothing and 404s.
       const [seq] = await tx
-        .update(workspaces)
-        .set({ taskSeq: sql`${workspaces.taskSeq} + 1` })
-        .where(eq(workspaces.id, workspaceId))
-        .returning({ number: workspaces.taskSeq, prefix: workspaces.taskPrefix });
-      if (!seq) throw new NotFoundException('Workspace not found');
+        .update(projects)
+        .set({ taskSeq: sql`${projects.taskSeq} + 1` })
+        .where(and(eq(projects.id, input.projectId), eq(projects.workspaceId, workspaceId)))
+        .returning({ number: projects.taskSeq, prefix: projects.taskPrefix });
+      if (!seq) throw new NotFoundException('Project not found in this workspace');
 
       const [task] = await tx
         .insert(tasks)
         .values({
           workspaceId,
+          projectId: input.projectId,
           number: seq.number,
           title: input.title,
           description: input.description ?? null,
@@ -247,14 +255,8 @@ export class TasksService {
   async list(workspaceId: string, actor: Actor, query: TaskQuery): Promise<Paginated<TaskListItem>> {
     await this.workspaces.assertCanAccess(workspaceId, actor);
 
-    const [ws] = await this.db
-      .select({ prefix: workspaces.taskPrefix })
-      .from(workspaces)
-      .where(eq(workspaces.id, workspaceId))
-      .limit(1);
-    if (!ws) throw new NotFoundException('Workspace not found');
-
     const conds = [eq(tasks.workspaceId, workspaceId)];
+    if (query.projectId) conds.push(eq(tasks.projectId, query.projectId));
     if (!query.includeArchived) conds.push(eq(tasks.isArchived, false));
     if (query.status) conds.push(eq(tasks.status, query.status));
     if (query.priority) conds.push(eq(tasks.priority, query.priority));
@@ -298,16 +300,17 @@ export class TasksService {
       .where(where);
 
     const rows = await this.db
-      .select()
+      .select({ task: tasks, prefix: projects.taskPrefix, projectName: projects.name })
       .from(tasks)
+      .innerJoin(projects, eq(projects.id, tasks.projectId))
       .where(where)
       .orderBy(orderBy)
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
 
-    const rel = await this.loadRelations(rows.map((r) => r.id));
+    const rel = await this.loadRelations(rows.map((r) => r.task.id));
     return {
-      items: rows.map((t) => this.toListItem(t, ws.prefix, rel)),
+      items: rows.map((r) => this.toListItem(r.task, r.prefix, r.projectName, rel)),
       total: Number(total),
       page: query.page,
       pageSize: query.pageSize,
@@ -318,7 +321,7 @@ export class TasksService {
     const task = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(task.workspaceId, actor);
     const rel = await this.loadRelations([taskId]);
-    const base = this.toListItem(task, task.taskPrefix, rel);
+    const base = this.toListItem(task, task.taskPrefix, task.projectName, rel);
     const createdBy = await this.userRef(task.createdById);
     return { ...base, description: task.description, createdBy };
   }
