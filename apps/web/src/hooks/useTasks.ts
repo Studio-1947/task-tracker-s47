@@ -21,6 +21,7 @@ export interface TaskFilters {
   sort?: string;
   order?: 'asc' | 'desc';
   page?: number;
+  pageSize?: number;
 }
 
 function toQueryString(filters: TaskFilters): string {

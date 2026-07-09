@@ -28,7 +28,7 @@ import { WorkspaceSettings } from '../components/WorkspaceSettings';
 
 type View = 'list' | 'table' | 'kanban';
 
-const DEFAULT_FILTERS: TaskFilters = { sort: 'createdAt', order: 'desc' };
+const DEFAULT_FILTERS: TaskFilters = { sort: 'createdAt', order: 'desc', pageSize: 15 };
 
 export function WorkspaceTasksPage() {
   const { id = '' } = useParams();
@@ -86,7 +86,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
   // Reset to page 1 whenever a filter changes.
   useEffect(() => {
     setPage(1);
-  }, [filters.status, filters.assigneeId, filters.labelId, filters.search, filters.sort, filters.order]);
+  }, [filters.status, filters.assigneeId, filters.labelId, filters.search, filters.sort, filters.order, filters.pageSize]);
 
   const createTask = useCreateTask(workspaceId);
   const [newTitle, setNewTitle] = useState('');
@@ -99,7 +99,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
   const filtersActive =
     !!filters.search || !!filters.status || !!filters.assigneeId || !!filters.labelId;
 
-  const pageSize = data?.pageSize ?? 50;
+  const pageSize = data?.pageSize ?? 15;
   const totalPages = data ? Math.max(1, Math.ceil(data.total / pageSize)) : 1;
 
   const onCreate = (e: React.FormEvent) => {
@@ -244,8 +244,25 @@ function Board({ workspaceId }: { workspaceId: string }) {
             <KanbanView workspaceId={workspaceId} tasks={data.items} onOpen={setOpenTaskId} />
           )}
           {data ? (
-            <div className="mt-3.5 flex items-center justify-between px-1.5">
-              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">{data.total} task(s) found</p>
+            <div className="mt-3.5 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between px-1.5">
+              <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-slate-400 dark:text-slate-500">
+                <span>{data.total} task(s) found</span>
+                <span className="hidden sm:inline text-slate-200 dark:text-slate-800">|</span>
+                <div className="flex items-center gap-1.5">
+                  <span>Show</span>
+                  <select
+                    aria-label="Tasks per page"
+                    value={filters.pageSize ?? 15}
+                    onChange={(e) => setFilters((f) => ({ ...f, pageSize: Number(e.target.value) }))}
+                    className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1a1a1a] py-1 px-1.5 outline-none text-[11px] font-semibold text-slate-700 dark:text-slate-350 cursor-pointer focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all"
+                  >
+                    <option value={10}>10 per page</option>
+                    <option value={15}>15 per page</option>
+                    <option value={30}>30 per page</option>
+                    <option value={50}>50 per page</option>
+                  </select>
+                </div>
+              </div>
               {view !== 'kanban' && totalPages > 1 ? (
                 <div className="flex items-center gap-2 text-xs font-semibold">
                   <Button variant="ghost" className="py-1 px-3" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
