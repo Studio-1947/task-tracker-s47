@@ -12,6 +12,8 @@ interface AuthState {
   bootstrap: () => Promise<void>;
   /** Replace the cached user (e.g. after an avatar change). */
   setUser: (user: AuthUser) => void;
+  /** Adopt a ready session (access token already set) — used by super-dev impersonation. */
+  adoptSession: (user: AuthUser) => void;
 }
 
 interface LoginResp {
@@ -46,6 +48,8 @@ export const useAuth = create<AuthState>((set) => ({
   },
 
   setUser: (user) => set({ user }),
+
+  adoptSession: (user) => set({ user, status: 'authenticated' }),
 
   bootstrap: async () => {
     try {

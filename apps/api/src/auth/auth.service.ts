@@ -146,6 +146,22 @@ export class AuthService {
     };
   }
 
+  /**
+   * Mint a normal user session for an arbitrary user id WITHOUT a password — used
+   * only by the super-dev console to impersonate a user (reproduce their view).
+   * Deactivated users cannot be impersonated.
+   */
+  async issueSessionForUser(
+    userId: string,
+    userAgent?: string | null,
+    ipAddress?: string | null,
+  ): Promise<{ tokens: LoginResponse; refreshToken: string }> {
+    const user = await this.findById(userId);
+    if (!user) throw new UnauthorizedException('User not found');
+    if (!user.isActive) throw new UnauthorizedException('Account is deactivated');
+    return this.makeSession(user, userAgent, ipAddress);
+  }
+
   async me(userId: string): Promise<AuthUser> {
     const user = await this.findById(userId);
     if (!user || !user.isActive) throw new UnauthorizedException();
