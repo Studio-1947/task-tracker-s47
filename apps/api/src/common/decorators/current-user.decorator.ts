@@ -5,6 +5,7 @@ export interface RequestUser {
   id: string;
   role: string;
   tokenVersion: number;
+  sessionId?: string;
 }
 
 /** Injects the authenticated user (populated by JwtStrategy) into a handler param. */

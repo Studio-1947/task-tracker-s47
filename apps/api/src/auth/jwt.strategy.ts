@@ -42,6 +42,6 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     if (!user || !user.isActive || user.tokenVersion !== payload.tokenVersion) {
       throw new UnauthorizedException('Session is no longer valid');
     }
-    return { id: user.id, role: user.role, tokenVersion: user.tokenVersion };
+    return { id: user.id, role: user.role, tokenVersion: user.tokenVersion, sessionId: payload.sessionId };
   }
 }

@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm';
 import type { AuthUser, JwtPayload, LoginResponse } from '@task-tracker/shared';
 import type { Env } from '../config/env';
 import { DRIZZLE, type Database } from '../database/database.module';
-import { users, type UserRow } from '../database/schema';
+import { users, sessions, type UserRow } from '../database/schema';
 
 @Injectable()
 export class AuthService {
@@ -29,16 +29,16 @@ export class AuthService {
     };
   }
 
-  private signAccess(u: UserRow): string {
-    const payload: JwtPayload = { sub: u.id, role: u.role as JwtPayload['role'], tokenVersion: u.tokenVersion };
+  private signAccess(u: UserRow, sessionId?: string): string {
+    const payload: JwtPayload = { sub: u.id, role: u.role as JwtPayload['role'], tokenVersion: u.tokenVersion, sessionId };
     return this.jwt.sign(payload, {
       secret: this.config.get('JWT_ACCESS_SECRET', { infer: true }),
       expiresIn: this.config.get('JWT_ACCESS_TTL', { infer: true }),
     });
   }
 
-  signRefresh(u: UserRow): string {
-    const payload: JwtPayload = { sub: u.id, role: u.role as JwtPayload['role'], tokenVersion: u.tokenVersion };
+  signRefresh(u: UserRow, sessionId?: string): string {
+    const payload: JwtPayload = { sub: u.id, role: u.role as JwtPayload['role'], tokenVersion: u.tokenVersion, sessionId };
     return this.jwt.sign(payload, {
       secret: this.config.get('JWT_REFRESH_SECRET', { infer: true }),
       expiresIn: this.config.get('JWT_REFRESH_TTL', { infer: true }),
@@ -55,16 +55,34 @@ export class AuthService {
     return u;
   }
 
-  /** Build an access token + refresh token pair for a user row. */
-  private makeSession(user: UserRow): { tokens: LoginResponse; refreshToken: string } {
+  /** Build an access token + refresh token pair for a user row and record session. */
+  private async makeSession(
+    user: UserRow,
+    userAgent?: string | null,
+    ipAddress?: string | null,
+  ): Promise<{ tokens: LoginResponse; refreshToken: string }> {
+    const [sess] = await this.db
+      .insert(sessions)
+      .values({
+        userId: user.id,
+        userAgent: userAgent ?? null,
+        ipAddress: ipAddress ?? null,
+      })
+      .returning();
+    const sessionId = sess?.id;
     return {
-      tokens: { accessToken: this.signAccess(user), user: this.toAuthUser(user) },
-      refreshToken: this.signRefresh(user),
+      tokens: { accessToken: this.signAccess(user, sessionId), user: this.toAuthUser(user) },
+      refreshToken: this.signRefresh(user, sessionId),
     };
   }
 
   /** Verify credentials; returns { access token, refresh token, user }. */
-  async login(email: string, password: string): Promise<{ tokens: LoginResponse; refreshToken: string }> {
+  async login(
+    email: string,
+    password: string,
+    userAgent?: string | null,
+    ipAddress?: string | null,
+  ): Promise<{ tokens: LoginResponse; refreshToken: string }> {
     const user = await this.findByEmail(email);
     // Constant-ish work whether or not the user exists — avoids user enumeration.
     const hash = user?.passwordHash ?? '$argon2id$v=19$m=65536,t=3,p=4$deadbeefdeadbeef$0000000000000000000000000000000000000000000';
@@ -73,14 +91,15 @@ export class AuthService {
     if (!user || !ok) throw new UnauthorizedException('Invalid email or password');
     if (!user.isActive) throw new UnauthorizedException('Account is deactivated');
 
-    return {
-      tokens: { accessToken: this.signAccess(user), user: this.toAuthUser(user) },
-      refreshToken: this.signRefresh(user),
-    };
+    return this.makeSession(user, userAgent, ipAddress);
   }
 
   /** Validate a refresh token and mint a fresh access token (rotating tokenVersion enforced). */
-  async refresh(refreshToken: string): Promise<{ tokens: LoginResponse; refreshToken: string }> {
+  async refresh(
+    refreshToken: string,
+    userAgent?: string | null,
+    ipAddress?: string | null,
+  ): Promise<{ tokens: LoginResponse; refreshToken: string }> {
     let payload: JwtPayload;
     try {
       payload = await this.jwt.verifyAsync<JwtPayload>(refreshToken, {
@@ -95,9 +114,35 @@ export class AuthService {
       throw new UnauthorizedException('Session is no longer valid');
     }
 
+    let sessionId = payload.sessionId;
+    if (sessionId) {
+      const [sess] = await this.db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1);
+      if (!sess) {
+        throw new UnauthorizedException('Session is no longer valid');
+      }
+      await this.db
+        .update(sessions)
+        .set({
+          lastActiveAt: new Date(),
+          ...(userAgent ? { userAgent } : {}),
+          ...(ipAddress ? { ipAddress } : {}),
+        })
+        .where(eq(sessions.id, sessionId));
+    } else {
+      const [sess] = await this.db
+        .insert(sessions)
+        .values({
+          userId: user.id,
+          userAgent: userAgent ?? null,
+          ipAddress: ipAddress ?? null,
+        })
+        .returning();
+      sessionId = sess?.id;
+    }
+
     return {
-      tokens: { accessToken: this.signAccess(user), user: this.toAuthUser(user) },
-      refreshToken: this.signRefresh(user),
+      tokens: { accessToken: this.signAccess(user, sessionId), user: this.toAuthUser(user) },
+      refreshToken: this.signRefresh(user, sessionId),
     };
   }
 
@@ -135,5 +180,22 @@ export class AuthService {
       .where(eq(users.id, userId))
       .returning();
     return this.makeSession(updated!);
+  }
+
+  async logout(sessionId?: string, refreshToken?: string): Promise<void> {
+    if (sessionId) {
+      await this.db.delete(sessions).where(eq(sessions.id, sessionId));
+    } else if (refreshToken) {
+      try {
+        const payload = await this.jwt.verifyAsync<JwtPayload>(refreshToken, {
+          secret: this.config.get('JWT_REFRESH_SECRET', { infer: true }),
+        });
+        if (payload.sessionId) {
+          await this.db.delete(sessions).where(eq(sessions.id, payload.sessionId));
+        }
+      } catch {
+        // ignore validation errors on logout
+      }
+    }
   }
 }

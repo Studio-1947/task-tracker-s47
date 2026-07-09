@@ -40,9 +40,12 @@ export class AuthController {
   @HttpCode(200)
   async login(
     @Body(new ZodValidationPipe(loginSchema)) body: LoginInput,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<LoginResponse> {
-    const { tokens, refreshToken } = await this.auth.login(body.email, body.password);
+    const userAgent = req.headers['user-agent'] ?? null;
+    const ipAddress = req.ip ?? null;
+    const { tokens, refreshToken } = await this.auth.login(body.email, body.password, userAgent, ipAddress);
     res.cookie(REFRESH_COOKIE, refreshToken, this.refreshCookieOptions());
     return tokens;
   }
@@ -52,7 +55,9 @@ export class AuthController {
   @HttpCode(200)
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<LoginResponse> {
     const token = (req.cookies as Record<string, string> | undefined)?.[REFRESH_COOKIE] ?? '';
-    const { tokens, refreshToken } = await this.auth.refresh(token);
+    const userAgent = req.headers['user-agent'] ?? null;
+    const ipAddress = req.ip ?? null;
+    const { tokens, refreshToken } = await this.auth.refresh(token, userAgent, ipAddress);
     res.cookie(REFRESH_COOKIE, refreshToken, this.refreshCookieOptions());
     return tokens;
   }
@@ -60,7 +65,13 @@ export class AuthController {
   @Public()
   @Post('logout')
   @HttpCode(204)
-  logout(@Res({ passthrough: true }) res: Response): void {
+  async logout(
+    @Req() req: Request,
+    @CurrentUser('sessionId') sessionId: string | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<void> {
+    const token = (req.cookies as Record<string, string> | undefined)?.[REFRESH_COOKIE] ?? '';
+    await this.auth.logout(sessionId, token);
     res.clearCookie(REFRESH_COOKIE, { ...this.refreshCookieOptions(), maxAge: undefined });
   }
 

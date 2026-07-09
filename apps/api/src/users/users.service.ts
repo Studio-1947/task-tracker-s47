@@ -1,15 +1,16 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import * as argon2 from 'argon2';
-import { and, count, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import type {
   AuthUser,
   CreatedUserWithTempPassword,
   CreateUserInput,
   UpdateUserInput,
   UserSummary,
+  UserSession,
 } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
-import { users, workspaceMembers, type UserRow } from '../database/schema';
+import { users, workspaceMembers, sessions, type UserRow } from '../database/schema';
 import { generateTempPassword } from '../common/util/password';
 import { FilesService } from '../files/files.service';
 
@@ -169,5 +170,40 @@ export class UsersService {
     if (found.length !== new Set(ids).size) {
       throw new NotFoundException('One or more users not found or inactive');
     }
+  }
+
+  async listSessions(): Promise<UserSession[]> {
+    const rows = await this.db
+      .select({
+        id: sessions.id,
+        userId: sessions.userId,
+        userName: users.name,
+        userEmail: users.email,
+        userAvatarKey: users.avatarKey,
+        userAgent: sessions.userAgent,
+        ipAddress: sessions.ipAddress,
+        lastActiveAt: sessions.lastActiveAt,
+        createdAt: sessions.createdAt,
+      })
+      .from(sessions)
+      .innerJoin(users, eq(users.id, sessions.userId))
+      .orderBy(desc(sessions.lastActiveAt));
+
+    return rows.map((r) => ({
+      id: r.id,
+      userId: r.userId,
+      userName: r.userName,
+      userEmail: r.userEmail,
+      userAvatarKey: r.userAvatarKey,
+      userAgent: r.userAgent,
+      ipAddress: r.ipAddress,
+      lastActiveAt: r.lastActiveAt.toISOString(),
+      createdAt: r.createdAt.toISOString(),
+    }));
+  }
+
+  async revokeSession(id: string): Promise<{ id: string }> {
+    await this.db.delete(sessions).where(eq(sessions.id, id));
+    return { id };
   }
 }

@@ -24,6 +24,7 @@ export interface JwtPayload {
   sub: string;
   role: Role;
   tokenVersion: number;
+  sessionId?: string;
 }
 
 /** Standard error envelope returned by the API (PRD §11.5). */
@@ -225,5 +226,17 @@ export interface AuditEntry {
   user: UserRef;
   beforeValue: unknown;
   afterValue: unknown;
+  createdAt: string;
+}
+
+export interface UserSession {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  userAvatarKey: string | null;
+  userAgent: string | null;
+  ipAddress: string | null;
+  lastActiveAt: string;
   createdAt: string;
 }

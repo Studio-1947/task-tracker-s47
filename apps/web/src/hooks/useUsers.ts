@@ -4,6 +4,7 @@ import type {
   CreateUserInput,
   UpdateUserInput,
   UserSummary,
+  UserSession,
 } from '@task-tracker/shared';
 import { http } from '../lib/api';
 
@@ -34,5 +35,20 @@ export function useUpdateUser() {
 export function useResetPassword() {
   return useMutation({
     mutationFn: (id: string) => http.post<{ tempPassword: string }>(`/users/${id}/reset-password`),
+  });
+}
+
+export function useSessions() {
+  return useQuery({
+    queryKey: ['sessions'],
+    queryFn: () => http.get<UserSession[]>('/users/sessions'),
+  });
+}
+
+export function useRevokeSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => http.del<{ id: string }>(`/users/sessions/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
   });
 }

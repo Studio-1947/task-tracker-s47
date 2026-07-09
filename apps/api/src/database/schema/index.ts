@@ -5,3 +5,4 @@ export * from './users';
 export * from './workspaces';
 export * from './tasks';
 export * from './audit';
+export * from './sessions';

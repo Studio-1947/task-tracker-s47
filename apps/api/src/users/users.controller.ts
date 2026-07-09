@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import {
   Role,
   createUserSchema,
@@ -26,6 +26,20 @@ export class UsersController {
   create(@Body(new ZodValidationPipe(createUserSchema)) body: CreateUserInput) {
     return this.users.create(body);
   }
+
+  // ── Session routes (static path segments MUST come before :id params) ──
+
+  @Get('sessions')
+  listSessions() {
+    return this.users.listSessions();
+  }
+
+  @Delete('sessions/:id')
+  revokeSession(@Param('id', ParseUUIDPipe) id: string) {
+    return this.users.revokeSession(id);
+  }
+
+  // ── Parameterized user routes ──
 
   @Patch(':id')
   update(
