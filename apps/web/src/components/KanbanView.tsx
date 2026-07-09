@@ -53,7 +53,7 @@ export function KanbanView({ workspaceId, tasks, onOpen }: Props) {
 
   return (
     <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      <div className="flex gap-4 overflow-x-auto pb-4 items-start">
         {TASK_STATUSES.map((status) => (
           <Column key={status} status={status} tasks={byStatus[status] ?? []} onOpen={onOpen} />
         ))}
@@ -75,23 +75,23 @@ function Column({
   const { setNodeRef, isOver } = useDroppable({ id: status });
   return (
     <div className="flex w-72 shrink-0 flex-col">
-      <div className="mb-2 flex items-center justify-between px-1">
-        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusClasses[status]}`}>
+      <div className="mb-3 flex items-center justify-between px-1.5">
+        <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${statusClasses[status]}`}>
           {statusLabel(status)}
         </span>
-        <span className="text-xs text-slate-400">{tasks.length}</span>
+        <span className="text-xs font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-[#252525] px-2 py-0.5 rounded-full">{tasks.length}</span>
       </div>
       <div
         ref={setNodeRef}
-        className={`flex min-h-24 flex-1 flex-col gap-2 rounded-lg border p-2 transition ${
-          isOver ? 'border-indigo-400 bg-indigo-50/50' : 'border-slate-200 bg-slate-50'
+        className={`flex min-h-24 flex-1 flex-col gap-3 rounded-2xl border p-3 transition ${
+          isOver ? 'border-indigo-400 bg-indigo-50/20 dark:border-indigo-500/50 dark:bg-indigo-950/10' : 'border-slate-100 dark:border-[#2d2d2d] bg-slate-50/40 dark:bg-[#181818]/20'
         }`}
       >
         {tasks.map((t) => (
           <DraggableCard key={t.id} task={t} onOpen={onOpen} />
         ))}
         {tasks.length === 0 ? (
-          <div className="py-6 text-center text-xs text-slate-300">Drop here</div>
+          <div className="py-8 text-center text-xs font-semibold uppercase tracking-wider text-slate-350 dark:text-slate-600 border border-dashed border-slate-200/60 dark:border-[#2d2d2d] rounded-xl bg-white/30 dark:bg-[#1a1a1a]/10">Drop target</div>
         ) : null}
       </div>
     </div>
@@ -108,7 +108,7 @@ function DraggableCard({ task, onOpen }: { task: TaskListItem; onOpen: (id: stri
       {...attributes}
       {...listeners}
       onClick={() => onOpen(task.id)}
-      className="cursor-grab touch-none rounded-md border border-slate-200 bg-white p-3 shadow-sm active:cursor-grabbing"
+      className="cursor-grab touch-none rounded-xl border border-slate-150/60 dark:border-[#2d2d2d] bg-white dark:bg-[#1e1e1e] p-4 shadow-[0_2px_8px_-2px_rgba(15,23,42,0.02)] active:cursor-grabbing hover:border-indigo-400 dark:hover:border-indigo-500/40 transition duration-150"
     >
       <Card task={task} />
     </div>
@@ -117,25 +117,31 @@ function DraggableCard({ task, onOpen }: { task: TaskListItem; onOpen: (id: stri
 
 function Card({ task, overlay = false }: { task: TaskListItem; overlay?: boolean }) {
   return (
-    <div className={overlay ? 'w-64 rounded-md border border-indigo-300 bg-white p-3 shadow-lg' : ''}>
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-xs text-slate-400">{task.ref}</span>
-        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${priorityClasses[task.priority]}`}>
+    <div className={overlay ? 'w-64 rounded-xl border border-indigo-400 bg-white dark:bg-[#1e1e1e] p-4 shadow-xl dark:shadow-none' : ''}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-[10px] font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-[#252525] px-1.5 py-0.5 rounded">{task.ref}</span>
+        <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${priorityClasses[task.priority]}`}>
           {task.priority}
         </span>
       </div>
-      <p className="mt-1 text-sm font-medium text-slate-700">{task.title}</p>
+      <p className="mt-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200 leading-snug break-words">{task.title}</p>
       {task.labels.length ? (
-        <div className="mt-1.5 flex flex-wrap gap-1">
+        <div className="mt-2.5 flex flex-wrap gap-1">
           {task.labels.slice(0, 3).map((l) => (
             <LabelChip key={l.id} name={l.name} color={l.color} />
           ))}
         </div>
       ) : null}
-      <div className="mt-2 flex items-center justify-between text-xs">
-        <span className="truncate text-slate-500">{task.assignees[0]?.name ?? 'Unassigned'}</span>
+      <div className="mt-3.5 flex items-center justify-between text-[11px] font-semibold">
+        <span className="truncate text-slate-500 dark:text-slate-400 flex items-center gap-1">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+          {task.assignees[0]?.name ?? 'Unassigned'}
+        </span>
         {task.dueDate ? (
-          <span className={isOverdue(task.dueDate) ? 'font-medium text-red-600' : 'text-slate-400'}>
+          <span className={isOverdue(task.dueDate) ? 'text-red-500 dark:text-red-400 font-bold' : 'text-slate-400 dark:text-slate-500'}>
             {formatDate(task.dueDate)}
           </span>
         ) : null}

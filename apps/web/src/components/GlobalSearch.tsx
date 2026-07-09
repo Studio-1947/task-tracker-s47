@@ -134,7 +134,7 @@ export function GlobalSearch({
           aria-label="Search tasks, workspaces and users"
           placeholder="Search…"
           autoFocus={autoFocus}
-          className="w-full rounded-md border border-slate-300 bg-white py-2 pl-9 pr-14 text-sm outline-none placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+          className="w-full rounded-lg border border-slate-200 bg-white/80 py-2.5 pl-9.5 pr-14 text-sm outline-none placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 dark:border-slate-800 dark:bg-[#1a1a1a]/85 dark:text-white dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-500/20 transition-all"
           value={raw}
           onChange={(e) => {
             setRaw(e.target.value);
@@ -143,7 +143,7 @@ export function GlobalSearch({
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
         />
-        <kbd className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-400 lg:inline">
+        <kbd className="pointer-events-none absolute right-3.5 top-1/2 hidden -translate-y-1/2 rounded-md border border-slate-200 bg-slate-50/80 dark:border-slate-800 dark:bg-[#252525] px-1.5 py-0.5 text-[9px] font-bold text-slate-400 dark:text-slate-500 lg:inline">
           {isMac ? '⌘K' : 'Ctrl K'}
         </kbd>
       </div>
@@ -151,10 +151,10 @@ export function GlobalSearch({
       {showDropdown ? (
         <div
           id="global-search-results"
-          className="absolute top-full z-50 mt-2 max-h-96 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
+          className="absolute top-full z-50 mt-2 max-h-96 w-full overflow-y-auto rounded-2xl border border-slate-150/60 dark:border-[#1e293b]/30 bg-white/95 dark:bg-[#1e1e1e]/95 backdrop-blur-md shadow-2xl dark:shadow-none"
         >
           {!hasResults ? (
-            <p className="px-4 py-6 text-center text-sm text-slate-400">
+            <p className="px-4 py-6 text-center text-xs font-semibold text-slate-400 dark:text-slate-500">
               {isFetching ? 'Searching…' : 'No results found.'}
             </p>
           ) : (
@@ -168,8 +168,8 @@ export function GlobalSearch({
                       onSelect={() => go({ kind: 'task', item: t })}
                       onHover={() => setActive(taskOffset + i)}
                     >
-                      <span className="w-16 shrink-0 font-mono text-xs text-slate-400">{t.ref}</span>
-                      <span className="min-w-0 flex-1 truncate text-sm text-slate-700">{t.title}</span>
+                      <span className="w-16 shrink-0 font-mono text-xs text-slate-400 dark:text-slate-500">{t.ref}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm text-slate-700 dark:text-slate-200">{t.title}</span>
                       <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${statusClasses[t.status]}`}>
                         {statusLabel(t.status)}
                       </span>
@@ -188,8 +188,8 @@ export function GlobalSearch({
                       onHover={() => setActive(wsOffset + i)}
                     >
                       <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: w.color ?? '#6366f1' }} />
-                      <span className="min-w-0 flex-1 truncate text-sm text-slate-700">{w.name}</span>
-                      <span className="shrink-0 font-mono text-xs text-slate-400">{w.taskPrefix}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm text-slate-700 dark:text-slate-200">{w.name}</span>
+                      <span className="shrink-0 font-mono text-xs text-slate-400 dark:text-slate-500">{w.taskPrefix}</span>
                     </ResultRow>
                   ))}
                 </SearchGroup>
@@ -205,8 +205,8 @@ export function GlobalSearch({
                       onHover={() => setActive(userOffset + i)}
                     >
                       <Avatar user={u} size="sm" />
-                      <span className="min-w-0 flex-1 truncate text-sm text-slate-700">{u.name}</span>
-                      <span className="shrink-0 truncate text-xs text-slate-400">{u.email}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm text-slate-700 dark:text-slate-200">{u.name}</span>
+                      <span className="shrink-0 truncate text-xs text-slate-400 dark:text-slate-500">{u.email}</span>
                     </ResultRow>
                   ))}
                 </SearchGroup>
@@ -221,8 +221,8 @@ export function GlobalSearch({
 
 function SearchGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="px-2 pb-1">
-      <p className="px-2 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p>
+    <div className="px-2 pb-1.5">
+      <p className="px-2.5 pb-1 pt-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-550">{label}</p>
       {children}
     </div>
   );
@@ -242,7 +242,7 @@ function ResultRow({
   return (
     <button
       type="button"
-      className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left ${active ? 'bg-indigo-50' : 'hover:bg-slate-50'}`}
+      className={`flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors cursor-pointer ${active ? 'bg-indigo-50/70 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 font-medium' : 'hover:bg-slate-50/70 dark:hover:bg-slate-800/20 text-slate-600 dark:text-slate-350'}`}
       onMouseEnter={onHover}
       // mousedown fires before the outside-click closer removes the row.
       onMouseDown={(e) => {

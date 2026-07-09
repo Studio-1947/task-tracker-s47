@@ -45,22 +45,22 @@ export function WorkspaceSettings({ workspaceId, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end">
+    <div className="fixed inset-0 z-50 flex justify-end">
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs animate-fade-in" onClick={onClose} />
+      <div className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/60 backdrop-blur-xs animate-fade-in" onClick={onClose} />
 
       {/* Drawer content */}
-      <div className="relative z-50 flex h-full w-[calc(100%-3rem)] sm:w-full sm:max-w-md flex-col overflow-y-auto border-l border-slate-200 bg-white shadow-xl animate-slide-in">
+      <div className="relative z-50 flex h-full w-[calc(100%-3rem)] sm:w-full sm:max-w-md flex-col overflow-y-auto border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-[#181818] shadow-xl animate-slide-in">
         {isLoading || !workspace ? (
           <Spinner />
         ) : (
           <div className="flex flex-col gap-6 p-4 sm:p-6">
             <div className="flex items-center justify-between gap-4">
-              <h2 className="text-lg font-semibold text-slate-800">Workspace settings</h2>
+              <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Workspace settings</h2>
               <button
                 type="button"
                 aria-label="Close"
-                className="shrink-0 rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition"
+                className="shrink-0 rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition"
                 onClick={onClose}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -73,20 +73,20 @@ export function WorkspaceSettings({ workspaceId, onClose }: Props) {
             {/* Details */}
             <section className="space-y-3">
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">Name</label>
+                <label className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Name</label>
                 <Input value={nameVal} onChange={(e) => setName(e.target.value)} />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">Description</label>
+                <label className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Description</label>
                 <textarea
                   aria-label="Workspace description"
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-[#252525] dark:text-white"
                   rows={3}
                   value={descVal}
                   onChange={(e) => setDescription(e.target.value)}
                 />
               </div>
-              {error ? <p className="text-sm text-red-600">{error}</p> : null}
+              {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
               <div className="flex items-center gap-2">
                 <Button onClick={saveDetails} disabled={updateWorkspace.isPending}>
                   Save details
@@ -100,13 +100,13 @@ export function WorkspaceSettings({ workspaceId, onClose }: Props) {
 
             {/* Members */}
             <section>
-              <h3 className="mb-2 text-sm font-semibold text-slate-700">
+              <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
                 Members ({members?.length ?? 0})
               </h3>
               <div className="flex gap-2">
                 <select
                   aria-label="Add user to workspace"
-                  className="flex-1 rounded-md border border-slate-300 px-2 py-2 text-sm"
+                  className="flex-1 rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 text-sm bg-white dark:bg-[#252525] dark:text-white"
                   value={addUserId}
                   onChange={(e) => setAddUserId(e.target.value)}
                 >
@@ -130,14 +130,14 @@ export function WorkspaceSettings({ workspaceId, onClose }: Props) {
                 </Button>
               </div>
 
-              <ul className="mt-3 divide-y divide-slate-100">
+              <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-850 dark:divide-slate-800">
                 {(members ?? []).map((m) => (
                   <li key={m.id} className="flex items-center justify-between py-2.5">
                     <div className="flex min-w-0 items-center gap-2.5">
                       <Avatar user={m} size="sm" />
                       <div className="min-w-0">
-                        <div className="truncate text-sm font-medium text-slate-700">{m.name}</div>
-                        <div className="truncate text-xs text-slate-400">{m.email}</div>
+                        <div className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">{m.name}</div>
+                        <div className="truncate text-xs text-slate-400 dark:text-slate-500">{m.email}</div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -153,7 +153,7 @@ export function WorkspaceSettings({ workspaceId, onClose }: Props) {
                   </li>
                 ))}
                 {members?.length === 0 ? (
-                  <li className="py-3 text-sm text-slate-400">No members yet. Add someone above.</li>
+                  <li className="py-3 text-sm text-slate-400 dark:text-slate-500">No members yet. Add someone above.</li>
                 ) : null}
               </ul>
             </section>

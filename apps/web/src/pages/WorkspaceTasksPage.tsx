@@ -109,151 +109,159 @@ function Board({ workspaceId }: { workspaceId: string }) {
   };
 
   return (
-    <div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <Link to="/workspaces" className="text-sm text-slate-400 hover:text-slate-600">
-            ← Workspaces
-          </Link>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-800">{workspace?.name ?? 'Tasks'}</h1>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex overflow-hidden rounded-md border border-slate-300">
-            {(['list', 'table', 'kanban'] as const).map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setView(v)}
-                className={`px-3 py-1.5 text-sm font-medium capitalize ${
-                  view === v ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                {v}
-              </button>
-            ))}
+    <>
+      <div className="animate-fade-in">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <Link to="/workspaces" className="text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-slate-650 dark:text-slate-500 dark:hover:text-slate-300 transition-colors flex items-center gap-1">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="19" y1="12" x2="5" y2="12" />
+                <polyline points="12 19 5 12 12 5" />
+              </svg>
+              Workspaces
+            </Link>
+            <h1 className="mt-1.5 text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">{workspace?.name ?? 'Tasks'}</h1>
           </div>
-          {isAdmin ? (
-            <Button variant="ghost" onClick={() => setShowSettings(true)}>
-              Manage
-            </Button>
-          ) : null}
-        </div>
-      </div>
-
-      {/* Create + filters */}
-      <Card className="mt-6 p-4">
-        <form className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3" onSubmit={onCreate}>
-          <Input
-            className="flex-1"
-            placeholder="Quick add — task title…"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-          />
-          <div className="flex gap-2 shrink-0">
-            <Button type="submit" className="flex-1 sm:flex-initial" disabled={createTask.isPending}>
-              {createTask.isPending ? 'Adding…' : 'Add'}
-            </Button>
-            <Button type="button" className="flex-1 sm:flex-initial" variant="ghost" onClick={() => setShowCreate(true)}>
-              + Detailed task
-            </Button>
-          </div>
-        </form>
-        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-3">
-          <Input
-            className="w-full lg:w-56"
-            placeholder="Search title/description…"
-            value={filters.search ?? ''}
-            onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
-          />
-          <select
-            aria-label="Filter by status"
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm bg-white lg:w-auto"
-            value={filters.status ?? ''}
-            onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value || undefined }))}
-          >
-            <option value="">All statuses</option>
-            {TASK_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {statusLabel(s)}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Filter by assignee"
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm bg-white lg:w-auto"
-            value={filters.assigneeId ?? ''}
-            onChange={(e) => setFilters((f) => ({ ...f, assigneeId: e.target.value || undefined }))}
-          >
-            <option value="">All assignees</option>
-            {memberRefs.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Filter by label"
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm bg-white lg:w-auto"
-            value={filters.labelId ?? ''}
-            onChange={(e) => setFilters((f) => ({ ...f, labelId: e.target.value || undefined }))}
-          >
-            <option value="">All labels</option>
-            {(labels ?? []).map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-          </select>
-          {filtersActive ? (
-            <Button variant="ghost" className="w-full lg:w-auto" onClick={() => setFilters({ ...DEFAULT_FILTERS })}>
-              Reset filters
-            </Button>
-          ) : null}
-        </div>
-      </Card>
-
-      <div className="mt-6">
-        {isLoading ? (
-          <Spinner />
-        ) : error ? (
-          <ErrorState message={error instanceof ApiRequestError ? error.message : 'Failed to load tasks'} />
-        ) : !data || data.items.length === 0 ? (
-          <EmptyState
-            title={filtersActive ? 'No tasks match your filters' : 'No tasks yet'}
-            hint={filtersActive ? 'Try clearing filters to see everything.' : 'Add your first task above.'}
-            action={
-              filtersActive ? (
-                <Button variant="ghost" onClick={() => setFilters({ ...DEFAULT_FILTERS })}>
-                  Reset filters
-                </Button>
-              ) : null
-            }
-          />
-        ) : view === 'list' ? (
-          <ListView tasks={data.items} onOpen={setOpenTaskId} />
-        ) : view === 'table' ? (
-          <TableView tasks={data.items} onOpen={setOpenTaskId} />
-        ) : (
-          <KanbanView workspaceId={workspaceId} tasks={data.items} onOpen={setOpenTaskId} />
-        )}
-        {data ? (
-          <div className="mt-3 flex items-center justify-between">
-            <p className="text-xs text-slate-400">{data.total} task(s)</p>
-            {view !== 'kanban' && totalPages > 1 ? (
-              <div className="flex items-center gap-2 text-sm">
-                <Button variant="ghost" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                  Prev
-                </Button>
-                <span className="text-slate-500">
-                  {page} / {totalPages}
-                </span>
-                <Button variant="ghost" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-                  Next
-                </Button>
-              </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 p-0.5 bg-slate-100/50 dark:bg-slate-900/50">
+              {(['list', 'table', 'kanban'] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setView(v)}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all duration-150 capitalize cursor-pointer ${
+                    view === v
+                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+            {isAdmin ? (
+              <Button variant="ghost" className="text-xs font-semibold py-2" onClick={() => void setShowSettings(true)}>
+                Manage
+              </Button>
             ) : null}
           </div>
-        ) : null}
+        </div>
+
+        {/* Create + filters */}
+        <Card className="mt-6 p-5 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
+          <form className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-3" onSubmit={onCreate}>
+            <Input
+              className="flex-1"
+              placeholder="Quick add — task title…"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+            />
+            <div className="flex gap-2 shrink-0">
+              <Button type="submit" className="flex-1 sm:flex-initial" disabled={createTask.isPending}>
+                {createTask.isPending ? 'Adding…' : 'Add'}
+              </Button>
+              <Button type="button" className="flex-1 sm:flex-initial" variant="ghost" onClick={() => void setShowCreate(true)}>
+                + Detailed task
+              </Button>
+            </div>
+          </form>
+          <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-3">
+            <input
+              className="w-full lg:w-56 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 px-3 py-2 text-xs text-slate-800 dark:text-white placeholder-slate-400 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all"
+              placeholder="Search title/description…"
+              value={filters.search ?? ''}
+              onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+            />
+            <select
+              aria-label="Filter by status"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 px-3 py-2 text-xs text-slate-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all lg:w-auto"
+              value={filters.status ?? ''}
+              onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value || undefined }))}
+            >
+              <option value="">All statuses</option>
+              {TASK_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {statusLabel(s)}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Filter by assignee"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 px-3 py-2 text-xs text-slate-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all lg:w-auto"
+              value={filters.assigneeId ?? ''}
+              onChange={(e) => setFilters((f) => ({ ...f, assigneeId: e.target.value || undefined }))}
+            >
+              <option value="">All assignees</option>
+              {memberRefs.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Filter by label"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 px-3 py-2 text-xs text-slate-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all lg:w-auto"
+              value={filters.labelId ?? ''}
+              onChange={(e) => setFilters((f) => ({ ...f, labelId: e.target.value || undefined }))}
+            >
+              <option value="">All labels</option>
+              {(labels ?? []).map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+            {filtersActive ? (
+              <Button variant="ghost" className="w-full lg:w-auto text-xs py-2 px-3" onClick={() => setFilters({ ...DEFAULT_FILTERS })}>
+                Reset filters
+              </Button>
+            ) : null}
+          </div>
+        </Card>
+
+        <div className="mt-6">
+          {isLoading ? (
+            <Spinner />
+          ) : error ? (
+            <ErrorState message={error instanceof ApiRequestError ? error.message : 'Failed to load tasks'} />
+          ) : !data || data.items.length === 0 ? (
+            <EmptyState
+              title={filtersActive ? 'No tasks match your filters' : 'No tasks yet'}
+              hint={filtersActive ? 'Try clearing filters to see everything.' : 'Add your first task above.'}
+              action={
+                filtersActive ? (
+                  <Button variant="ghost" onClick={() => setFilters({ ...DEFAULT_FILTERS })}>
+                    Reset filters
+                  </Button>
+                ) : null
+              }
+            />
+          ) : view === 'list' ? (
+            <ListView tasks={data.items} onOpen={setOpenTaskId} />
+          ) : view === 'table' ? (
+            <TableView tasks={data.items} onOpen={setOpenTaskId} />
+          ) : (
+            <KanbanView workspaceId={workspaceId} tasks={data.items} onOpen={setOpenTaskId} />
+          )}
+          {data ? (
+            <div className="mt-3.5 flex items-center justify-between px-1.5">
+              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">{data.total} task(s) found</p>
+              {view !== 'kanban' && totalPages > 1 ? (
+                <div className="flex items-center gap-2 text-xs font-semibold">
+                  <Button variant="ghost" className="py-1 px-3" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                    Prev
+                  </Button>
+                  <span className="text-slate-500 dark:text-slate-400 min-w-12 text-center">
+                    {page} / {totalPages}
+                  </span>
+                  <Button variant="ghost" className="py-1 px-3" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                    Next
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {openTaskId ? (
@@ -270,45 +278,45 @@ function Board({ workspaceId }: { workspaceId: string }) {
           workspaceId={workspaceId}
           members={memberRefs}
           labels={labels ?? []}
-          onClose={() => setShowCreate(false)}
+          onClose={() => void setShowCreate(false)}
         />
       ) : null}
       {showSettings ? (
-        <WorkspaceSettings workspaceId={workspaceId} onClose={() => setShowSettings(false)} />
+        <WorkspaceSettings workspaceId={workspaceId} onClose={() => void setShowSettings(false)} />
       ) : null}
-    </div>
+    </>
   );
 }
 
 function StatusBadge({ t }: { t: TaskListItem }) {
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusClasses[t.status]}`}>{statusLabel(t.status)}</span>;
+  return <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${statusClasses[t.status]}`}>{statusLabel(t.status)}</span>;
 }
 function PriorityBadge({ t }: { t: TaskListItem }) {
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${priorityClasses[t.priority]}`}>{t.priority}</span>;
+  return <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${priorityClasses[t.priority]}`}>{t.priority}</span>;
 }
 
 function ListView({ tasks, onOpen }: { tasks: TaskListItem[]; onOpen: (id: string) => void }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5">
       {tasks.map((t) => (
         <button
           key={t.id}
           type="button"
           onClick={() => onOpen(t.id)}
-          className="w-full rounded-lg border border-slate-200 bg-white p-3 text-left hover:border-indigo-300 hover:shadow-sm sm:flex sm:items-center sm:gap-3 sm:px-4"
+          className="w-full rounded-xl border border-slate-100 bg-white/70 dark:border-slate-800/40 dark:bg-slate-900/30 p-3.5 text-left hover:border-indigo-500 dark:hover:border-indigo-500/50 hover:shadow-md hover:shadow-indigo-500/[0.01] hover:-translate-y-0.5 transition-all duration-150 sm:flex sm:items-center sm:gap-4 sm:px-5"
         >
-          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3 sm:flex-1 min-w-0">
+          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-4 sm:flex-1 min-w-0">
             {/* Primary Row: Ref, Title, Mobile Status */}
-            <div className="flex items-center justify-between sm:justify-start gap-2 min-w-0 sm:flex-1">
-              <span className="font-mono text-xs text-slate-400 w-12 sm:w-16 shrink-0">{t.ref}</span>
-              <span className="min-w-0 flex-1 truncate font-medium text-slate-700">{t.title}</span>
+            <div className="flex items-center justify-between sm:justify-start gap-3 min-w-0 sm:flex-1">
+              <span className="font-mono text-xs text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded w-16 text-center shrink-0">{t.ref}</span>
+              <span className="min-w-0 flex-1 truncate font-semibold text-slate-750 dark:text-slate-200">{t.title}</span>
               <span className="sm:hidden shrink-0">
                 <StatusBadge t={t} />
               </span>
             </div>
 
             {/* Metadata Row: labels, assignee, due date, priority, status */}
-            <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:shrink-0 sm:gap-3">
+            <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:shrink-0 sm:gap-4">
               {t.labels.length > 0 ? (
                 <div className="flex flex-wrap gap-1 sm:hidden lg:flex">
                   {t.labels.slice(0, 2).map((l) => (
@@ -323,7 +331,7 @@ function ListView({ tasks, onOpen }: { tasks: TaskListItem[]; onOpen: (id: strin
               ) : null}
               {t.dueDate ? (
                 <span
-                  className={`text-xs ${isOverdue(t.dueDate) ? 'font-medium text-red-600' : 'text-slate-400'}`}
+                  className={`text-xs font-semibold ${isOverdue(t.dueDate) ? 'text-red-500 dark:text-red-400' : 'text-slate-450 dark:text-slate-500'}`}
                 >
                   {formatDate(t.dueDate)}
                 </span>
@@ -346,19 +354,19 @@ function TableView({ tasks, onOpen }: { tasks: TaskListItem[]; onOpen: (id: stri
   const [sorting, setSorting] = useState<SortingState>([]);
   const columns = useMemo(
     () => [
-      columnHelper.accessor('ref', { header: 'Ref', cell: (c) => <span className="font-mono text-xs text-slate-400">{c.getValue()}</span> }),
-      columnHelper.accessor('title', { header: 'Title', cell: (c) => <span className="font-medium text-slate-700">{c.getValue()}</span> }),
+      columnHelper.accessor('ref', { header: 'Ref', cell: (c) => <span className="font-mono text-xs text-slate-450 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{c.getValue()}</span> }),
+      columnHelper.accessor('title', { header: 'Title', cell: (c) => <span className="font-semibold text-slate-750 dark:text-slate-200">{c.getValue()}</span> }),
       columnHelper.accessor('status', { header: 'Status', cell: (c) => <StatusBadge t={c.row.original} /> }),
       columnHelper.accessor('priority', { header: 'Priority', cell: (c) => <PriorityBadge t={c.row.original} /> }),
       columnHelper.accessor((r) => r.assignees[0]?.name ?? '', {
         id: 'assignee',
         header: 'Assignee',
-        cell: (c) => <span className="text-sm text-slate-600">{c.getValue() || '—'}</span>,
+        cell: (c) => <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">{c.getValue() || '—'}</span>,
       }),
       columnHelper.accessor('dueDate', {
         header: 'Due',
         cell: (c) => (
-          <span className={`text-sm ${isOverdue(c.getValue()) ? 'font-medium text-red-600' : 'text-slate-500'}`}>
+          <span className={`text-sm font-semibold ${isOverdue(c.getValue()) ? 'text-red-500 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>
             {formatDate(c.getValue())}
           </span>
         ),
@@ -377,32 +385,36 @@ function TableView({ tasks, onOpen }: { tasks: TaskListItem[]; onOpen: (id: stri
   });
 
   return (
-    <Card className="overflow-x-auto">
-      <table className="w-full min-w-[640px] text-sm">
-        <thead className="bg-slate-50 text-left text-slate-500">
-          {table.getHeaderGroups().map((hg) => (
-            <tr key={hg.id}>
-              {hg.headers.map((h) => (
-                <th key={h.id} className="cursor-pointer px-4 py-2 font-medium select-none" onClick={h.column.getToggleSortingHandler()}>
-                  {flexRender(h.column.columnDef.header, h.getContext())}
-                  {{ asc: ' ↑', desc: ' ↓' }[h.column.getIsSorted() as string] ?? ''}
-                </th>
-              ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {table.getRowModel().rows.map((row) => (
-            <tr key={row.id} className="cursor-pointer hover:bg-slate-50" onClick={() => onOpen(row.original.id)}>
-              {row.getVisibleCells().map((cell) => (
-                <td key={cell.id} className="px-4 py-2.5">
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <Card className="overflow-hidden bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-sm">
+          <thead className="bg-slate-50/80 dark:bg-slate-900/30 text-left text-[11px] font-bold uppercase tracking-wider text-slate-450 dark:text-slate-500 border-b border-slate-100 dark:border-slate-800/50">
+            {table.getHeaderGroups().map((hg) => (
+              <tr key={hg.id}>
+                {hg.headers.map((h) => (
+                  <th key={h.id} className="cursor-pointer px-4 py-3 font-semibold select-none" onClick={h.column.getToggleSortingHandler()}>
+                    <span className="flex items-center gap-1.5">
+                      {flexRender(h.column.columnDef.header, h.getContext())}
+                      {{ asc: ' ↑', desc: ' ↓' }[h.column.getIsSorted() as string] ?? ''}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            ))}
+          </thead>
+          <tbody className="divide-y divide-slate-100/60 dark:divide-slate-800/40">
+            {table.getRowModel().rows.map((row) => (
+              <tr key={row.id} className="cursor-pointer hover:bg-slate-50/50 dark:hover:bg-slate-850/20 transition-colors" onClick={() => onOpen(row.original.id)}>
+                {row.getVisibleCells().map((cell) => (
+                  <td key={cell.id} className="px-4 py-3">
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </Card>
   );
 }

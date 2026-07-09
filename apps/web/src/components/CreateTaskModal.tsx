@@ -47,19 +47,19 @@ export function CreateTaskModal({ workspaceId, members, labels, onClose }: Props
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto p-4 sm:p-8">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-8">
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs animate-fade-in" onClick={onClose} />
+      <div className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/60 backdrop-blur-xs animate-fade-in" onClick={onClose} />
 
       {/* Modal content */}
-      <div className="relative z-50 w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-xl animate-scale-up">
+      <div className="relative z-50 w-full max-w-lg rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#181818] shadow-xl dark:shadow-none animate-scale-up">
         <form className="flex flex-col gap-4 p-6" onSubmit={onSubmit}>
           <div className="flex items-center justify-between gap-4">
-            <h2 className="text-lg font-semibold text-slate-800">New task</h2>
+            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">New task</h2>
             <button
               type="button"
               aria-label="Close"
-              className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition"
+              className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition"
               onClick={onClose}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -70,15 +70,15 @@ export function CreateTaskModal({ workspaceId, members, labels, onClose }: Props
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Title</label>
+            <label className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Title</label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} required autoFocus />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Description</label>
+            <label className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Description</label>
             <textarea
               aria-label="Task description"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-[#252525] dark:text-white"
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -87,10 +87,10 @@ export function CreateTaskModal({ workspaceId, members, labels, onClose }: Props
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <label className="text-sm">
-              <span className="mb-1 block font-medium text-slate-600">Status</span>
+              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Status</span>
               <select
                 aria-label="Status"
-                className="w-full rounded-md border border-slate-300 px-2 py-2"
+                className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white"
                 value={status}
                 onChange={(e) => setStatus(e.target.value as TaskStatus)}
               >
@@ -102,10 +102,10 @@ export function CreateTaskModal({ workspaceId, members, labels, onClose }: Props
               </select>
             </label>
             <label className="text-sm">
-              <span className="mb-1 block font-medium text-slate-600">Priority</span>
+              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Priority</span>
               <select
                 aria-label="Priority"
-                className="w-full rounded-md border border-slate-300 px-2 py-2"
+                className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white"
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as Priority)}
               >
@@ -117,10 +117,10 @@ export function CreateTaskModal({ workspaceId, members, labels, onClose }: Props
               </select>
             </label>
             <label className="text-sm">
-              <span className="mb-1 block font-medium text-slate-600">Assignee</span>
+              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Assignee</span>
               <select
                 aria-label="Assignee"
-                className="w-full rounded-md border border-slate-300 px-2 py-2"
+                className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white"
                 value={assigneeId}
                 onChange={(e) => setAssigneeId(e.target.value)}
               >
@@ -133,11 +133,11 @@ export function CreateTaskModal({ workspaceId, members, labels, onClose }: Props
               </select>
             </label>
             <label className="text-sm">
-              <span className="mb-1 block font-medium text-slate-600">Due date</span>
+              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Due date</span>
               <input
                 aria-label="Due date"
                 type="date"
-                className="w-full rounded-md border border-slate-300 px-2 py-2"
+                className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
               />
@@ -146,7 +146,7 @@ export function CreateTaskModal({ workspaceId, members, labels, onClose }: Props
 
           {labels.length ? (
             <div>
-              <div className="mb-1 text-sm font-medium text-slate-600">Labels</div>
+              <div className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">Labels</div>
               <div className="flex flex-wrap gap-1.5">
                 {labels.map((l) => {
                   const on = labelIds.includes(l.id);
@@ -155,8 +155,8 @@ export function CreateTaskModal({ workspaceId, members, labels, onClose }: Props
                       key={l.id}
                       type="button"
                       onClick={() => toggleLabel(l.id)}
-                      className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-                        on ? 'border-transparent' : 'border-slate-200 text-slate-400 hover:border-slate-300'
+                      className={`rounded-full border px-2 py-0.5 text-[11px] font-medium transition ${
+                        on ? 'border-transparent' : 'border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:border-slate-300 dark:hover:border-slate-700'
                       }`}
                       style={on ? { backgroundColor: `${l.color ?? '#64748b'}1a`, color: l.color ?? '#64748b' } : undefined}
                     >
@@ -168,7 +168,7 @@ export function CreateTaskModal({ workspaceId, members, labels, onClose }: Props
             </div>
           ) : null}
 
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={onClose}>
               Cancel

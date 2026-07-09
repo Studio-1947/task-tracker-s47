@@ -45,22 +45,22 @@ export function ChangePasswordPage({
   };
 
   const form = (
-    <form className="space-y-4" onSubmit={onSubmit}>
+    <form className="space-y-4.5" onSubmit={onSubmit}>
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-600">Current password</label>
+        <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Current password</label>
         <Input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} required autoFocus />
       </div>
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-600">New password</label>
+        <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">New password</label>
         <Input type="password" value={next} onChange={(e) => setNext(e.target.value)} required />
       </div>
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-600">Confirm new password</label>
+        <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Confirm new password</label>
         <Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
       </div>
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      {done ? <p className="text-sm text-green-600">Password updated.</p> : null}
-      <Button type="submit" className="w-full" disabled={busy}>
+      {error ? <p className="text-sm text-red-500 dark:text-red-400 font-semibold">{error}</p> : null}
+      {done ? <p className="text-sm text-green-500 dark:text-green-400 font-semibold">Password updated successfully.</p> : null}
+      <Button type="submit" className="w-full py-3 font-semibold text-sm shadow-md" disabled={busy}>
         {busy ? 'Saving…' : 'Update password'}
       </Button>
     </form>
@@ -68,13 +68,15 @@ export function ChangePasswordPage({
 
   if (forced) {
     return (
-      <div className="flex min-h-full items-center justify-center px-4">
-        <Card className="w-full max-w-sm p-8">
-          <h1 className="text-xl font-semibold text-slate-800">Set a new password</h1>
-          <p className="mt-1 text-sm text-slate-400">
-            You're using a temporary password. Choose a new one to continue.
-          </p>
-          <div className="mt-6">{form}</div>
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-tr from-[#f8fafc] via-slate-50 to-indigo-50/20 dark:from-[#121212] dark:via-[#181818] dark:to-[#121212] px-4 py-12 animate-fade-in">
+        <Card className="w-full max-w-md p-8 sm:p-10 shadow-2xl shadow-indigo-500/[0.02] border border-slate-200/50 dark:border-slate-800/40 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818] rounded-2xl">
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">Set a new password</h1>
+            <p className="mt-1.5 text-sm text-slate-400 dark:text-slate-500 font-medium">
+              You're using a temporary password. Choose a new one to continue.
+            </p>
+          </div>
+          <div>{form}</div>
         </Card>
       </div>
     );
@@ -82,17 +84,17 @@ export function ChangePasswordPage({
 
   if (embedded) {
     return (
-      <Card className="p-6">
-        <h2 className="text-sm font-medium text-slate-600">Change password</h2>
-        <div className="mt-4">{form}</div>
+      <Card className="p-6 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-4">Security</h2>
+        <div>{form}</div>
       </Card>
     );
   }
 
   return (
-    <div className="max-w-md">
-      <h1 className="text-2xl font-semibold text-slate-800">Change password</h1>
-      <Card className="mt-6 p-6">{form}</Card>
+    <div className="max-w-md space-y-6 animate-fade-in">
+      <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">Change password</h1>
+      <Card className="p-6 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">{form}</Card>
     </div>
   );
 }

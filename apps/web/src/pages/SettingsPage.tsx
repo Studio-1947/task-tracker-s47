@@ -58,15 +58,15 @@ function ProfileCard() {
   };
 
   return (
-    <Card className="p-6">
-      <h2 className="text-sm font-medium text-slate-600">Profile</h2>
-      <div className="mt-4 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-        <Avatar user={user} size="lg" />
+    <Card className="p-6 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
+      <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Profile Details</h2>
+      <div className="mt-5 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+        <Avatar user={user} size="lg" className="ring-4 ring-slate-100 dark:ring-slate-800/40" />
         <div className="min-w-0">
-          <p className="font-medium text-slate-700">{user.name}</p>
-          <p className="text-sm text-slate-400">{user.email}</p>
-          {user.designation ? <p className="text-sm text-slate-400">{user.designation}</p> : null}
-          <div className="mt-3 flex flex-wrap gap-2">
+          <p className="font-bold text-slate-800 dark:text-slate-100 text-lg">{user.name}</p>
+          <p className="text-sm font-semibold text-slate-450 dark:text-slate-500 mt-0.5">{user.email}</p>
+          {user.designation ? <p className="text-sm font-semibold text-slate-450 dark:text-slate-500 mt-0.5">{user.designation}</p> : null}
+          <div className="mt-4 flex flex-wrap gap-2">
             <input
               ref={fileInput}
               type="file"
@@ -75,17 +75,17 @@ function ProfileCard() {
               aria-label="Choose profile picture"
               onChange={(e) => void onPick(e.target.files?.[0])}
             />
-            <Button variant="ghost" disabled={busy} onClick={() => fileInput.current?.click()}>
+            <Button variant="ghost" className="text-xs py-2 px-3" disabled={busy} onClick={() => fileInput.current?.click()}>
               {busy ? 'Working…' : user.avatarKey ? 'Change picture' : 'Upload picture'}
             </Button>
             {user.avatarKey ? (
-              <Button variant="danger" disabled={busy} onClick={() => void onRemove()}>
+              <Button variant="danger" className="text-xs py-2 px-3" disabled={busy} onClick={() => void onRemove()}>
                 Remove
               </Button>
             ) : null}
           </div>
-          <p className="mt-2 text-xs text-slate-400">PNG, JPG, WebP or GIF — up to 2 MB.</p>
-          {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
+          <p className="mt-2.5 text-xs text-slate-400 dark:text-slate-500">PNG, JPG, WebP or GIF — up to 2 MB.</p>
+          {error ? <p className="mt-2 text-sm text-red-650 dark:text-red-400 font-medium">{error}</p> : null}
         </div>
       </div>
     </Card>
@@ -94,8 +94,8 @@ function ProfileCard() {
 
 export function SettingsPage() {
   return (
-    <div className="max-w-md space-y-6">
-      <h1 className="text-2xl font-semibold text-slate-800">Settings</h1>
+    <div className="max-w-md space-y-6 animate-fade-in">
+      <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">Settings</h1>
       <ProfileCard />
       <ChangePasswordPage embedded />
     </div>

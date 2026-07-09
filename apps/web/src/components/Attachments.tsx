@@ -58,7 +58,7 @@ export function Attachments({ taskId, workspaceId }: { taskId: string; workspace
   return (
     <section>
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-700">
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
           Attachments{attachments?.length ? ` (${attachments.length})` : ''}
         </h3>
         <input
@@ -73,12 +73,12 @@ export function Attachments({ taskId, workspaceId }: { taskId: string; workspace
           {upload.isPending ? 'Uploading…' : '+ Add file'}
         </Button>
       </div>
-      {error ? <p className="mb-2 text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="mb-2 text-sm text-red-600 dark:text-red-400">{error}</p> : null}
 
       {isLoading ? (
         <Spinner />
       ) : !attachments?.length ? (
-        <p className="text-sm text-slate-400">No attachments yet. Images, PDFs, videos and documents up to 20 MB.</p>
+        <p className="text-sm text-slate-400 dark:text-slate-500">No attachments yet. Images, PDFs, videos and documents up to 20 MB.</p>
       ) : (
         <div className="space-y-3">
           {images.length > 0 ? (
@@ -87,7 +87,7 @@ export function Attachments({ taskId, workspaceId }: { taskId: string; workspace
                 <button
                   key={a.id}
                   type="button"
-                  className="group relative aspect-square overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+                  className="group relative aspect-square overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900"
                   title={a.fileName}
                   onClick={() => setLightbox(a)}
                 >
@@ -95,7 +95,7 @@ export function Attachments({ taskId, workspaceId }: { taskId: string; workspace
                     path={`/files/${a.storageKey}`}
                     alt={a.fileName}
                     className="h-full w-full object-cover"
-                    fallback={<span className="flex h-full items-center justify-center text-xs text-slate-400">…</span>}
+                    fallback={<span className="flex h-full items-center justify-center text-xs text-slate-400 dark:text-slate-500">…</span>}
                   />
                 </button>
               ))}
@@ -103,13 +103,13 @@ export function Attachments({ taskId, workspaceId }: { taskId: string; workspace
           ) : null}
 
           {(images.length > 0 ? attachments : others).length > 0 ? (
-            <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+            <ul className="divide-y divide-slate-100 dark:divide-slate-850 dark:divide-slate-800 rounded-lg border border-slate-200 dark:border-slate-800">
               {attachments.map((a) => (
                 <li key={a.id} className="flex items-center gap-2 px-3 py-2">
                   <FileIcon mime={a.mimeType} />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-slate-700">{a.fileName}</p>
-                    <p className="flex items-center gap-1.5 text-xs text-slate-400">
+                    <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">{a.fileName}</p>
+                    <p className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
                       <Avatar user={a.uploader} size="sm" className="!h-4 !w-4 text-[8px]" />
                       {a.uploader.name} · {formatBytes(a.sizeBytes)} · {formatDateTime(a.createdAt)}
                     </p>
@@ -117,7 +117,7 @@ export function Attachments({ taskId, workspaceId }: { taskId: string; workspace
                   <button
                     type="button"
                     aria-label={`Download ${a.fileName}`}
-                    className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                    className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
                     onClick={() => void download(a).catch(() => setError('Download failed'))}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -130,7 +130,7 @@ export function Attachments({ taskId, workspaceId }: { taskId: string; workspace
                     <button
                       type="button"
                       aria-label={`Delete ${a.fileName}`}
-                      className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                      className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:text-slate-500 dark:hover:bg-red-950/20 dark:hover:text-red-400"
                       disabled={remove.isPending}
                       onClick={() => {
                         if (window.confirm(`Delete "${a.fileName}"?`)) remove.mutate(a.id);
@@ -165,7 +165,7 @@ function Lightbox({ attachment, onClose }: { attachment: TaskAttachment; onClose
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/80 p-4 animate-fade-in"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/80 dark:bg-slate-950/90 p-4 animate-fade-in"
       onClick={onClose}
     >
       <div className="max-h-full max-w-4xl" onClick={(e) => e.stopPropagation()}>
@@ -205,7 +205,7 @@ function FileIcon({ mime }: { mime: string }) {
             ? 'ZIP'
             : 'DOC';
   return (
-    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-100 text-[9px] font-bold text-slate-500">
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-100 dark:bg-slate-800 text-[9px] font-bold text-slate-500 dark:text-slate-400">
       {label}
     </span>
   );

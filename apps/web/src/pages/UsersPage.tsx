@@ -25,7 +25,7 @@ function DesignationCell({
   return (
     <input
       aria-label={`Designation for ${userName}`}
-      className="w-36 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm text-slate-600 hover:border-slate-300 focus:border-indigo-500 focus:bg-white focus:outline-none"
+      className="w-36 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm text-slate-600 hover:border-slate-300 focus:border-indigo-500 focus:bg-white focus:outline-none dark:text-slate-300 dark:hover:border-slate-700 dark:focus:border-indigo-500 dark:focus:bg-slate-800"
       value={draft}
       placeholder="—"
       maxLength={120}
@@ -38,7 +38,6 @@ function DesignationCell({
     />
   );
 }
-
 export function UsersPage() {
   const { data, isLoading, error } = useUsers();
   const createUser = useCreateUser();
@@ -74,22 +73,22 @@ export function UsersPage() {
   };
 
   return (
-    <div>
-      <h1 className="text-2xl font-semibold text-slate-800">Users</h1>
+    <div className="animate-fade-in">
+      <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">Users</h1>
 
-      <Card className="mt-6 p-5">
-        <form className="grid grid-cols-1 gap-3 sm:grid-cols-5 sm:items-end" onSubmit={onCreate}>
+      <Card className="mt-6 p-6 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
+        <form className="grid grid-cols-1 gap-4 sm:grid-cols-5 sm:items-end" onSubmit={onCreate}>
           <div className="sm:col-span-1">
-            <label className="mb-1 block text-sm font-medium text-slate-600">Name</label>
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Name</label>
             <Input value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
           <div className="sm:col-span-1">
-            <label className="mb-1 block text-sm font-medium text-slate-600">Email</label>
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Email</label>
             <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </div>
           <div className="sm:col-span-1">
-            <label className="mb-1 block text-sm font-medium text-slate-600">
-              Designation <span className="font-normal text-slate-400">(optional)</span>
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Designation <span className="font-normal text-slate-400 dark:text-slate-500 text-[10px]">(optional)</span>
             </label>
             <Input
               value={designation}
@@ -99,10 +98,10 @@ export function UsersPage() {
             />
           </div>
           <div className="sm:col-span-1">
-            <label className="mb-1 block text-sm font-medium text-slate-600">Role</label>
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Role</label>
             <select
               aria-label="User role"
-              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 px-3 py-2.5 text-xs text-slate-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all font-semibold"
               value={role}
               onChange={(e) => setRole(e.target.value as Role)}
             >
@@ -110,19 +109,19 @@ export function UsersPage() {
               <option value="ADMIN">Admin</option>
             </select>
           </div>
-          <Button type="submit" disabled={createUser.isPending}>
+          <Button type="submit" className="py-2.5 font-semibold" disabled={createUser.isPending}>
             {createUser.isPending ? 'Creating…' : 'Create user'}
           </Button>
         </form>
-        {formError ? <p className="mt-2 text-sm text-red-600">{formError}</p> : null}
+        {formError ? <p className="mt-2 text-sm text-red-650 dark:text-red-400 font-medium">{formError}</p> : null}
         {tempPassword ? (
-          <div className="mt-4 rounded-md border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm">
-            <p className="font-medium text-indigo-800">Temporary password (shown once)</p>
-            <p className="mt-1 text-indigo-700">
-              Relay to <strong>{tempPassword.email}</strong>:{' '}
-              <code className="rounded bg-white px-2 py-0.5 font-mono">{tempPassword.password}</code>
+          <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/40 dark:border-indigo-950/40 dark:bg-indigo-950/20 px-4 py-3.5 text-sm">
+            <p className="font-bold text-indigo-850 dark:text-indigo-300">Temporary password (shown once)</p>
+            <p className="mt-1.5 text-indigo-700 dark:text-indigo-400 font-medium">
+              Relay to <strong className="text-slate-800 dark:text-slate-200">{tempPassword.email}</strong>:{' '}
+              <code className="rounded bg-white dark:bg-slate-900 px-2 py-0.5 font-mono border border-indigo-100 dark:border-slate-800">{tempPassword.password}</code>
             </p>
-            <p className="mt-1 text-xs text-indigo-500">They'll be asked to change it on first login.</p>
+            <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500 font-medium">They'll be asked to change it on first login.</p>
           </div>
         ) : null}
       </Card>
@@ -133,35 +132,35 @@ export function UsersPage() {
         ) : error ? (
           <ErrorState message={error instanceof ApiRequestError ? error.message : 'Failed to load'} />
         ) : data && data.length > 0 ? (
-          <Card className="overflow-x-auto">
+          <Card className="overflow-x-auto bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
             <table className="w-full min-w-[1000px] text-sm">
-              <thead className="bg-slate-50 text-left text-slate-500">
+              <thead className="bg-slate-50/80 dark:bg-slate-900/30 text-left text-[11px] font-bold uppercase tracking-wider text-slate-450 dark:text-slate-500 border-b border-slate-100 dark:border-slate-800/50">
                 <tr>
-                  <th className="px-4 py-2 font-medium">Name</th>
-                  <th className="px-4 py-2 font-medium">Email</th>
-                  <th className="px-4 py-2 font-medium">Role</th>
-                  <th className="px-4 py-2 font-medium">Designation</th>
-                  <th className="px-4 py-2 font-medium">Workspaces</th>
-                  <th className="px-4 py-2 font-medium">Status</th>
-                  <th className="px-4 py-2">
+                  <th className="px-5 py-3 font-semibold">Name</th>
+                  <th className="px-4 py-3 font-semibold">Email</th>
+                  <th className="px-4 py-3 font-semibold">Role</th>
+                  <th className="px-4 py-3 font-semibold">Designation</th>
+                  <th className="px-4 py-3 font-semibold">Workspaces</th>
+                  <th className="px-4 py-3 font-semibold">Status</th>
+                  <th className="px-5 py-3">
                     <span className="sr-only">Actions</span>
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100/60 dark:divide-slate-800/40">
                 {data.map((u) => (
-                  <tr key={u.id}>
-                    <td className="px-4 py-2.5 font-medium text-slate-700">
-                      <span className="flex items-center gap-2">
-                        <Avatar user={u} size="sm" />
+                  <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/20 transition-colors">
+                    <td className="px-5 py-3 font-semibold text-slate-700 dark:text-slate-200">
+                      <span className="flex items-center gap-2.5">
+                        <Avatar user={u} size="sm" className="ring-2 ring-slate-100 dark:ring-slate-800/40" />
                         {u.name}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 text-slate-500">{u.email}</td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 font-medium">{u.email}</td>
+                    <td className="px-4 py-3">
                       <select
                         aria-label={`Role for ${u.name}`}
-                        className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                        className="rounded-lg border border-slate-200 dark:border-slate-850 px-2 py-1 text-xs text-slate-700 dark:text-white bg-white dark:bg-slate-900/60 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all font-semibold"
                         value={u.role}
                         onChange={(e) => updateUser.mutate({ id: u.id, patch: { role: e.target.value as Role } })}
                         disabled={updateUser.isPending}
@@ -173,7 +172,7 @@ export function UsersPage() {
                         ))}
                       </select>
                     </td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-4 py-3">
                       <DesignationCell
                         key={`${u.id}-${u.designation ?? ''}`}
                         value={u.designation}
@@ -184,14 +183,15 @@ export function UsersPage() {
                         }
                       />
                     </td>
-                    <td className="px-4 py-2.5 text-slate-500">{u.workspaceCount ?? 0}</td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 font-semibold">{u.workspaceCount ?? 0}</td>
+                    <td className="px-4 py-3">
                       {u.isActive ? <Badge tone="green">Active</Badge> : <Badge tone="amber">Inactive</Badge>}
                     </td>
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center justify-end gap-2">
+                    <td className="px-5 py-3">
+                      <div className="flex items-center justify-end gap-2.5">
                         <Button
                           variant="ghost"
+                          className="text-xs py-1.5 px-3 font-semibold"
                           disabled={resetPassword.isPending}
                           onClick={async () => {
                             setFormError(null);
@@ -207,6 +207,7 @@ export function UsersPage() {
                         </Button>
                         <Button
                           variant={u.isActive ? 'danger' : 'ghost'}
+                          className="text-xs py-1.5 px-3 font-semibold"
                           onClick={() => updateUser.mutate({ id: u.id, patch: { isActive: !u.isActive } })}
                           disabled={updateUser.isPending}
                         >
