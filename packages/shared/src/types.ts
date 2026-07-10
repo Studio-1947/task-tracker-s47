@@ -63,8 +63,12 @@ export interface CreatedUserWithTempPassword extends UserSummary {
 export interface WorkspaceSummary {
   id: string;
   name: string;
+  /** Secondary tagline shown under the name on the card. */
+  subtitle: string | null;
   description: string | null;
   color: string | null;
+  /** Storage key of the small square logo, e.g. "avatars/<uuid>.png"; served via /api/files. */
+  logoKey: string | null;
   isArchived: boolean;
   createdAt: string;
   memberCount?: number;

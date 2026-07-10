@@ -4,8 +4,12 @@ import { users } from './users';
 export const workspaces = pgTable('workspaces', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: varchar('name', { length: 120 }).notNull(),
+  /** Secondary tagline shown under the name on the workspace card. */
+  subtitle: varchar('subtitle', { length: 200 }),
   description: varchar('description', { length: 2000 }),
   color: varchar('color', { length: 7 }),
+  /** Storage key of the small square logo, e.g. "avatars/<uuid>.png"; served via /api/files. */
+  logoKey: varchar('logo_key', { length: 255 }),
   isArchived: boolean('is_archived').notNull().default(false),
   createdById: uuid('created_by_id')
     .notNull()
