@@ -1,4 +1,4 @@
-import type { AuditAction, Priority, Role, TaskStatus } from './enums';
+import type { AuditAction, LeaveStatus, Priority, Role, TaskStatus } from './enums';
 
 /** Shape of the authenticated user echoed by the API (never includes passwordHash). */
 export interface AuthUser {
@@ -266,4 +266,71 @@ export interface UserSession {
   ipAddress: string | null;
   lastActiveAt: string;
   createdAt: string;
+}
+
+/* ── Attendance & leave ── */
+
+export interface LeaveType {
+  id: string;
+  name: string;
+  color: string | null;
+  defaultBalance: number;
+  isActive: boolean;
+}
+
+/** A user's balance for one leave type. `allotted` = per-user override or the type default. */
+export interface LeaveBalance {
+  leaveTypeId: string;
+  typeName: string;
+  color: string | null;
+  allotted: number;
+  used: number;
+  remaining: number;
+}
+
+export interface LeaveRequestItem {
+  id: string;
+  user: UserRef;
+  leaveTypeId: string;
+  typeName: string;
+  color: string | null;
+  startDate: string;
+  endDate: string;
+  halfDay: boolean;
+  days: number;
+  reason: string | null;
+  status: LeaveStatus;
+  reviewedBy: UserRef | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  createdAt: string;
+}
+
+/** A single lat/lng punch location. */
+export interface GeoPoint {
+  lat: number;
+  lng: number;
+  accuracy: number | null;
+}
+
+export interface AttendanceRecordItem {
+  id: string;
+  workDate: string;
+  checkInAt: string;
+  checkOutAt: string | null;
+  checkInLocation: GeoPoint | null;
+  checkOutLocation: GeoPoint | null;
+}
+
+/** Admin team-log row: an attendance record plus the member it belongs to. */
+export interface AttendanceWithUser extends AttendanceRecordItem {
+  user: UserRef;
+}
+
+/** Today's punch state for the check-in/out button. */
+export interface AttendanceToday {
+  workDate: string;
+  checkedIn: boolean;
+  checkedOut: boolean;
+  record: AttendanceRecordItem | null;
 }
