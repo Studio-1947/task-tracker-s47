@@ -414,6 +414,64 @@ function ProjectPill({
   );
 }
 
+/** Progress bar showing time elapsed from task creation to due date. */
+function DueDateProgress({ dueDate, createdAt }: { dueDate: string | null; createdAt: string }) {
+  if (!dueDate) return null;
+
+  const created = new Date(createdAt).getTime();
+  const due = new Date(dueDate).getTime();
+  const now = Date.now();
+
+  // Progress 0-100%
+  const total = due - created;
+  const elapsed = now - created;
+  const pct = total <= 0 ? 100 : Math.min(100, Math.max(0, (elapsed / total) * 100));
+
+  const isExpired = now > due;
+  const isNearDue = !isExpired && pct >= 75;
+
+  const daysLeft = Math.ceil((due - now) / (1000 * 60 * 60 * 24));
+  const label = isExpired
+    ? 'Overdue'
+    : daysLeft === 0
+    ? 'Due today'
+    : daysLeft === 1
+    ? '1 day left'
+    : `${daysLeft} days left`;
+
+  const barColor = isExpired
+    ? 'bg-red-500'
+    : isNearDue
+    ? 'bg-amber-400'
+    : 'bg-indigo-500';
+
+  const trackColor = isExpired
+    ? 'bg-red-100 dark:bg-red-950/30'
+    : isNearDue
+    ? 'bg-amber-100 dark:bg-amber-950/20'
+    : 'bg-slate-100 dark:bg-slate-800/60';
+
+  const textColor = isExpired
+    ? 'text-red-500 dark:text-red-400'
+    : isNearDue
+    ? 'text-amber-600 dark:text-amber-400'
+    : 'text-slate-400 dark:text-slate-500';
+
+  return (
+    <div className="w-full mt-1.5 flex items-center gap-2">
+      <div className={`h-1.5 flex-1 rounded-full overflow-hidden ${trackColor}`}>
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className={`shrink-0 text-[10px] font-semibold tabular-nums ${textColor}`}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
 function StatusBadge({ t }: { t: TaskListItem }) {
   const icon = {
     TODO: (
@@ -506,9 +564,9 @@ function ListView({
           key={t.id}
           type="button"
           onClick={() => onOpen(t.id)}
-          className="w-full rounded-xl border border-slate-100 bg-white/70 dark:border-slate-800/40 dark:bg-slate-900/30 p-3.5 text-left hover:border-indigo-500 dark:hover:border-indigo-500/50 hover:shadow-md hover:shadow-indigo-500/[0.01] hover:-translate-y-0.5 transition-all duration-150 sm:flex sm:items-center sm:gap-4 sm:px-5"
+          className="w-full rounded-xl border border-slate-100 bg-white/70 dark:border-slate-800/40 dark:bg-slate-900/30 p-3.5 text-left hover:border-indigo-500 dark:hover:border-indigo-500/50 hover:shadow-md hover:shadow-indigo-500/[0.01] hover:-translate-y-0.5 transition-all duration-150 flex flex-col sm:px-5"
         >
-          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-4 sm:flex-1 min-w-0">
+          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-4 sm:flex-1 min-w-0 w-full">
             {/* Primary Row: Ref, Title, Mobile Status */}
             <div className="flex items-center justify-between sm:justify-start gap-3 min-w-0 sm:flex-1">
               <span className="font-mono text-xs text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded w-16 text-center shrink-0">{t.ref}</span>
@@ -553,6 +611,8 @@ function ListView({
               </span>
             </div>
           </div>
+          {/* Due date progress bar */}
+          <DueDateProgress dueDate={t.dueDate} createdAt={t.createdAt} />
         </button>
       ))}
     </div>

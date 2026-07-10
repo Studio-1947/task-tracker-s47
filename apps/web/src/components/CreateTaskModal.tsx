@@ -36,6 +36,10 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
       setError('Please select a project');
       return;
     }
+    if (!dueDate) {
+      setError('Please set a due date');
+      return;
+    }
     setError(null);
     try {
       await createTask.mutateAsync({
@@ -158,10 +162,14 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
               </select>
             </label>
             <label className="text-sm">
-              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Due date</span>
+              <span className="mb-1 flex items-center gap-0.5 font-medium text-slate-600 dark:text-slate-300">
+                Due date
+                <span className="text-red-500 ml-0.5">*</span>
+              </span>
               <input
                 aria-label="Due date"
                 type="date"
+                required
                 className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
