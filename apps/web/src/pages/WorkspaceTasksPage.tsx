@@ -21,7 +21,8 @@ import { useProjects } from '../hooks/useProjects';
 import { useAuth } from '../stores/auth';
 import { formatDate, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
 import { ApiRequestError } from '../lib/api';
-import { Badge, Button, Card, EmptyState, ErrorState, Input, LabelChip, Spinner } from '../components/ui';
+import { Button, Card, EmptyState, ErrorState, Input, LabelChip, Spinner } from '../components/ui';
+import { Avatar } from '../components/Avatar';
 import { TaskDrawer } from '../components/TaskDrawer';
 import { KanbanView } from '../components/KanbanView';
 import { CreateTaskModal } from '../components/CreateTaskModal';
@@ -414,15 +415,76 @@ function ProjectPill({
 }
 
 function StatusBadge({ t }: { t: TaskListItem }) {
-  return <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${statusClasses[t.status]}`}>{statusLabel(t.status)}</span>;
+  const icon = {
+    TODO: (
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+        <circle cx="12" cy="12" r="10" />
+      </svg>
+    ),
+    IN_PROGRESS: (
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+        <path d="M21 12a9 9 0 1 1-9-9" />
+      </svg>
+    ),
+    IN_REVIEW: (
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    ),
+    DONE: (
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" className="shrink-0">
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+    ),
+  }[t.status];
+
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${statusClasses[t.status]}`}>
+      {icon}
+      {statusLabel(t.status)}
+    </span>
+  );
 }
+
 function PriorityBadge({ t }: { t: TaskListItem }) {
-  return <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${priorityClasses[t.priority]}`}>{t.priority}</span>;
+  const icon = {
+    LOW: (
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+        <path d="M12 5v14M19 12l-7 7-7-7" />
+      </svg>
+    ),
+    MEDIUM: (
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+        <path d="M5 12h14" />
+      </svg>
+    ),
+    HIGH: (
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+        <path d="M12 19V5M5 12l7-7 7 7" />
+      </svg>
+    ),
+    URGENT: (
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+        <path d="m18 17-6-6-6 6M18 12l-6-6-6 6" />
+      </svg>
+    ),
+  }[t.priority];
+
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${priorityClasses[t.priority]}`}>
+      {icon}
+      {t.priority}
+    </span>
+  );
 }
 
 function ProjectTag({ name }: { name: string }) {
   return (
-    <span className="shrink-0 rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+    <span className="shrink-0 inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-80 shrink-0">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+      </svg>
       {name}
     </span>
   );
@@ -467,14 +529,21 @@ function ListView({
                 </div>
               ) : null}
               {t.assignees[0] ? (
-                <span className="sm:hidden md:inline-flex">
-                  <Badge>{t.assignees[0].name}</Badge>
+                <span className="sm:hidden md:inline-flex items-center gap-1.5 rounded-full bg-slate-100/60 dark:bg-slate-800/40 px-2 py-0.5 text-[10px] font-semibold text-slate-650 dark:text-slate-350 border border-slate-200/30 dark:border-slate-700/50 shadow-xs">
+                  <Avatar user={t.assignees[0]} size="sm" className="!h-4.5 !w-4.5 !text-[8px]" />
+                  <span>{t.assignees[0].name}</span>
                 </span>
               ) : null}
               {t.dueDate ? (
                 <span
-                  className={`text-xs font-semibold ${isOverdue(t.dueDate) ? 'text-red-500 dark:text-red-400' : 'text-slate-450 dark:text-slate-500'}`}
+                  className={`inline-flex items-center gap-1.5 text-xs font-semibold ${isOverdue(t.dueDate) ? 'text-red-500 dark:text-red-400' : 'text-slate-450 dark:text-slate-500'}`}
                 >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-80 shrink-0">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
                   {formatDate(t.dueDate)}
                 </span>
               ) : null}
@@ -516,10 +585,19 @@ function TableView({
         : []),
       columnHelper.accessor('status', { header: 'Status', cell: (c) => <StatusBadge t={c.row.original} /> }),
       columnHelper.accessor('priority', { header: 'Priority', cell: (c) => <PriorityBadge t={c.row.original} /> }),
-      columnHelper.accessor((r) => r.assignees[0]?.name ?? '', {
+      columnHelper.accessor((r) => r.assignees[0], {
         id: 'assignee',
         header: 'Assignee',
-        cell: (c) => <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">{c.getValue() || '—'}</span>,
+        cell: (c) => {
+          const val = c.getValue();
+          if (!val) return <span className="text-slate-455 dark:text-slate-600 font-medium">—</span>;
+          return (
+            <span className="inline-flex items-center gap-2 font-semibold text-slate-650 dark:text-slate-350">
+              <Avatar user={val} size="sm" className="!h-5 !w-5 !text-[9px]" />
+              <span>{val.name}</span>
+            </span>
+          );
+        },
       }),
       columnHelper.accessor('dueDate', {
         header: 'Due',

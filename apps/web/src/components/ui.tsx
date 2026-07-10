@@ -97,9 +97,13 @@ export function LabelChip({ name, color }: { name: string; color?: string | null
   const c = color ?? '#64748b';
   return (
     <span
-      className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
+      className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
       style={{ backgroundColor: `${c}12`, color: c, border: `1px solid ${c}25` }}
     >
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="opacity-80 shrink-0">
+        <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" />
+        <line x1="7" y1="7" x2="7.01" y2="7" strokeLinecap="round" />
+      </svg>
       {name}
     </span>
   );
