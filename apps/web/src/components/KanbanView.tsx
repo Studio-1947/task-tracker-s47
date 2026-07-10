@@ -15,6 +15,7 @@ import { TASK_STATUSES, type TaskListItem, type TaskStatus } from '@task-tracker
 import { useUpdateTask } from '../hooks/useTasks';
 import { formatDate, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
 import { LabelChip } from './ui';
+import { DueDateProgress } from './DueDateProgress';
 
 interface Props {
   workspaceId: string;
@@ -62,10 +63,11 @@ export function KanbanView({ workspaceId, tasks, onOpen, showProject }: Props) {
             tasks={byStatus[status] ?? []}
             onOpen={onOpen}
             showProject={showProject}
+            workspaceId={workspaceId}
           />
         ))}
       </div>
-      <DragOverlay>{activeTask ? <Card task={activeTask} overlay showProject={showProject} /> : null}</DragOverlay>
+      <DragOverlay>{activeTask ? <Card task={activeTask} overlay showProject={showProject} workspaceId={workspaceId} /> : null}</DragOverlay>
     </DndContext>
   );
 }
@@ -75,11 +77,13 @@ function Column({
   tasks,
   onOpen,
   showProject,
+  workspaceId,
 }: {
   status: TaskStatus;
   tasks: TaskListItem[];
   onOpen: (id: string) => void;
   showProject?: boolean;
+  workspaceId: string;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   return (
@@ -97,7 +101,7 @@ function Column({
         }`}
       >
         {tasks.map((t) => (
-          <DraggableCard key={t.id} task={t} onOpen={onOpen} showProject={showProject} />
+          <DraggableCard key={t.id} task={t} onOpen={onOpen} showProject={showProject} workspaceId={workspaceId} />
         ))}
         {tasks.length === 0 ? (
           <div className="py-8 text-center text-xs font-semibold uppercase tracking-wider text-slate-350 dark:text-slate-600 border border-dashed border-slate-200/60 dark:border-[#2d2d2d] rounded-xl bg-white/30 dark:bg-[#1a1a1a]/10">Drop target</div>
@@ -111,10 +115,12 @@ function DraggableCard({
   task,
   onOpen,
   showProject,
+  workspaceId,
 }: {
   task: TaskListItem;
   onOpen: (id: string) => void;
   showProject?: boolean;
+  workspaceId: string;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id });
   const style = { transform: CSS.Translate.toString(transform), opacity: isDragging ? 0.4 : 1 };
@@ -127,12 +133,12 @@ function DraggableCard({
       onClick={() => onOpen(task.id)}
       className="cursor-grab touch-none rounded-xl border border-slate-150/60 dark:border-[#2d2d2d] bg-white dark:bg-[#1e1e1e] p-4 shadow-[0_2px_8px_-2px_rgba(15,23,42,0.02)] active:cursor-grabbing hover:border-indigo-400 dark:hover:border-indigo-500/40 transition duration-150"
     >
-      <Card task={task} showProject={showProject} />
+      <Card task={task} showProject={showProject} workspaceId={workspaceId} />
     </div>
   );
 }
 
-function Card({ task, overlay = false, showProject }: { task: TaskListItem; overlay?: boolean; showProject?: boolean }) {
+function Card({ task, overlay = false, showProject, workspaceId }: { task: TaskListItem; overlay?: boolean; showProject?: boolean; workspaceId: string }) {
   return (
     <div className={overlay ? 'w-64 rounded-xl border border-indigo-400 bg-white dark:bg-[#1e1e1e] p-4 shadow-xl dark:shadow-none' : ''}>
       <div className="flex items-center justify-between gap-2">
@@ -168,6 +174,7 @@ function Card({ task, overlay = false, showProject }: { task: TaskListItem; over
           </span>
         ) : null}
       </div>
+      <DueDateProgress t={task} workspaceId={workspaceId} />
     </div>
   );
 }
