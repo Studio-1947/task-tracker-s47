@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiRequestError } from '../lib/api';
 import { useAuth } from '../stores/auth';
-import { Button, Card, Input } from '../components/ui';
+import { Button, Card, PasswordInput } from '../components/ui';
 
 export function ChangePasswordPage({
   forced = false,
@@ -48,15 +48,15 @@ export function ChangePasswordPage({
     <form className="space-y-4.5" onSubmit={onSubmit}>
       <div>
         <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Current password</label>
-        <Input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} required autoFocus />
+        <PasswordInput value={current} onChange={(e) => setCurrent(e.target.value)} required autoFocus />
       </div>
       <div>
         <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">New password</label>
-        <Input type="password" value={next} onChange={(e) => setNext(e.target.value)} required />
+        <PasswordInput value={next} onChange={(e) => setNext(e.target.value)} required />
       </div>
       <div>
         <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Confirm new password</label>
-        <Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
+        <PasswordInput value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
       </div>
       {error ? <p className="text-sm text-red-500 dark:text-red-400 font-semibold">{error}</p> : null}
       {done ? <p className="text-sm text-green-500 dark:text-green-400 font-semibold">Password updated successfully.</p> : null}
