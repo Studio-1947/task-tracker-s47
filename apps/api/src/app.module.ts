@@ -15,6 +15,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { LabelsModule } from './labels/labels.module';
 import { SearchModule } from './search/search.module';
 import { FilesModule } from './files/files.module';
+import { AttendanceModule } from './attendance/attendance.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -42,6 +43,7 @@ import { HealthController } from './health/health.controller';
     LabelsModule,
     SearchModule,
     FilesModule,
+    AttendanceModule,
   ],
   controllers: [HealthController],
   providers: [

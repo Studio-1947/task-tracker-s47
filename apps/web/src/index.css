@@ -50,6 +50,30 @@
   select[disabled] {
     cursor: not-allowed !important;
   }
+
+  /* Pin native date/time controls to the app theme so the calendar-picker icon
+     stays visible (otherwise it follows the OS color-scheme and can render a
+     light icon on a light field, making it invisible). */
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  input[type="month"] {
+    color-scheme: light;
+  }
+  .dark input[type="date"],
+  .dark input[type="time"],
+  .dark input[type="datetime-local"],
+  .dark input[type="month"] {
+    color-scheme: dark;
+  }
+  input::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.65;
+    transition: opacity 0.15s;
+  }
+  input::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+  }
 }
 
 @keyframes fadeIn {

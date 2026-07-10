@@ -1,13 +1,19 @@
 import {
+  BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import {
   Role,
   createWorkspaceSchema,
@@ -21,6 +27,7 @@ import { CurrentUser, type RequestUser } from '../common/decorators/current-user
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { AVATAR_MAX_BYTES } from '../files/files.constants';
 import { WorkspacesService } from './workspaces.service';
 
 @Controller('workspaces')
@@ -69,5 +76,22 @@ export class WorkspacesController {
     @Body(new ZodValidationPipe(updateWorkspaceMembersSchema)) body: UpdateWorkspaceMembersInput,
   ) {
     return this.workspaces.updateMembers(id, body);
+  }
+
+  // Workspace logo — admin only. Validated (image-only allowlist) in FilesService.save.
+  @Post(':id/logo')
+  @Roles(Role.ADMIN)
+  @UseInterceptors(
+    FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: AVATAR_MAX_BYTES } }),
+  )
+  uploadLogo(@Param('id', ParseUUIDPipe) id: string, @UploadedFile() file: Express.Multer.File | undefined) {
+    if (!file) throw new BadRequestException('No file provided');
+    return this.workspaces.setLogo(id, file);
+  }
+
+  @Delete(':id/logo')
+  @Roles(Role.ADMIN)
+  removeLogo(@Param('id', ParseUUIDPipe) id: string) {
+    return this.workspaces.removeLogo(id);
   }
 }
