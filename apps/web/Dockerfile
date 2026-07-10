@@ -11,6 +11,9 @@ COPY packages/shared/package.json packages/shared/
 COPY apps/web/package.json apps/web/
 RUN pnpm install --frozen-lockfile
 
+# Cache-bust this layer on every deploy by passing the git commit SHA.
+# docker build --build-arg CACHEBUST=$(git rev-parse HEAD) ...
+ARG CACHEBUST=1
 COPY packages/shared packages/shared
 COPY apps/web apps/web
 RUN pnpm --filter @task-tracker/shared build \
