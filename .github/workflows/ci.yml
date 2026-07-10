@@ -12,7 +12,6 @@ jobs:
     services:
       postgres:
         image: postgres:16-alpine
-
         env:
           POSTGRES_USER: tasktracker
           POSTGRES_PASSWORD: tasktracker
