@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   createColumnHelper,
   flexRender,
@@ -18,6 +18,7 @@ import {
 } from '../hooks/useTasks';
 import { useLabels } from '../hooks/useLabels';
 import { useProjects } from '../hooks/useProjects';
+import { useEnsureProjectConversation } from '../hooks/useChat';
 import { useAuth } from '../stores/auth';
 import { formatDate, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
 import { ApiRequestError } from '../lib/api';
@@ -68,6 +69,12 @@ function Board({ workspaceId }: { workspaceId: string }) {
   const [showCreate, setShowCreate] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const navigate = useNavigate();
+  const ensureProjectConv = useEnsureProjectConversation();
+  const openProjectChat = async (projectId: string) => {
+    const conv = await ensureProjectConv.mutateAsync(projectId);
+    navigate(`/chat?c=${conv.id}`);
+  };
 
   // Project scope is navigational (?project=), not a persisted filter.
   const selectedProjectId = searchParams.get('project') ?? '';
@@ -209,6 +216,20 @@ function Board({ workspaceId }: { workspaceId: string }) {
           >
             + New project
           </button>
+          {selectedProjectId ? (
+            <button
+              type="button"
+              onClick={() => void openProjectChat(selectedProjectId)}
+              disabled={ensureProjectConv.isPending}
+              title="Open this project's chat channel"
+              className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-100 disabled:opacity-50 dark:bg-indigo-950/30 dark:text-indigo-400 dark:hover:bg-indigo-950/50 transition-colors cursor-pointer"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              Open chat
+            </button>
+          ) : null}
         </div>
 
         {/* Create + filters */}

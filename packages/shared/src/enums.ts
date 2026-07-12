@@ -46,6 +46,16 @@ export const LeaveStatus = {
 export type LeaveStatus = (typeof LeaveStatus)[keyof typeof LeaveStatus];
 export const LEAVE_STATUSES = Object.values(LeaveStatus);
 
+/** Conversation kinds for the chat layer. DIRECT = 1:1 DM, PROJECT = a project's
+ * group channel (membership derived from the workspace), GROUP = ad-hoc named group. */
+export const ConversationType = {
+  DIRECT: 'DIRECT',
+  PROJECT: 'PROJECT',
+  GROUP: 'GROUP',
+} as const;
+export type ConversationType = (typeof ConversationType)[keyof typeof ConversationType];
+export const CONVERSATION_TYPES = Object.values(ConversationType);
+
 /** Audit log actions — PRD §3.5 / §5. */
 export const AuditAction = {
   CREATED: 'CREATED',

@@ -7,4 +7,5 @@ export * from './schemas/task';
 export * from './schemas/label';
 export * from './schemas/search';
 export * from './schemas/attendance';
+export * from './schemas/chat';
 export * from './types';

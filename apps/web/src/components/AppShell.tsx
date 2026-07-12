@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../stores/auth';
+import { useChatBridge, useConversations } from '../hooks/useChat';
 import { Avatar } from './Avatar';
 import { GlobalSearch } from './GlobalSearch';
 import { Topbar } from './Topbar';
@@ -27,6 +28,15 @@ const nav = [
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+      </svg>
+    ),
+  },
+  {
+    to: '/chat',
+    label: 'Chat',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </svg>
     ),
   },
@@ -61,6 +71,10 @@ const nav = [
 export function AppShell() {
   const { user, logout } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
+  // Live realtime chat connection (kept open app-wide so unread badges update).
+  useChatBridge();
+  const { data: conversations } = useConversations();
+  const chatUnread = (conversations ?? []).reduce((n, c) => n + c.unreadCount, 0);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('tt.sidebar-collapsed') === 'true');
@@ -99,8 +113,18 @@ export function AppShell() {
             }`
           }
         >
-          {n.icon}
+          <span className="relative flex items-center">
+            {n.icon}
+            {n.to === '/chat' && chatUnread > 0 && collapsed ? (
+              <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-indigo-600" />
+            ) : null}
+          </span>
           {!collapsed && n.label}
+          {n.to === '/chat' && chatUnread > 0 && !collapsed ? (
+            <span className="ml-auto rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+              {chatUnread > 99 ? '99+' : chatUnread}
+            </span>
+          ) : null}
         </NavLink>
       ))}
     </>

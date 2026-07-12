@@ -1,4 +1,4 @@
-import type { AuditAction, LeaveStatus, Priority, Role, TaskStatus } from './enums';
+import type { AuditAction, ConversationType, LeaveStatus, Priority, Role, TaskStatus } from './enums';
 
 /** Shape of the authenticated user echoed by the API (never includes passwordHash). */
 export interface AuthUser {
@@ -333,4 +333,102 @@ export interface AttendanceToday {
   checkedIn: boolean;
   checkedOut: boolean;
   record: AttendanceRecordItem | null;
+}
+
+/* ── Chat ── */
+
+/** A person you can start a DM with (org-wide directory). */
+export interface ChatContact {
+  id: string;
+  name: string;
+  email: string;
+  avatarKey: string | null;
+  designation: string | null;
+}
+
+export interface ChatAttachment {
+  id: string;
+  /** Server storage key, e.g. "attachments/<uuid>.png"; fetch bytes from /api/chat/<storageKey>. */
+  fileKey: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  conversationId: string;
+  sender: UserRef;
+  /** Null when the message is attachment-only or has been soft-deleted. */
+  body: string | null;
+  attachments: ChatAttachment[];
+  /** Ids of users @mentioned in this message. */
+  mentionIds: string[];
+  editedAt: string | null;
+  deletedAt: string | null;
+  createdAt: string;
+}
+
+export interface ConversationMember {
+  user: UserRef;
+  isAdmin: boolean;
+  lastReadAt: string | null;
+}
+
+/** Compact preview of the most recent message, for the conversation list. */
+export interface ConversationPreview {
+  body: string | null;
+  senderId: string;
+  senderName: string;
+  hasAttachment: boolean;
+  createdAt: string;
+}
+
+/** One row in the conversation list. Title/otherUser are resolved server-side per type. */
+export interface ConversationSummary {
+  id: string;
+  type: ConversationType;
+  /** Group title, project name, or the other person's name (DIRECT) — always display-ready. */
+  title: string;
+  /** For PROJECT conversations. */
+  projectId: string | null;
+  workspaceId: string | null;
+  /** The counterpart in a DIRECT conversation; null for groups/projects. */
+  otherUser: UserRef | null;
+  memberCount: number;
+  lastMessage: ConversationPreview | null;
+  lastMessageAt: string | null;
+  unreadCount: number;
+}
+
+export interface ConversationDetail extends ConversationSummary {
+  members: ConversationMember[];
+}
+
+/* Socket event payloads (server → client) */
+export interface MessageEvent {
+  conversationId: string;
+  message: ChatMessage;
+}
+export interface MessageDeletedEvent {
+  conversationId: string;
+  messageId: string;
+}
+export interface TypingEvent {
+  conversationId: string;
+  userId: string;
+  userName: string;
+  typing: boolean;
+}
+export interface ReadEvent {
+  conversationId: string;
+  userId: string;
+  lastReadAt: string;
+}
+export interface PresenceEvent {
+  userId: string;
+  online: boolean;
+}
+export interface ConversationCreatedEvent {
+  conversation: ConversationSummary;
 }
