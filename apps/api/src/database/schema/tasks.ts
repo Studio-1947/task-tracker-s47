@@ -9,6 +9,7 @@ import {
   uniqueIndex,
   uuid,
   varchar,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { priorityEnum, taskStatusEnum } from './enums';
 import { projects } from './projects';
@@ -26,6 +27,8 @@ export const tasks = pgTable(
     projectId: uuid('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
+    /** Parent task, when this is a subtask. Single level only (a subtask can't itself have subtasks). */
+    parentTaskId: uuid('parent_task_id').references((): AnyPgColumn => tasks.id, { onDelete: 'cascade' }),
     /** Per-project sequential number backing the human-readable ref (e.g. 12 in WEB-12). */
     number: integer('number').notNull(),
     title: varchar('title', { length: 300 }).notNull(),
@@ -45,6 +48,7 @@ export const tasks = pgTable(
   (t) => [
     uniqueIndex('tasks_project_number_uq').on(t.projectId, t.number),
     index('tasks_completed_at_idx').on(t.completedAt),
+    index('tasks_parent_task_idx').on(t.parentTaskId),
   ],
 );
 

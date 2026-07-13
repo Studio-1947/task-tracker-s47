@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AuditEntry,
+  CreateSubtaskInput,
   CreateTaskInput,
   Paginated,
   TaskAttachment,
@@ -23,6 +24,7 @@ export interface TaskFilters {
   order?: 'asc' | 'desc';
   page?: number;
   pageSize?: number;
+  includeArchived?: boolean;
 }
 
 function toQueryString(filters: TaskFilters): string {
@@ -130,8 +132,42 @@ export function useUpdateTask(workspaceId: string) {
 export function useArchiveTask(workspaceId: string) {
   const qc = useQueryClient();
   return useMutation({
+    mutationFn: (id: string) => http.post<{ id: string; isArchived: boolean }>(`/tasks/${id}/archive`, {}),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
+      qc.invalidateQueries({ queryKey: ['task', id] });
+    },
+  });
+}
+
+export function useRestoreTask(workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => http.post<{ id: string; isArchived: boolean }>(`/tasks/${id}/restore`, {}),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
+      qc.invalidateQueries({ queryKey: ['task', id] });
+    },
+  });
+}
+
+/** Permanent, irreversible delete — admin-only (enforced server-side). */
+export function useDeleteTask(workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
     mutationFn: (id: string) => http.del<{ id: string }>(`/tasks/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tasks', workspaceId] }),
+  });
+}
+
+export function useCreateSubtask(taskId: string, workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateSubtaskInput) => http.post<TaskDetail>(`/tasks/${taskId}/subtasks`, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId] });
+      qc.invalidateQueries({ queryKey: ['tasks', workspaceId] }); // subtaskCount on the parent row
+    },
   });
 }
 

@@ -132,7 +132,16 @@ function Board({ workspaceId }: { workspaceId: string }) {
   // Reset to page 1 whenever a filter changes.
   useEffect(() => {
     setPage(1);
-  }, [filters.status, filters.assigneeId, filters.labelId, filters.search, filters.sort, filters.order, filters.pageSize]);
+  }, [
+    filters.status,
+    filters.assigneeId,
+    filters.labelId,
+    filters.search,
+    filters.sort,
+    filters.order,
+    filters.pageSize,
+    filters.includeArchived,
+  ]);
 
   const createTask = useCreateTask(workspaceId);
   const [newTitle, setNewTitle] = useState('');
@@ -143,7 +152,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
   );
 
   const filtersActive =
-    !!filters.search || !!filters.status || !!filters.assigneeId || !!filters.labelId;
+    !!filters.search || !!filters.status || !!filters.assigneeId || !!filters.labelId || !!filters.includeArchived;
 
   const pageSize = data?.pageSize ?? 15;
   const totalPages = data ? Math.max(1, Math.ceil(data.total / pageSize)) : 1;
@@ -310,6 +319,15 @@ function Board({ workspaceId }: { workspaceId: string }) {
                 </option>
               ))}
             </select>
+            <label className="flex w-full items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 lg:w-auto cursor-pointer">
+              <input
+                type="checkbox"
+                className="cursor-pointer accent-indigo-600"
+                checked={!!filters.includeArchived}
+                onChange={(e) => setFilters((f) => ({ ...f, includeArchived: e.target.checked }))}
+              />
+              Show archived
+            </label>
             {filtersActive ? (
               <Button variant="ghost" className="w-full lg:w-auto text-xs py-2 px-3" onClick={() => setFilters({ ...DEFAULT_FILTERS })}>
                 Reset filters
@@ -408,6 +426,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
           members={memberRefs}
           labels={labels ?? []}
           onClose={closeTask}
+          onOpenTask={setOpenTaskId}
         />
       ) : null}
       {showCreate ? (
@@ -531,6 +550,18 @@ function PriorityBadge({ t }: { t: TaskListItem }) {
   );
 }
 
+function SubtaskProgress({ count, done }: { count: number; done: number }) {
+  return (
+    <span className="shrink-0 inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-80 shrink-0">
+        <polyline points="9 11 12 14 22 4" />
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+      </svg>
+      {done}/{count}
+    </span>
+  );
+}
+
 function ProjectTag({ name }: { name: string }) {
   return (
     <span className="shrink-0 inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
@@ -575,6 +606,12 @@ function ListView({
             {/* Metadata Row: project, labels, assignee, due date, priority, status */}
             <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:shrink-0 sm:gap-4">
               {showProject ? <ProjectTag name={t.projectName} /> : null}
+              {t.isArchived ? (
+                <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+                  Archived
+                </span>
+              ) : null}
+              {t.subtaskCount > 0 ? <SubtaskProgress count={t.subtaskCount} done={t.subtaskDoneCount} /> : null}
               {t.labels.length > 0 ? (
                 <div className="flex flex-wrap gap-1 sm:hidden lg:flex">
                   {t.labels.slice(0, 2).map((l) => (

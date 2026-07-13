@@ -15,8 +15,18 @@ export const createTaskSchema = z.object({
   dueDate: z.string().datetime().nullable().optional(),
   assigneeIds: z.array(z.string().uuid()).optional(),
   labelIds: z.array(z.string().uuid()).optional(),
+  /** Set to create this task as a subtask of another (must be a top-level task in the same project). */
+  parentTaskId: z.string().uuid().optional(),
 });
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
+
+/** Lightweight create form used by the "+ Add subtask" quick-add under a task. */
+export const createSubtaskSchema = z.object({
+  title: z.string().min(1).max(300),
+  assigneeIds: z.array(z.string().uuid()).optional(),
+  dueDate: z.string().datetime().nullable().optional(),
+});
+export type CreateSubtaskInput = z.infer<typeof createSubtaskSchema>;
 
 /**
  * Partial update. Semantics: a field omitted is left unchanged; `dueDate: null`

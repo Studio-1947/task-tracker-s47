@@ -118,14 +118,29 @@ export interface TaskListItem {
   labels: LabelRef[];
   commentCount: number;
   attachmentCount: number;
+  /** Non-null when this task is a subtask of another. */
+  parentTaskId: string | null;
+  subtaskCount: number;
+  subtaskDoneCount: number;
   isArchived: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
+/** Compact row for a task's subtask list / a parent-task reference. */
+export interface SubtaskRef {
+  id: string;
+  ref: string;
+  title: string;
+  status: TaskStatus;
+  priority: Priority;
+}
+
 export interface TaskDetail extends TaskListItem {
   description: string | null;
   createdBy: UserRef;
+  parentTask: SubtaskRef | null;
+  subtasks: SubtaskRef[];
 }
 
 export interface TaskComment {

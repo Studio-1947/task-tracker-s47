@@ -153,6 +153,15 @@ function Card({ task, overlay = false, showProject, workspaceId }: { task: TaskL
         </span>
       </div>
       <p className="mt-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200 leading-snug break-words">{task.title}</p>
+      {task.subtaskCount > 0 ? (
+        <span className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-[#252525] px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-80 shrink-0">
+            <polyline points="9 11 12 14 22 4" />
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+          </svg>
+          {task.subtaskDoneCount}/{task.subtaskCount} subtasks
+        </span>
+      ) : null}
       {task.labels.length ? (
         <div className="mt-2.5 flex flex-wrap gap-1">
           {task.labels.slice(0, 3).map((l) => (

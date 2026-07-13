@@ -57,6 +57,13 @@
       "when": 1783750117397,
       "tag": "0007_dapper_firestar",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783925975976,
+      "tag": "0008_heavy_patriot",
+      "breakpoints": true
     }
   ]
 }

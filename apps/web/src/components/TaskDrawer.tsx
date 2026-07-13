@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   PRIORITIES,
   TASK_STATUSES,
@@ -9,13 +10,19 @@ import {
 } from '@task-tracker/shared';
 import {
   useAddComment,
+  useArchiveTask,
+  useCreateSubtask,
+  useDeleteTask,
+  useRestoreTask,
   useTask,
   useTaskComments,
   useTaskHistory,
   useUpdateTask,
 } from '../hooks/useTasks';
 import { useCreateLabel } from '../hooks/useLabels';
+import { useAuth } from '../stores/auth';
 import { describeAudit, formatDate, formatDateTime, priorityClasses, statusClasses, statusLabel } from '../lib/format';
+import { ApiRequestError } from '../lib/api';
 import { Attachments } from './Attachments';
 import { Avatar } from './Avatar';
 import { Button, Spinner } from './ui';
@@ -26,17 +33,47 @@ interface Props {
   members: UserRef[];
   labels: LabelRef[];
   onClose: () => void;
+  /** Opens another task (a subtask or the parent) in this same drawer. */
+  onOpenTask: (id: string) => void;
 }
 
-export function TaskDrawer({ workspaceId, taskId, members, labels, onClose }: Props) {
+export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOpenTask }: Props) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
   const { data: task, isLoading } = useTask(taskId);
   const { data: comments } = useTaskComments(taskId);
   const { data: history } = useTaskHistory(taskId);
   const update = useUpdateTask(workspaceId);
   const addComment = useAddComment(taskId);
+  const archive = useArchiveTask(workspaceId);
+  const restore = useRestoreTask(workspaceId);
+  const remove = useDeleteTask(workspaceId);
+  const createSubtask = useCreateSubtask(taskId, workspaceId);
+  const qc = useQueryClient();
   const [comment, setComment] = useState('');
+  const [subtaskTitle, setSubtaskTitle] = useState('');
 
   const patch = (p: Parameters<typeof update.mutate>[0]['patch']) => update.mutate({ id: taskId, patch: p });
+
+  const toggleSubtask = (subtaskId: string, currentStatus: TaskStatus) => {
+    const nextStatus: TaskStatus = currentStatus === 'DONE' ? 'TODO' : 'DONE';
+    update.mutate(
+      { id: subtaskId, patch: { status: nextStatus } },
+      { onSuccess: () => qc.invalidateQueries({ queryKey: ['task', taskId] }) },
+    );
+  };
+
+  const onDelete = () => {
+    if (!window.confirm(`Permanently delete "${task?.ref} ${task?.title}"? This cannot be undone.`)) return;
+    remove.mutate(taskId, { onSuccess: onClose });
+  };
+
+  const onAddSubtask = (e: React.FormEvent) => {
+    e.preventDefault();
+    const title = subtaskTitle.trim();
+    if (!title) return;
+    createSubtask.mutate({ title }, { onSuccess: () => setSubtaskTitle('') });
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -51,9 +88,27 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose }: Pr
           <div className="flex flex-col gap-6 p-5 sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
+                {task.parentTask ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenTask(task.parentTask!.id)}
+                    className="mb-1.5 flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-indigo-600 dark:text-slate-500 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <line x1="19" y1="12" x2="5" y2="12" />
+                      <polyline points="12 19 5 12 12 5" />
+                    </svg>
+                    Subtask of {task.parentTask.ref} {task.parentTask.title}
+                  </button>
+                ) : null}
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-850 px-2 py-0.5 rounded text-center">{task.ref}</span>
                   <span className="truncate text-xs font-semibold text-slate-500 dark:text-slate-400">{task.projectName}</span>
+                  {task.isArchived ? (
+                    <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+                      Archived
+                    </span>
+                  ) : null}
                 </div>
                 <h2 className="mt-2.5 text-lg font-bold text-slate-800 dark:text-white break-words leading-snug">{task.title}</h2>
               </div>
@@ -68,6 +123,28 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose }: Pr
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
               </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {task.isArchived ? (
+                <Button variant="ghost" className="py-1.5 px-3 text-xs" disabled={restore.isPending} onClick={() => restore.mutate(taskId)}>
+                  Restore
+                </Button>
+              ) : (
+                <Button variant="ghost" className="py-1.5 px-3 text-xs" disabled={archive.isPending} onClick={() => archive.mutate(taskId)}>
+                  Archive
+                </Button>
+              )}
+              {isAdmin ? (
+                <Button variant="danger" className="py-1.5 px-3 text-xs" disabled={remove.isPending} onClick={onDelete}>
+                  Delete permanently
+                </Button>
+              ) : null}
+              {remove.isError ? (
+                <span className="text-xs font-semibold text-red-500 dark:text-red-400">
+                  {remove.error instanceof ApiRequestError ? remove.error.message : 'Failed to delete task'}
+                </span>
+              ) : null}
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -145,6 +222,66 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose }: Pr
               selected={task.labels}
               onChange={(labelIds) => patch({ labelIds })}
             />
+
+            {!task.parentTaskId ? (
+              <section>
+                <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
+                  Subtasks{task.subtasks.length ? ` (${task.subtasks.filter((s) => s.status === 'DONE').length}/${task.subtasks.length})` : ''}
+                </h3>
+                <div className="space-y-2">
+                  {task.subtasks.length ? (
+                    task.subtasks.map((s) => (
+                      <div
+                        key={s.id}
+                        className="flex items-center gap-2.5 rounded-lg border border-slate-100 dark:border-slate-800/40 bg-slate-50/50 dark:bg-[#222222]/50 px-3 py-2"
+                      >
+                        <button
+                          type="button"
+                          aria-label={s.status === 'DONE' ? 'Mark as not done' : 'Mark as done'}
+                          onClick={() => toggleSubtask(s.id, s.status)}
+                          className={`shrink-0 flex h-4.5 w-4.5 items-center justify-center rounded border transition-colors cursor-pointer ${
+                            s.status === 'DONE'
+                              ? 'border-indigo-500 bg-indigo-500 text-white'
+                              : 'border-slate-300 dark:border-slate-700 hover:border-indigo-400'
+                          }`}
+                        >
+                          {s.status === 'DONE' ? (
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          ) : null}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onOpenTask(s.id)}
+                          className={`min-w-0 flex-1 truncate text-left text-sm font-medium cursor-pointer ${
+                            s.status === 'DONE'
+                              ? 'text-slate-400 dark:text-slate-500 line-through'
+                              : 'text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400'
+                          }`}
+                        >
+                          {s.title}
+                        </button>
+                        <span className="shrink-0 font-mono text-[10px] text-slate-400 dark:text-slate-500">{s.ref}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-400 dark:text-slate-500 py-1">No subtasks yet.</p>
+                  )}
+                </div>
+                <form className="mt-3 flex gap-2" onSubmit={onAddSubtask}>
+                  <input
+                    className="flex-1 rounded-lg border border-slate-200 dark:border-slate-800 px-3.5 py-2 text-sm bg-white dark:bg-[#252525] dark:text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all placeholder:text-slate-400"
+                    placeholder="Add a subtask…"
+                    value={subtaskTitle}
+                    onChange={(e) => setSubtaskTitle(e.target.value)}
+                  />
+                  <Button type="submit" variant="ghost" className="py-2 px-4 text-xs" disabled={createSubtask.isPending}>
+                    Add
+                  </Button>
+                </form>
+              </section>
+            ) : null}
 
             <Attachments taskId={taskId} workspaceId={workspaceId} />
 
