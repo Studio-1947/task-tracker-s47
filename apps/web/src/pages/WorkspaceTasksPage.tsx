@@ -23,7 +23,7 @@ import { useAuth } from '../stores/auth';
 import { formatDate, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
 import { ApiRequestError } from '../lib/api';
 import { Button, Card, EmptyState, ErrorState, Input, LabelChip, Spinner } from '../components/ui';
-import { Avatar } from '../components/Avatar';
+import { AvatarStack } from '../components/AvatarStack';
 import { TaskDrawer } from '../components/TaskDrawer';
 import { KanbanView } from '../components/KanbanView';
 import { CreateTaskModal } from '../components/CreateTaskModal';
@@ -619,10 +619,10 @@ function ListView({
                   ))}
                 </div>
               ) : null}
-              {t.assignees[0] ? (
+              {t.assignees.length ? (
                 <span className="sm:hidden md:inline-flex items-center gap-1.5 rounded-full bg-slate-100/60 dark:bg-slate-800/40 px-2 py-0.5 text-[10px] font-semibold text-slate-650 dark:text-slate-350 border border-slate-200/30 dark:border-slate-700/50 shadow-xs">
-                  <Avatar user={t.assignees[0]} size="sm" className="!h-4.5 !w-4.5 !text-[8px]" />
-                  <span>{t.assignees[0].name}</span>
+                  <AvatarStack users={t.assignees} max={3} />
+                  <span>{t.assignees.length === 1 ? t.assignees[0]!.name : `${t.assignees.length} assignees`}</span>
                 </span>
               ) : null}
               {t.dueDate ? (
@@ -680,16 +680,19 @@ function TableView({
         : []),
       columnHelper.accessor('status', { header: 'Status', cell: (c) => <StatusBadge t={c.row.original} /> }),
       columnHelper.accessor('priority', { header: 'Priority', cell: (c) => <PriorityBadge t={c.row.original} /> }),
-      columnHelper.accessor((r) => r.assignees[0], {
+      columnHelper.accessor((r) => r.assignees, {
         id: 'assignee',
-        header: 'Assignee',
+        header: 'Assignees',
         cell: (c) => {
-          const val = c.getValue();
-          if (!val) return <span className="text-slate-455 dark:text-slate-600 font-medium">—</span>;
+          const assignees = c.getValue();
+          if (assignees.length === 0)
+            return <span className="text-slate-455 dark:text-slate-600 font-medium">—</span>;
           return (
             <span className="inline-flex items-center gap-2 font-semibold text-slate-650 dark:text-slate-350">
-              <Avatar user={val} size="sm" className="!h-5 !w-5 !text-[9px]" />
-              <span>{val.name}</span>
+              <AvatarStack users={assignees} max={3} />
+              <span className="whitespace-nowrap">
+                {assignees.length === 1 ? assignees[0]!.name : `${assignees.length} assignees`}
+              </span>
             </span>
           );
         },

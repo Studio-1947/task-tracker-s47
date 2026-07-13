@@ -134,6 +134,7 @@ export interface SubtaskRef {
   title: string;
   status: TaskStatus;
   priority: Priority;
+  assignees: UserRef[];
 }
 
 export interface TaskDetail extends TaskListItem {

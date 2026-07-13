@@ -230,14 +230,40 @@ export class TasksService {
     }
   }
 
+  /** Assignees for a set of tasks — lighter than `loadRelations` when that's all you need. */
+  private async assigneesFor(taskIds: string[]): Promise<Map<string, UserRef[]>> {
+    const map = new Map<string, UserRef[]>();
+    if (taskIds.length === 0) return map;
+    const rows = await this.db
+      .select({
+        taskId: taskAssignees.taskId,
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        avatarKey: users.avatarKey,
+      })
+      .from(taskAssignees)
+      .innerJoin(users, eq(users.id, taskAssignees.userId))
+      .where(inArray(taskAssignees.taskId, taskIds));
+    for (const r of rows) {
+      const list = map.get(r.taskId) ?? [];
+      list.push({ id: r.id, name: r.name, email: r.email, avatarKey: r.avatarKey });
+      map.set(r.taskId, list);
+    }
+    return map;
+  }
+
   private async subtaskRefsFor(taskIds: string[]): Promise<Map<string, SubtaskRef>> {
     const map = new Map<string, SubtaskRef>();
     if (taskIds.length === 0) return map;
-    const rows = await this.db
-      .select({ task: tasks, prefix: projects.taskPrefix })
-      .from(tasks)
-      .innerJoin(projects, eq(projects.id, tasks.projectId))
-      .where(inArray(tasks.id, taskIds));
+    const [rows, assignees] = await Promise.all([
+      this.db
+        .select({ task: tasks, prefix: projects.taskPrefix })
+        .from(tasks)
+        .innerJoin(projects, eq(projects.id, tasks.projectId))
+        .where(inArray(tasks.id, taskIds)),
+      this.assigneesFor(taskIds),
+    ]);
     for (const r of rows) {
       map.set(r.task.id, {
         id: r.task.id,
@@ -245,6 +271,7 @@ export class TasksService {
         title: r.task.title,
         status: r.task.status as TaskStatus,
         priority: r.task.priority as Priority,
+        assignees: assignees.get(r.task.id) ?? [],
       });
     }
     return map;

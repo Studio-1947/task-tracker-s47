@@ -14,6 +14,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { TASK_STATUSES, type TaskListItem, type TaskStatus } from '@task-tracker/shared';
 import { useUpdateTask } from '../hooks/useTasks';
 import { formatDate, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
+import { AvatarStack } from './AvatarStack';
 import { LabelChip } from './ui';
 import { DueDateProgress } from './DueDateProgress';
 
@@ -169,14 +170,21 @@ function Card({ task, overlay = false, showProject, workspaceId }: { task: TaskL
           ))}
         </div>
       ) : null}
-      <div className="mt-3.5 flex items-center justify-between text-[11px] font-semibold">
-        <span className="truncate text-slate-500 dark:text-slate-400 flex items-center gap-1">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-            <circle cx="12" cy="7" r="4" />
-          </svg>
-          {task.assignees[0]?.name ?? 'Unassigned'}
-        </span>
+      <div className="mt-3.5 flex items-center justify-between gap-2 text-[11px] font-semibold">
+        {task.assignees.length ? (
+          <span className="flex min-w-0 items-center gap-1.5 text-slate-500 dark:text-slate-400">
+            <AvatarStack users={task.assignees} max={3} />
+            {task.assignees.length === 1 ? <span className="truncate">{task.assignees[0]!.name}</span> : null}
+          </span>
+        ) : (
+          <span className="truncate text-slate-500 dark:text-slate-400 flex items-center gap-1">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+            Unassigned
+          </span>
+        )}
         {task.dueDate ? (
           <span className={isOverdue(task.dueDate) ? 'text-red-500 dark:text-red-400 font-bold' : 'text-slate-400 dark:text-slate-500'}>
             {formatDate(task.dueDate)}
