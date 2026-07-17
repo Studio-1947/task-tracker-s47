@@ -11,7 +11,10 @@ import { LoginPage } from './pages/LoginPage';
 import { UsersPage } from './pages/UsersPage';
 import { WorkspacesPage } from './pages/WorkspacesPage';
 import { WorkspaceTasksPage } from './pages/WorkspaceTasksPage';
+import { SuperDevLoginPage } from './pages/superdev/SuperDevLoginPage';
+import { SuperDevConsole } from './pages/superdev/SuperDevConsole';
 import { useAuth } from './stores/auth';
+import { useSuperDev } from './stores/superdev';
 
 /** Requires authentication only (used by the forced password-change route). */
 function RequireAuthRaw() {
@@ -38,15 +41,37 @@ function RequireAdmin() {
   return <Outlet />;
 }
 
-export default function App() {
-  const { status, user, bootstrap } = useAuth();
-
+/**
+ * Fully isolated entry for the hidden developer console. Runs its own auth
+ * (separate cookie/store), lives outside the app shell + normal auth tree, and is
+ * never linked from anywhere in the product. Real access control is server-side —
+ * this route being obscure is only a thin extra layer.
+ */
+function SuperDevGate() {
+  const { status, bootstrap } = useSuperDev();
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
+  if (status === 'loading') return <div className="min-h-screen bg-[#0a0a0b]" />;
+  return status === 'authenticated' ? <SuperDevConsole /> : <SuperDevLoginPage />;
+}
+
+export default function App() {
+  const { status, user, bootstrap } = useAuth();
+  const location = useLocation();
+
+  // The super-dev console runs its own auth tier — don't fire the normal
+  // /auth/refresh session-restore there (it would 401 with no user cookie).
+  const onSuperDev = location.pathname.startsWith('/super-dev');
+  useEffect(() => {
+    if (!onSuperDev) void bootstrap();
+  }, [bootstrap, onSuperDev]);
 
   return (
     <Routes>
+      {/* Hidden developer console — isolated from the rest of the routing tree. */}
+      <Route path="/super-dev" element={<SuperDevGate />} />
+
       <Route
         path="/login"
         element={status === 'authenticated' ? <Navigate to="/" replace /> : <LoginPage />}

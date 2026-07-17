@@ -48,6 +48,12 @@ services:
       SEED_ADMIN2_EMAIL: ${SEED_ADMIN2_EMAIL}
       SEED_ADMIN2_PASSWORD: ${SEED_ADMIN2_PASSWORD}
       SEED_ADMIN2_NAME: ${SEED_ADMIN2_NAME}
+      # Hidden super-dev console. Leave unset to keep it disabled (routes 404).
+      SUPERDEV_EMAIL: ${SUPERDEV_EMAIL:-}
+      SUPERDEV_PASSWORD: ${SUPERDEV_PASSWORD:-}
+      SUPERDEV_JWT_SECRET: ${SUPERDEV_JWT_SECRET:-}
+      SUPERDEV_JWT_TTL: ${SUPERDEV_JWT_TTL:-8h}
+      SUPERDEV_ALLOWED_IPS: ${SUPERDEV_ALLOWED_IPS:-}
       UPLOAD_DIR: /data/uploads
     volumes:
       - uploads:/data/uploads

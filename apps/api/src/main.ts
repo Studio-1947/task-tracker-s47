@@ -5,7 +5,6 @@ import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
 import type { Env } from './config/env';
 import { AppModule } from './app.module';
-import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: false });
@@ -13,7 +12,8 @@ async function bootstrap(): Promise<void> {
 
   app.setGlobalPrefix('api');
   app.use(cookieParser());
-  app.useGlobalFilters(new AllExceptionsFilter());
+  // The global exception filter is registered via APP_FILTER in AppModule so it can
+  // inject ErrorLogService (see app.module.ts).
   // Request validation is done per-route via ZodValidationPipe against the shared
   // schemas (single source of truth with the web app) — no class-validator needed.
 
