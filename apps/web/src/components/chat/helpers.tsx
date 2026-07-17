@@ -1,4 +1,5 @@
 import type { ConversationSummary } from '@task-tracker/shared';
+import { linkify, LINK_ON_ACCENT, LINK_ON_SURFACE } from '../../lib/linkify';
 
 export function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -68,11 +69,19 @@ export function PresenceDot({ online, className = '' }: { online: boolean; class
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
- * Render message text with @mentions highlighted. Mentions are inserted as the
- * member's full name (which may contain spaces), so match against the known
- * member names — longest first — and only fall back to a bare "@word" run.
+ * Render message text with @mentions highlighted and bare URLs made clickable.
+ * Mentions are inserted as the member's full name (which may contain spaces), so
+ * match against the known member names — longest first — and only fall back to a
+ * bare "@word" run. Everything that isn't a mention goes through linkify.
+ *
+ * `onAccent` = this text sits on the gradient "my message" bubble, which needs
+ * light link/mention colours rather than the default indigo.
  */
-export function renderBody(body: string, memberNames: string[] = []): React.ReactNode {
+export function renderBody(
+  body: string,
+  memberNames: string[] = [],
+  onAccent = false,
+): React.ReactNode {
   const names = [...memberNames].sort((a, b) => b.length - a.length).map(escapeRe);
   const pattern = names.length
     ? new RegExp(`(@(?:${names.join('|')})|@[\\w.\\-]+)`, 'g')
@@ -81,12 +90,18 @@ export function renderBody(body: string, memberNames: string[] = []): React.Reac
     part.startsWith('@') ? (
       <span
         key={i}
-        className="rounded bg-indigo-100 px-0.5 font-medium text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300"
+        className={`rounded px-0.5 font-medium ${
+          onAccent
+            ? 'bg-white/25 text-white'
+            : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300'
+        }`}
       >
         {part}
       </span>
     ) : (
-      <span key={i}>{part}</span>
+      <span key={i}>
+        {linkify(part, { keyPrefix: `m${i}-`, className: onAccent ? LINK_ON_ACCENT : LINK_ON_SURFACE })}
+      </span>
     ),
   );
 }

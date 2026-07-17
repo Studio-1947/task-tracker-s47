@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundEx
 import { and, asc, count, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type {
   AuditEntry,
+  CreateLinkAttachmentInput,
   CreateSubtaskInput,
   CreateTaskInput,
   LabelRef,
@@ -17,7 +18,7 @@ import type {
   UpdateTaskInput,
   UserRef,
 } from '@task-tracker/shared';
-import { AuditAction, Role } from '@task-tracker/shared';
+import { AttachmentKind, AuditAction, Role } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
 import {
   labels,
@@ -29,6 +30,7 @@ import {
   tasks,
   users,
   workspaceMembers,
+  type TaskAttachmentRow,
   type TaskRow,
 } from '../database/schema';
 import { AuditService } from '../audit/audit.service';
@@ -611,10 +613,16 @@ export class TasksService {
       .from(tasks)
       .where(eq(tasks.parentTaskId, taskId));
     const idsToClean = [taskId, ...subtaskRows.map((r) => r.id)];
+    // Links carry no bytes — only FILE rows have something to unlink from disk.
     const attachmentRows = await this.db
       .select({ storageKey: taskAttachments.storageKey })
       .from(taskAttachments)
-      .where(inArray(taskAttachments.taskId, idsToClean));
+      .where(
+        and(
+          inArray(taskAttachments.taskId, idsToClean),
+          eq(taskAttachments.kind, AttachmentKind.FILE),
+        ),
+      );
 
     await this.db.transaction(async (tx) => {
       await this.audit.record(
@@ -631,7 +639,11 @@ export class TasksService {
     });
 
     // After commit; missing files are tolerated (mirrors removeAttachment).
-    await Promise.all(attachmentRows.map((a) => this.files.remove(a.storageKey).catch(() => undefined)));
+    await Promise.all(
+      attachmentRows
+        .filter((a): a is { storageKey: string } => !!a.storageKey)
+        .map((a) => this.files.remove(a.storageKey).catch(() => undefined)),
+    );
     return { id: taskId };
   }
 
@@ -697,17 +709,33 @@ export class TasksService {
 
   // ── attachments ───────────────────────────────────────────────────────────
 
+  /** Row -> discriminated union. The DB CHECK guarantees the per-kind columns are populated. */
+  private toAttachment(row: TaskAttachmentRow, uploader: UserRef): TaskAttachment {
+    const base = {
+      id: row.id,
+      fileName: row.fileName,
+      uploader,
+      createdAt: row.createdAt.toISOString(),
+    };
+    if (row.kind === AttachmentKind.LINK) {
+      return { ...base, kind: AttachmentKind.LINK, url: row.url!, mimeType: null, sizeBytes: null, storageKey: null };
+    }
+    return {
+      ...base,
+      kind: AttachmentKind.FILE,
+      mimeType: row.mimeType!,
+      sizeBytes: row.sizeBytes!,
+      storageKey: row.storageKey!,
+      url: null,
+    };
+  }
+
   async listAttachments(taskId: string, actor: Actor): Promise<TaskAttachment[]> {
     const current = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(current.workspaceId, actor);
     const rows = await this.db
       .select({
-        id: taskAttachments.id,
-        fileName: taskAttachments.fileName,
-        mimeType: taskAttachments.mimeType,
-        sizeBytes: taskAttachments.sizeBytes,
-        storageKey: taskAttachments.storageKey,
-        createdAt: taskAttachments.createdAt,
+        attachment: taskAttachments,
         userId: users.id,
         userName: users.name,
         userEmail: users.email,
@@ -717,15 +745,69 @@ export class TasksService {
       .innerJoin(users, eq(users.id, taskAttachments.uploaderId))
       .where(eq(taskAttachments.taskId, taskId))
       .orderBy(asc(taskAttachments.createdAt));
-    return rows.map((r) => ({
-      id: r.id,
-      fileName: r.fileName,
-      mimeType: r.mimeType,
-      sizeBytes: r.sizeBytes,
-      storageKey: r.storageKey,
-      uploader: { id: r.userId, name: r.userName, email: r.userEmail, avatarKey: r.userAvatarKey },
-      createdAt: r.createdAt.toISOString(),
-    }));
+    return rows.map((r) =>
+      this.toAttachment(r.attachment, {
+        id: r.userId,
+        name: r.userName,
+        email: r.userEmail,
+        avatarKey: r.userAvatarKey,
+      }),
+    );
+  }
+
+  /**
+   * Attach an external link (Figma, Docs, …). The URL is stored verbatim and never
+   * fetched server-side — previews are rendered client-side from the URL alone, so
+   * there is no SSRF surface here. Scheme is restricted to http(s) by the DTO.
+   */
+  async addLinkAttachment(
+    taskId: string,
+    actor: Actor,
+    input: CreateLinkAttachmentInput,
+  ): Promise<TaskAttachment> {
+    const current = await this.loadTaskOrThrow(taskId);
+    await this.workspaces.assertCanAccess(current.workspaceId, actor);
+
+    // Defence in depth: the DTO already rejects non-http(s), but this is what
+    // guards the href/iframe that eventually renders it.
+    let parsed: URL;
+    try {
+      parsed = new URL(input.url);
+    } catch {
+      throw new BadRequestException('Link must be a valid URL');
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new BadRequestException('Link must be an http(s) URL');
+    }
+
+    const title = (input.title?.trim() || parsed.hostname.replace(/^www\./, '')).slice(0, 255);
+
+    const row = await this.db.transaction(async (tx) => {
+      const [inserted] = await tx
+        .insert(taskAttachments)
+        .values({
+          taskId,
+          uploaderId: actor.id,
+          kind: AttachmentKind.LINK,
+          fileName: title,
+          url: parsed.toString(),
+        })
+        .returning();
+      if (!inserted) throw new Error('Failed to save link');
+      await this.audit.record(
+        {
+          workspaceId: current.workspaceId,
+          taskId,
+          userId: actor.id,
+          action: AuditAction.ATTACHMENT_ADDED,
+          afterValue: { attachmentId: inserted.id, fileName: title, url: inserted.url },
+        },
+        tx,
+      );
+      return inserted;
+    });
+
+    return this.toAttachment(row, await this.userRef(actor.id));
   }
 
   async addAttachment(taskId: string, actor: Actor, file: Express.Multer.File): Promise<TaskAttachment> {
@@ -742,6 +824,7 @@ export class TasksService {
           .values({
             taskId,
             uploaderId: actor.id,
+            kind: AttachmentKind.FILE,
             fileName,
             storageKey: saved.key,
             mimeType: saved.mimeType,
@@ -761,16 +844,7 @@ export class TasksService {
         );
         return inserted;
       });
-      const uploader = await this.userRef(actor.id);
-      return {
-        id: row.id,
-        fileName: row.fileName,
-        mimeType: row.mimeType,
-        sizeBytes: row.sizeBytes,
-        storageKey: row.storageKey,
-        uploader,
-        createdAt: row.createdAt.toISOString(),
-      };
+      return this.toAttachment(row, await this.userRef(actor.id));
     } catch (err) {
       // The DB row is the source of truth — don't leave an orphaned file behind.
       await this.files.remove(saved.key).catch(() => undefined);
@@ -805,21 +879,39 @@ export class TasksService {
         tx,
       );
     });
-    // After commit; missing files are tolerated.
-    await this.files.remove(attachment.storageKey).catch(() => undefined);
+    // After commit; missing files are tolerated. Links have no bytes on disk.
+    if (attachment.storageKey) {
+      await this.files.remove(attachment.storageKey).catch(() => undefined);
+    }
     return { id: attachmentId };
   }
 
-  /** Authorized lookup used by the file-serving route. */
-  async attachmentByStorageKey(storageKey: string, actor: Actor) {
+  /**
+   * Authorized lookup used by the file-serving route. Only FILE rows have a
+   * storage key, so the kind filter both scopes the query and lets us hand back
+   * the non-null mime/name the route needs.
+   */
+  async attachmentByStorageKey(
+    storageKey: string,
+    actor: Actor,
+  ): Promise<{ fileName: string; mimeType: string }> {
     const [row] = await this.db
-      .select({ attachment: taskAttachments, workspaceId: tasks.workspaceId })
+      .select({
+        fileName: taskAttachments.fileName,
+        mimeType: taskAttachments.mimeType,
+        workspaceId: tasks.workspaceId,
+      })
       .from(taskAttachments)
       .innerJoin(tasks, eq(tasks.id, taskAttachments.taskId))
-      .where(eq(taskAttachments.storageKey, storageKey))
+      .where(
+        and(
+          eq(taskAttachments.storageKey, storageKey),
+          eq(taskAttachments.kind, AttachmentKind.FILE),
+        ),
+      )
       .limit(1);
-    if (!row) throw new NotFoundException('File not found');
+    if (!row?.mimeType) throw new NotFoundException('File not found');
     await this.workspaces.assertCanAccess(row.workspaceId, actor);
-    return row.attachment;
+    return { fileName: row.fileName, mimeType: row.mimeType };
   }
 }

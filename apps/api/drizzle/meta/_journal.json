@@ -64,6 +64,13 @@
       "when": 1783925975976,
       "tag": "0008_heavy_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1783947751253,
+      "tag": "0009_classy_thanos",
+      "breakpoints": true
     }
   ]
 }

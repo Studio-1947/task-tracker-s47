@@ -25,6 +25,7 @@ import { useCreateLabel } from '../hooks/useLabels';
 import { useAuth } from '../stores/auth';
 import { describeAudit, formatDate, formatDateTime, priorityClasses, statusClasses, statusLabel } from '../lib/format';
 import { ApiRequestError } from '../lib/api';
+import { linkify } from '../lib/linkify';
 import { AssigneePicker } from './AssigneePicker';
 import { Attachments } from './Attachments';
 import { Avatar } from './Avatar';
@@ -272,7 +273,9 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                         </span>
                         <span className="shrink-0 text-[11px] font-medium text-slate-400 dark:text-slate-500">{formatDateTime(c.createdAt)}</span>
                       </div>
-                      <p className="mt-2 whitespace-pre-wrap text-slate-650 dark:text-slate-300 leading-relaxed">{c.body}</p>
+                      <p className="mt-2 whitespace-pre-wrap break-words text-slate-650 dark:text-slate-300 leading-relaxed">
+                        {linkify(c.body)}
+                      </p>
                     </div>
                   ))
                 ) : (

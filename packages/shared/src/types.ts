@@ -1,4 +1,12 @@
-import type { AuditAction, ConversationType, LeaveStatus, Priority, Role, TaskStatus } from './enums';
+import type {
+  AttachmentKind,
+  AuditAction,
+  ConversationType,
+  LeaveStatus,
+  Priority,
+  Role,
+  TaskStatus,
+} from './enums';
 
 /** Shape of the authenticated user echoed by the API (never includes passwordHash). */
 export interface AuthUser {
@@ -151,17 +159,35 @@ export interface TaskComment {
   createdAt: string;
 }
 
-export interface TaskAttachment {
+interface AttachmentBase {
   id: string;
-  /** Original filename, for display and download. */
+  /** Uploaded file: the original filename. Link: the display title. */
   fileName: string;
+  uploader: UserRef;
+  createdAt: string;
+}
+
+/** An uploaded file living under UPLOAD_DIR. */
+export interface FileAttachment extends AttachmentBase {
+  kind: typeof AttachmentKind.FILE;
   mimeType: string;
   sizeBytes: number;
   /** Server storage key; fetch bytes from /api/files/<storageKey>. */
   storageKey: string;
-  uploader: UserRef;
-  createdAt: string;
+  url: null;
 }
+
+/** An external link (Figma, Google Docs, …). Previewed client-side; never fetched by the API. */
+export interface LinkAttachment extends AttachmentBase {
+  kind: typeof AttachmentKind.LINK;
+  /** Always http(s) — other schemes are rejected at the edge. */
+  url: string;
+  mimeType: null;
+  sizeBytes: null;
+  storageKey: null;
+}
+
+export type TaskAttachment = FileAttachment | LinkAttachment;
 
 /** Compact task row for the member "my tasks" home. */
 export interface MyTaskItem {

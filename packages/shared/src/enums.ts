@@ -56,6 +56,14 @@ export const ConversationType = {
 export type ConversationType = (typeof ConversationType)[keyof typeof ConversationType];
 export const CONVERSATION_TYPES = Object.values(ConversationType);
 
+/** An attachment is either an uploaded file or an external link (Figma, Docs, …). */
+export const AttachmentKind = {
+  FILE: 'FILE',
+  LINK: 'LINK',
+} as const;
+export type AttachmentKind = (typeof AttachmentKind)[keyof typeof AttachmentKind];
+export const ATTACHMENT_KINDS = Object.values(AttachmentKind);
+
 /** Audit log actions — PRD §3.5 / §5. */
 export const AuditAction = {
   CREATED: 'CREATED',

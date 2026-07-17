@@ -22,11 +22,13 @@ import type { Response } from 'express';
 import { memoryStorage } from 'multer';
 import {
   createCommentSchema,
+  createLinkAttachmentSchema,
   createSubtaskSchema,
   createTaskSchema,
   taskQuerySchema,
   updateTaskSchema,
   type CreateCommentInput,
+  type CreateLinkAttachmentInput,
   type CreateSubtaskInput,
   type CreateTaskInput,
   type TaskQuery,
@@ -140,6 +142,16 @@ export class TasksController {
   ) {
     if (!file) throw new BadRequestException('No file provided');
     return this.tasks.addAttachment(id, user, file);
+  }
+
+  /** Attach an external link (Figma, Docs, …) rather than uploading bytes. */
+  @Post(':id/attachments/links')
+  addLinkAttachment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(createLinkAttachmentSchema)) body: CreateLinkAttachmentInput,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.tasks.addLinkAttachment(id, user, body);
   }
 
   @Delete(':id/attachments/:attachmentId')
