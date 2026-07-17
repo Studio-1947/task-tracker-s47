@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   PRIORITIES,
@@ -23,7 +24,7 @@ import {
 } from '../hooks/useTasks';
 import { useCreateLabel } from '../hooks/useLabels';
 import { useAuth } from '../stores/auth';
-import { describeAudit, formatDate, formatDateTime, priorityClasses, statusClasses, statusLabel } from '../lib/format';
+import { describeAudit, formatDate, formatDateTime, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
 import { ApiRequestError } from '../lib/api';
 import { linkify } from '../lib/linkify';
 import { AssigneePicker } from './AssigneePicker';
@@ -56,6 +57,15 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
   const qc = useQueryClient();
   const [comment, setComment] = useState('');
   const [subtaskTitle, setSubtaskTitle] = useState('');
+
+  // Lock body scroll when drawer is open to prevent double scrollbars
+  useEffect(() => {
+    const originalStyle = window.getComputedStyle(document.body).overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalStyle;
+    };
+  }, []);
 
   const patch = (p: Parameters<typeof update.mutate>[0]['patch']) => update.mutate({ id: taskId, patch: p });
 
@@ -510,6 +520,28 @@ function SubtaskRow({
             selected={subtask.assignees}
             onChange={(assigneeIds) => onPatch({ assigneeIds })}
           />
+          
+          <label className="relative shrink-0 cursor-pointer text-slate-400 hover:text-indigo-650 dark:hover:text-indigo-400 transition-colors flex items-center gap-1.5 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800" title="Set due date">
+            <input
+              type="date"
+              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+              value={subtask.dueDate ? subtask.dueDate.slice(0, 10) : ''}
+              onChange={(e) =>
+                onPatch({ dueDate: e.target.value ? new Date(e.target.value).toISOString() : null })
+              }
+            />
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={subtask.dueDate ? "text-indigo-500 dark:text-indigo-400" : "text-slate-400 dark:text-slate-500"}>
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            {subtask.dueDate ? (
+              <span className={`text-[10px] font-bold ${isOverdue(subtask.dueDate) && subtask.status !== 'DONE' ? 'text-red-500' : 'text-slate-500 dark:text-slate-400'}`}>
+                {new Date(subtask.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+              </span>
+            ) : null}
+          </label>
           <button
             type="button"
             onClick={() => setEditing(true)}
@@ -601,26 +633,342 @@ function LabelPicker({
   );
 }
 
+function parseInline(text: string): ReactNode {
+  const codeParts = text.split(/(`[^`\n]+`)/g);
+  return (
+    <>
+      {codeParts.map((part, i) => {
+        if (part.startsWith('`') && part.endsWith('`')) {
+          const code = part.slice(1, -1);
+          return (
+            <code key={i} className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800/80 text-pink-600 dark:text-pink-400 font-mono text-xs">
+              {code}
+            </code>
+          );
+        }
+        return parseBoldItalic(part, i);
+      })}
+    </>
+  );
+}
+
+function parseBoldItalic(text: string, keyPrefix: any): ReactNode {
+  const boldParts = text.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <>
+      {boldParts.map((part, i) => {
+        const boldKey = `${keyPrefix}-b-${i}`;
+        if (part.startsWith('**') && part.endsWith('**')) {
+          const boldContent = part.slice(2, -2);
+          return (
+            <strong key={boldKey} className="font-bold text-slate-900 dark:text-white">
+              {parseItalic(boldContent, boldKey)}
+            </strong>
+          );
+        }
+        return parseItalic(part, boldKey);
+      })}
+    </>
+  );
+}
+
+function parseItalic(text: string, keyPrefix: any): ReactNode {
+  const italicParts = text.split(/(\*[^*]+\*)/g);
+  return (
+    <>
+      {italicParts.map((part, i) => {
+        const italicKey = `${keyPrefix}-i-${i}`;
+        if (part.startsWith('*') && part.endsWith('*')) {
+          const italicContent = part.slice(1, -1);
+          return (
+            <em key={italicKey} className="italic text-slate-800 dark:text-slate-200">
+              {parseLinks(italicContent, italicKey)}
+            </em>
+          );
+        }
+        return parseLinks(part, italicKey);
+      })}
+    </>
+  );
+}
+
+function parseLinks(text: string, keyPrefix: any): ReactNode {
+  return <>{linkify(text, { keyPrefix })}</>;
+}
+
+function renderMarkdown(text: string): ReactNode {
+  if (!text) return null;
+
+  const lines = text.split('\n');
+  const blocks: ReactNode[] = [];
+  
+  let currentList: { type: 'ul' | 'ol'; items: string[] } | null = null;
+  let currentParagraph: string[] = [];
+  let currentQuote: string[] = [];
+  let inCodeBlock = false;
+  let codeBlockLines: string[] = [];
+
+  const flush = (key: number) => {
+    if (currentList) {
+      const ListTag = currentList.type;
+      const listStyle = currentList.type === 'ul' ? 'list-disc' : 'list-decimal';
+      blocks.push(
+        <ListTag key={`list-${key}`} className={`${listStyle} pl-5 space-y-1.5 my-3 text-slate-700 dark:text-slate-350`}>
+          {currentList.items.map((item, i) => (
+            <li key={i} className="marker:text-slate-400 dark:marker:text-slate-600">
+              {parseInline(item)}
+            </li>
+          ))}
+        </ListTag>
+      );
+      currentList = null;
+    }
+    if (currentQuote.length > 0) {
+      blocks.push(
+        <blockquote key={`quote-${key}`} className="border-l-4 border-slate-200 dark:border-slate-700 pl-4 italic text-slate-500 dark:text-slate-400 my-3 space-y-1">
+          {currentQuote.map((quoteLine, i) => (
+            <p key={i}>{parseInline(quoteLine)}</p>
+          ))}
+        </blockquote>
+      );
+      currentQuote = [];
+    }
+    if (currentParagraph.length > 0) {
+      blocks.push(
+        <p key={`p-${key}`} className="my-2.5 whitespace-pre-line leading-relaxed text-slate-700 dark:text-slate-300">
+          {parseInline(currentParagraph.join('\n'))}
+        </p>
+      );
+      currentParagraph = [];
+    }
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line === undefined) continue;
+    const trimmed = line.trim();
+
+    // Code blocks
+    if (trimmed.startsWith('```')) {
+      if (inCodeBlock) {
+        // End of code block
+        inCodeBlock = false;
+        blocks.push(
+          <pre key={`code-${i}`} className="overflow-x-auto rounded-lg bg-slate-50 dark:bg-[#1f1f1f] border border-slate-100 dark:border-slate-800/60 p-3.5 font-mono text-xs text-slate-750 dark:text-slate-350 leading-normal my-3 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
+            <code>{codeBlockLines.join('\n')}</code>
+          </pre>
+        );
+        codeBlockLines = [];
+      } else {
+        // Start of code block
+        flush(i);
+        inCodeBlock = true;
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeBlockLines.push(line);
+      continue;
+    }
+
+    // Blockquote
+    if (trimmed.startsWith('>')) {
+      if (currentParagraph.length > 0 || currentList) flush(i);
+      const content = line.replace(/^>\s?/, '');
+      currentQuote.push(content);
+      continue;
+    }
+
+    // Bullet list item
+    const bulletMatch = line.match(/^\s*([-*•])\s+(.*)/);
+    if (bulletMatch) {
+      if (currentParagraph.length > 0 || currentQuote.length > 0) flush(i);
+      if (!currentList || currentList.type !== 'ul') {
+        flush(i);
+        currentList = { type: 'ul', items: [] };
+      }
+      currentList.items.push(bulletMatch[2] ?? '');
+      continue;
+    }
+
+    // Numbered list item
+    const numMatch = line.match(/^\s*(\d+)\.\s+(.*)/);
+    if (numMatch) {
+      if (currentParagraph.length > 0 || currentQuote.length > 0) flush(i);
+      if (!currentList || currentList.type !== 'ol') {
+        flush(i);
+        currentList = { type: 'ol', items: [] };
+      }
+      currentList.items.push(numMatch[2] ?? '');
+      continue;
+    }
+
+    // Empty line
+    if (trimmed === '') {
+      flush(i);
+      continue;
+    }
+
+    // Normal paragraph text
+    if (currentList || currentQuote.length > 0) flush(i);
+    currentParagraph.push(line);
+  }
+
+  flush(lines.length);
+
+  return <div className="space-y-1">{blocks}</div>;
+}
+
 function DescriptionEditor({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
   const [text, setText] = useState(value);
-  const dirty = text !== value;
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  
+  const [isCollapsed, setIsCollapsed] = useState(true);
+  const [isLong, setIsLong] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Sync state if value changes externally
+  useEffect(() => {
+    setText(value);
+  }, [value]);
+
+  // Check if description is long enough to collapse
+  useEffect(() => {
+    const contentEl = contentRef.current;
+    if (contentEl) {
+      setIsLong(contentEl.scrollHeight > 240);
+    }
+  }, [value, editing]);
+
+  // Adjust height of textarea to match content
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (editing && textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    }
+  }, [text, editing]);
+
+  const commit = () => {
+    const next = text.trim();
+    onSave(next);
+    setEditing(false);
+  };
+
+  const cancel = () => {
+    setText(value);
+    setEditing(false);
+  };
+
+  if (!editing) {
+    if (!value.trim()) {
+      return (
+        <div
+          onClick={() => setEditing(true)}
+          className="group flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-200 hover:border-indigo-400 dark:border-slate-800 dark:hover:border-indigo-500/50 p-4 text-sm text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-350 bg-slate-50/20 hover:bg-slate-50/50 dark:bg-[#1f1f1f]/20 dark:hover:bg-[#1f1f1f]/40 transition-all duration-200"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-slate-400 dark:text-slate-500 transition-colors group-hover:text-indigo-500">
+            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z" />
+          </svg>
+          <span className="font-semibold text-xs tracking-wide uppercase">Add a description…</span>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        className="relative group rounded-lg border border-transparent hover:border-slate-100 hover:bg-slate-50/30 dark:hover:border-slate-800/40 dark:hover:bg-[#202020]/20 p-3 -m-3 transition-all duration-200 cursor-pointer"
+        onClick={() => setEditing(true)}
+      >
+        <div className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1.5 px-2 py-1 rounded bg-slate-100/90 dark:bg-slate-800/90 text-[10px] font-bold uppercase tracking-wider text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 shadow-sm border border-slate-200/50 dark:border-slate-700/50 z-10">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z" />
+          </svg>
+          <span>Edit</span>
+        </div>
+        
+        <div className="relative">
+          <div
+            ref={contentRef}
+            className={`transition-all duration-300 overflow-hidden ${
+              isCollapsed && isLong ? 'max-h-[220px]' : 'max-h-none'
+            }`}
+          >
+            {renderMarkdown(value)}
+          </div>
+          
+          {/* Gradient Overlay for collapsed state */}
+          {isCollapsed && isLong && (
+            <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white dark:from-[#181818] to-transparent pointer-events-none" />
+          )}
+        </div>
+
+        {isLong && (
+          <div className="mt-2 flex justify-start">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsCollapsed(!isCollapsed);
+              }}
+              className="flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors cursor-pointer py-1 px-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800/50"
+            >
+              {isCollapsed ? (
+                <>
+                  <span>Show more</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </>
+              ) : (
+                <>
+                  <span>Show less</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <polyline points="18 15 12 9 6 15" />
+                  </svg>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div>
       <textarea
-        className="w-full rounded-lg border border-slate-200 dark:border-slate-800 px-3.5 py-2.5 text-sm bg-white dark:bg-[#252525] dark:text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all placeholder:text-slate-400"
-        rows={4}
+        ref={textareaRef}
+        autoFocus
+        className="w-full resize-none overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 px-3.5 py-2.5 text-sm bg-white dark:bg-[#1f1f1f] dark:text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all placeholder:text-slate-400 min-h-[120px]"
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="Add a description…"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            commit();
+          }
+          if (e.key === 'Escape') {
+            cancel();
+          }
+        }}
+        placeholder="Add a detailed description… Use markdown like **bold**, *italic*, `code` or lists."
       />
-      {dirty ? (
-        <div className="mt-2.5 flex gap-2">
-          <Button className="py-2 px-4" onClick={() => onSave(text)}>Save</Button>
-          <Button variant="ghost" className="py-2 px-4" onClick={() => setText(value)}>
+      <div className="mt-2.5 flex items-center justify-between">
+        <div className="flex gap-2">
+          <Button className="py-1.5 px-3.5 text-xs font-semibold" onClick={commit}>
+            Save
+          </Button>
+          <Button variant="ghost" className="py-1.5 px-3.5 text-xs font-semibold" onClick={cancel}>
             Cancel
           </Button>
         </div>
-      ) : null}
+        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">
+          Press <kbd className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded border border-slate-200 dark:border-slate-700">Ctrl</kbd> + <kbd className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded border border-slate-200 dark:border-slate-700">Enter</kbd> to save
+        </span>
+      </div>
     </div>
   );
 }

@@ -274,6 +274,7 @@ export class TasksService {
         status: r.task.status as TaskStatus,
         priority: r.task.priority as Priority,
         assignees: assignees.get(r.task.id) ?? [],
+        dueDate: r.task.dueDate ? r.task.dueDate.toISOString() : null,
       });
     }
     return map;

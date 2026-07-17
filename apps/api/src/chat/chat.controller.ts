@@ -131,6 +131,20 @@ export class ChatController {
     return { conversationId, messageId: id };
   }
 
+  @Post('messages/:id/react')
+  async toggleReaction(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('emoji') emoji: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    if (!emoji || typeof emoji !== 'string') {
+      throw new BadRequestException('Emoji is required');
+    }
+    const message = await this.chat.toggleReaction(user, id, emoji);
+    this.gateway.broadcastUpdatedMessage(message);
+    return message;
+  }
+
   @Post('conversations/:id/read')
   async markRead(
     @Param('id', ParseUUIDPipe) id: string,

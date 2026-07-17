@@ -26,6 +26,7 @@ import {
   useMarkRead,
   useMessages,
   useSendMessage,
+  useToggleReaction,
   useUploadChatFile,
 } from '../../hooks/useChat';
 import { ConversationInfo } from './ConversationInfo';
@@ -85,21 +86,32 @@ function MessageBubble({
   showSender,
   canDelete,
   memberNames,
+  myId,
   onEdit,
   onDelete,
+  onReply,
+  onReact,
 }: {
   msg: ChatMessage;
   mine: boolean;
   showSender: boolean;
   canDelete: boolean;
   memberNames: string[];
+  myId: string;
   onEdit: (m: ChatMessage) => void;
   onDelete: (m: ChatMessage) => void;
+  onReply: (m: ChatMessage) => void;
+  onReact: (m: ChatMessage, emoji: string) => void;
 }) {
   const deleted = !!msg.deletedAt;
+  const [showMore, setShowMore] = useState(false);
   return (
-    <div className={`group flex gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
+    <div 
+      className={`group relative flex gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}
+      onMouseLeave={() => setShowMore(false)}
+    >
       {!mine ? <Avatar user={msg.sender} size="sm" className="mt-auto" /> : null}
+
       {/* min-w-0: a flex item defaults to min-width:auto, so a long unbroken URL
           would force the bubble past max-w and stretch the row. */}
       <div className={`flex min-w-0 max-w-[78%] flex-col ${mine ? 'items-end' : 'items-start'}`}>
@@ -108,28 +120,141 @@ function MessageBubble({
             {msg.sender.name}
           </span>
         ) : null}
-        <div
-          className={`max-w-full rounded-2xl px-3.5 py-2 text-sm break-words ${
-            deleted
-              ? 'bg-slate-100 italic text-slate-400 dark:bg-[#242424] dark:text-slate-500'
-              : mine
-                ? 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white'
-                : 'bg-slate-100 text-slate-800 dark:bg-[#2a2a2a] dark:text-slate-100'
-          }`}
-        >
-          {deleted ? (
-            'This message was deleted'
-          ) : (
-            <>
-              {msg.body ? (
-                <span className="whitespace-pre-wrap">{renderBody(msg.body, memberNames, mine)}</span>
-              ) : null}
-              {msg.attachments.map((a) => (
-                <AttachmentView key={a.id} att={a} />
+        
+        {/* Quoted Message Preview above bubble */}
+        {msg.parentMessage && !deleted && (
+          <div 
+            className={`mb-1 px-3 py-1.5 rounded-xl border-l-4 bg-slate-100 dark:bg-[#202020] text-xs text-left max-w-full truncate ${
+              mine 
+                ? 'border-indigo-400 dark:border-indigo-500 text-slate-550 dark:text-slate-400' 
+                : 'border-slate-400 dark:border-slate-600 text-slate-550 dark:text-slate-400'
+            }`}
+          >
+            <div className="font-bold text-indigo-600 dark:text-indigo-400 truncate">
+              {msg.parentMessage.senderName}
+            </div>
+            <div className="truncate opacity-90">{msg.parentMessage.body || '📎 Attachment'}</div>
+          </div>
+        )}
+
+        <div className="relative max-w-full">
+          <div
+            className={`max-w-full rounded-2xl px-3.5 py-2 text-sm break-words ${
+              deleted
+                ? 'bg-slate-100 italic text-slate-400 dark:bg-[#242424] dark:text-slate-500'
+                : mine
+                  ? 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white'
+                  : 'bg-slate-100 text-slate-800 dark:bg-[#2a2a2a] dark:text-slate-100'
+            }`}
+          >
+            {deleted ? (
+              'This message was deleted'
+            ) : (
+              <>
+                {msg.body ? (
+                  <span className="whitespace-pre-wrap">{renderBody(msg.body, memberNames, mine)}</span>
+                ) : null}
+                {msg.attachments.map((a) => (
+                  <AttachmentView key={a.id} att={a} />
+                ))}
+              </>
+            )}
+          </div>
+
+          {/* Hover Action Bar */}
+          {!deleted && (
+            <div 
+              className={`absolute -top-3.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center gap-1 bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-slate-800 px-1.5 py-0.5 rounded-full shadow-md z-25 ${
+                mine ? 'right-0' : 'left-0'
+              }`}
+            >
+              {['👍', '❤️', '😂'].map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => onReact(msg, emoji)}
+                  className="p-1 hover:bg-slate-100 dark:hover:bg-slate-850 rounded-full transition text-sm cursor-pointer hover:scale-110"
+                  title={`React ${emoji}`}
+                >
+                  {emoji}
+                </button>
               ))}
-            </>
+              
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowMore(!showMore)}
+                  className={`p-1 hover:bg-slate-100 dark:hover:bg-slate-850 rounded-full transition cursor-pointer hover:text-slate-650 dark:hover:text-slate-350 ${
+                    showMore ? 'text-indigo-500 bg-slate-100 dark:bg-slate-800' : 'text-slate-400 dark:text-slate-500'
+                  }`}
+                  title="More Reactions"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                    <line x1="9" y1="9" x2="9.01" y2="9" />
+                    <line x1="15" y1="9" x2="15.01" y2="9" />
+                  </svg>
+                </button>
+                {showMore && (
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 flex items-center gap-1.5 bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-slate-800 p-1.5 rounded-full shadow-lg z-30">
+                    {['😮', '😢', '🙏'].map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => {
+                          onReact(msg, emoji);
+                          setShowMore(false);
+                        }}
+                        className="hover:scale-125 transition duration-100 text-sm cursor-pointer p-0.5"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => onReply(msg)}
+                className="p-1 hover:bg-slate-100 dark:hover:bg-slate-850 rounded-full transition text-slate-400 hover:text-indigo-650 dark:hover:text-indigo-400 cursor-pointer"
+                title="Reply"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="9 17 4 12 9 7" />
+                  <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+                </svg>
+              </button>
+            </div>
           )}
         </div>
+
+        {/* Reaction badges below bubble */}
+        {msg.reactions && msg.reactions.length > 0 && !deleted && (
+          <div className={`mt-1 flex flex-wrap gap-1 ${mine ? 'justify-end' : 'justify-start'}`}>
+            {msg.reactions.map((r) => {
+              const hasReacted = r.userIds.includes(myId);
+              return (
+                <button
+                  key={r.emoji}
+                  type="button"
+                  onClick={() => onReact(msg, r.emoji)}
+                  className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border transition cursor-pointer ${
+                    hasReacted
+                      ? 'bg-indigo-50 border-indigo-200 text-indigo-600 dark:bg-indigo-950/40 dark:border-indigo-800/80 dark:text-indigo-400'
+                      : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100 dark:bg-[#202020]/80 dark:border-[#333] dark:text-slate-400 dark:hover:bg-[#252525]'
+                  }`}
+                  title={`${r.userIds.length} reaction(s)`}
+                >
+                  <span>{r.emoji}</span>
+                  <span>{r.userIds.length}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <div className={`mt-0.5 flex items-center gap-1.5 px-1 ${mine ? 'flex-row-reverse' : ''}`}>
           <span className="text-[10px] text-slate-400 dark:text-slate-500">{formatTime(msg.createdAt)}</span>
           {msg.editedAt && !deleted ? (
@@ -197,9 +322,12 @@ export function MessageThread({
   const [showInfo, setShowInfo] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toggleReaction = useToggleReaction();
 
   const members: ConversationMember[] = detail?.members ?? [];
   const myMember = members.find((m) => m.user.id === myId);
@@ -275,10 +403,12 @@ export function MessageThread({
       .filter(([, name]) => body.includes(`@${name}`))
       .map(([id]) => id);
     const sentAttachments = pending;
+    const prevReplyingTo = replyingTo;
     setText('');
     setPending([]);
     setMentionIds({});
     setMentionQuery(null);
+    setReplyingTo(null);
     setUploadError(null);
     emitTyping(conversationId, false);
     try {
@@ -293,6 +423,7 @@ export function MessageThread({
         body: body || undefined,
         attachments: attachments.length ? attachments : undefined,
         mentionIds: activeMentions.length ? activeMentions : undefined,
+        parentMessageId: prevReplyingTo?.id || undefined,
       });
       // Sent: the thread now renders these from the server copy.
       for (const a of sentAttachments) if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
@@ -302,6 +433,7 @@ export function MessageThread({
       setText(body);
       setPending(sentAttachments);
       setMentionIds(mentionIds);
+      setReplyingTo(prevReplyingTo);
       setUploadError(err instanceof ApiRequestError ? err.message : 'Message failed to send — try again.');
     }
   };
@@ -476,8 +608,11 @@ export function MessageThread({
                     showSender={detail?.type !== 'DIRECT' && showSender}
                     canDelete={m.sender.id === myId || !!canDeleteAny}
                     memberNames={memberNames}
+                    myId={myId}
                     onEdit={startEdit}
                     onDelete={(mm) => del.mutate(mm.id)}
+                    onReply={setReplyingTo}
+                    onReact={(mm, emoji) => toggleReaction.mutate({ messageId: mm.id, emoji })}
                   />
                 </div>
               );
@@ -582,6 +717,22 @@ export function MessageThread({
           </div>
         ) : null}
 
+        {replyingTo ? (
+          <div className="mb-2 flex items-center justify-between rounded-lg bg-indigo-50/70 border border-indigo-100/50 dark:bg-indigo-950/20 dark:border-indigo-900/50 px-3 py-1.5 text-xs text-indigo-700 dark:text-indigo-400">
+            <div className="min-w-0 flex-1">
+              <span className="font-bold">Replying to {replyingTo.sender.name}</span>:{' '}
+              <span className="italic truncate block">{replyingTo.body || '📎 Attachment'}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplyingTo(null)}
+              className="font-bold text-indigo-500 hover:text-indigo-750 dark:hover:text-indigo-300 ml-2"
+            >
+              ✕
+            </button>
+          </div>
+        ) : null}
+
         <div className="flex items-end gap-2">
           <input
             ref={fileRef}
@@ -604,6 +755,48 @@ export function MessageThread({
                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
               </svg>
             </button>
+          ) : null}
+          {!editing ? (
+            <div className="relative flex items-center">
+              <button
+                type="button"
+                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                className={`shrink-0 rounded-lg p-2.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-[#242424] cursor-pointer ${
+                  showEmojiPicker ? 'text-indigo-500 bg-slate-100 dark:bg-[#242424]' : ''
+                }`}
+                title="Insert Emoji"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                  <line x1="9" y1="9" x2="9.01" y2="9" />
+                  <line x1="15" y1="9" x2="15.01" y2="9" />
+                </svg>
+              </button>
+              
+              {showEmojiPicker && (
+                <div className="absolute bottom-full left-0 mb-2 w-64 rounded-xl border border-slate-200 bg-white/95 dark:border-slate-800 dark:bg-[#1a1a1a]/95 backdrop-blur-md shadow-xl p-3 z-30 select-none">
+                  <div className="flex justify-between items-center mb-2 pb-1 border-b border-slate-100 dark:border-slate-800">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Emojis</span>
+                    <button type="button" onClick={() => setShowEmojiPicker(false)} className="text-[10px] font-bold text-slate-400 hover:text-slate-650">✕</button>
+                  </div>
+                  <div className="grid grid-cols-6 gap-2 max-h-40 overflow-y-auto">
+                    {['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🤩','🥳','😏','😒','😞','😔','😟','😕','🙁','☹️','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤗','🤔','🤭','🤫','🤥','😶','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','🤤','😪','😵','🤐','🥴','🤢','🤮','🤧','😷','🤒','🤕','🤑','🤠','😈','👿','👹','👹','👻','💀','☠️','👽','👾','🤖','🎃','😺','😸','😻','😼','😽','🙀','😿','😾','👋','🤚','🖐','✋','🖖','👌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🤝','🙏','✍️','💅','🤳','💪','🧠','🦷','🦴','👀','👁','👅','👄','👃','👂','🦻','🦶','🦵','❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','🌟','⭐','✨','⚡','💥','🔥','🌈','☀','⛅','☁','🌧','❄','🌪'].map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => {
+                          setText((t) => t + emoji);
+                        }}
+                        className="text-lg hover:scale-125 transition duration-100 cursor-pointer p-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-center"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           ) : null}
           <textarea
             value={text}

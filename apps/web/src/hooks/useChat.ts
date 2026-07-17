@@ -207,6 +207,25 @@ export function useDeleteMessage(conversationId: string) {
   });
 }
 
+export function useToggleReaction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ messageId, emoji }: { messageId: string; emoji: string }): Promise<ChatMessage> => {
+      const socket = getSocket();
+      if (socket.connected) {
+        const res = await emitAck<{ ok: boolean; message?: ChatMessage; error?: string }>('message:react', {
+          messageId,
+          emoji,
+        });
+        if (!res.ok || !res.message) throw new Error(res.error ?? 'Failed to toggle reaction');
+        return res.message;
+      }
+      return http.post<ChatMessage>(`/chat/messages/${messageId}/react`, { emoji });
+    },
+    onSuccess: (msg) => upsertMessage(qc, msg),
+  });
+}
+
 export function useMarkRead(conversationId: string) {
   const qc = useQueryClient();
   return useMutation({

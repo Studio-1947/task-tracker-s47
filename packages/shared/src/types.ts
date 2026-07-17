@@ -143,6 +143,7 @@ export interface SubtaskRef {
   status: TaskStatus;
   priority: Priority;
   assignees: UserRef[];
+  dueDate: string | null;
 }
 
 export interface TaskDetail extends TaskListItem {
@@ -406,6 +407,9 @@ export interface ChatMessage {
   attachments: ChatAttachment[];
   /** Ids of users @mentioned in this message. */
   mentionIds: string[];
+  parentMessageId: string | null;
+  parentMessage: { body: string | null; senderName: string } | null;
+  reactions: { emoji: string; userIds: string[] }[];
   editedAt: string | null;
   deletedAt: string | null;
   createdAt: string;

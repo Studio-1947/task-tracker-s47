@@ -71,6 +71,13 @@
       "when": 1783947751253,
       "tag": "0009_classy_thanos",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784292504756,
+      "tag": "0010_nice_albert_cleary",
+      "breakpoints": true
     }
   ]
 }

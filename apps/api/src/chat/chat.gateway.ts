@@ -12,6 +12,7 @@ import type { Namespace, Socket } from 'socket.io';
 import {
   socketDeleteSchema,
   socketEditSchema,
+  socketReactSchema,
   socketReadSchema,
   socketSendSchema,
   socketTypingSchema,
@@ -145,6 +146,19 @@ export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
       const { conversationId } = await this.chat.deleteMessage(this.actorOf(socket), parsed.data.messageId);
       this.broadcastDeletedMessage(conversationId, parsed.data.messageId);
       return { ok: true };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  }
+
+  @SubscribeMessage('message:react')
+  async onReact(@ConnectedSocket() socket: Socket, @MessageBody() payload: unknown) {
+    const parsed = socketReactSchema.safeParse(payload);
+    if (!parsed.success) return { ok: false, error: 'Invalid payload' };
+    try {
+      const message = await this.chat.toggleReaction(this.actorOf(socket), parsed.data.messageId, parsed.data.emoji);
+      this.broadcastUpdatedMessage(message);
+      return { ok: true, message };
     } catch (err) {
       return { ok: false, error: (err as Error).message };
     }
