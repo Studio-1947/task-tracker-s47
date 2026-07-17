@@ -143,6 +143,7 @@ export interface SubtaskRef {
   status: TaskStatus;
   priority: Priority;
   assignees: UserRef[];
+  dueDate: string | null;
 }
 
 export interface TaskDetail extends TaskListItem {

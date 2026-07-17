@@ -24,7 +24,7 @@ import {
 } from '../hooks/useTasks';
 import { useCreateLabel } from '../hooks/useLabels';
 import { useAuth } from '../stores/auth';
-import { describeAudit, formatDate, formatDateTime, priorityClasses, statusClasses, statusLabel } from '../lib/format';
+import { describeAudit, formatDate, formatDateTime, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
 import { ApiRequestError } from '../lib/api';
 import { linkify } from '../lib/linkify';
 import { AssigneePicker } from './AssigneePicker';
@@ -520,6 +520,28 @@ function SubtaskRow({
             selected={subtask.assignees}
             onChange={(assigneeIds) => onPatch({ assigneeIds })}
           />
+          
+          <label className="relative shrink-0 cursor-pointer text-slate-400 hover:text-indigo-650 dark:hover:text-indigo-400 transition-colors flex items-center gap-1.5 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800" title="Set due date">
+            <input
+              type="date"
+              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+              value={subtask.dueDate ? subtask.dueDate.slice(0, 10) : ''}
+              onChange={(e) =>
+                onPatch({ dueDate: e.target.value ? new Date(e.target.value).toISOString() : null })
+              }
+            />
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={subtask.dueDate ? "text-indigo-500 dark:text-indigo-400" : "text-slate-400 dark:text-slate-500"}>
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            {subtask.dueDate ? (
+              <span className={`text-[10px] font-bold ${isOverdue(subtask.dueDate) && subtask.status !== 'DONE' ? 'text-red-500' : 'text-slate-500 dark:text-slate-400'}`}>
+                {new Date(subtask.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+              </span>
+            ) : null}
+          </label>
           <button
             type="button"
             onClick={() => setEditing(true)}
