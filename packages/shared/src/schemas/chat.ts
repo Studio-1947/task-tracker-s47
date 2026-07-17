@@ -23,6 +23,7 @@ export const sendMessageSchema = z
     body: z.string().max(MESSAGE_MAX_LEN).optional(),
     attachments: z.array(chatAttachmentInputSchema).max(MAX_MESSAGE_ATTACHMENTS).optional(),
     mentionIds: z.array(z.string().uuid()).max(50).optional(),
+    parentMessageId: z.string().uuid().nullable().optional(),
   })
   .refine(messageContentRefine, { message: 'A message needs text or an attachment', path: ['body'] });
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;
@@ -78,3 +79,9 @@ export const socketReadSchema = z.object({
   messageId: z.string().uuid().optional(),
 });
 export type SocketReadInput = z.infer<typeof socketReadSchema>;
+
+export const socketReactSchema = z.object({
+  messageId: z.string().uuid(),
+  emoji: z.string().min(1).max(16),
+});
+export type SocketReactInput = z.infer<typeof socketReactSchema>;

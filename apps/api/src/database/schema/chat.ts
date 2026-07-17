@@ -87,6 +87,8 @@ export const messages = pgTable(
     senderId: uuid('sender_id')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
+    parentMessageId: uuid('parent_message_id')
+      .references((): any => messages.id, { onDelete: 'cascade' }),
     /** Null for attachment-only messages; cleared on soft-delete. */
     body: text('body'),
     editedAt: timestamp('edited_at', { withTimezone: true }),
@@ -130,3 +132,25 @@ export const messageMentions = pgTable(
 );
 
 export type MessageMentionRow = typeof messageMentions.$inferSelect;
+
+export const messageReactions = pgTable(
+  'message_reactions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    messageId: uuid('message_id')
+      .notNull()
+      .references(() => messages.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    emoji: varchar('emoji', { length: 16 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('message_reactions_uq').on(t.messageId, t.userId, t.emoji),
+    index('message_reactions_message_idx').on(t.messageId),
+  ],
+);
+
+export type MessageReactionRow = typeof messageReactions.$inferSelect;
+export type NewMessageReactionRow = typeof messageReactions.$inferInsert;

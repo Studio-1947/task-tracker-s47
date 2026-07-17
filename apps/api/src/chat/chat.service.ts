@@ -23,6 +23,7 @@ import {
   conversations,
   messageAttachments,
   messageMentions,
+  messageReactions,
   messages,
   projects,
   users,
@@ -376,35 +377,108 @@ export class ChatService {
 
   /* ── Messages ── */
 
-  private async hydrateMessages(rows: (MessageRow & { senderName: string; senderEmail: string; senderAvatar: string | null })[]): Promise<ChatMessage[]> {
+  private async hydrateMessages(
+    rows: {
+      id: string;
+      conversationId: string;
+      senderId: string;
+      body: string | null;
+      editedAt: Date | null;
+      deletedAt: Date | null;
+      createdAt: Date;
+      parentMessageId: string | null;
+      senderName: string;
+      senderEmail: string;
+      senderAvatar: string | null;
+    }[],
+  ): Promise<ChatMessage[]> {
     if (rows.length === 0) return [];
     const ids = rows.map((r) => r.id);
-    const [atts, mentions] = await Promise.all([
+    const parentIds = rows.map((r) => r.parentMessageId).filter((id): id is string => !!id);
+
+    const [atts, mentions, reactions, parents] = await Promise.all([
       this.db.select().from(messageAttachments).where(inArray(messageAttachments.messageId, ids)),
       this.db
         .select({ messageId: messageMentions.messageId, userId: messageMentions.userId })
         .from(messageMentions)
         .where(inArray(messageMentions.messageId, ids)),
+      this.db
+        .select()
+        .from(messageReactions)
+        .where(inArray(messageReactions.messageId, ids)),
+      parentIds.length > 0
+        ? this.db
+            .select({
+              id: messages.id,
+              body: messages.body,
+              senderName: users.name,
+            })
+            .from(messages)
+            .innerJoin(users, eq(users.id, messages.senderId))
+            .where(inArray(messages.id, parentIds))
+        : Promise.resolve([] as { id: string; body: string | null; senderName: string }[]),
     ]);
+
     const attsBy = new Map<string, ChatAttachment[]>();
     for (const a of atts) {
       const list = attsBy.get(a.messageId) ?? [];
       list.push({ id: a.id, fileKey: a.fileKey, fileName: a.fileName, mimeType: a.mimeType, sizeBytes: a.sizeBytes });
       attsBy.set(a.messageId, list);
     }
+
     const mentionsBy = new Map<string, string[]>();
     for (const m of mentions) {
       const list = mentionsBy.get(m.messageId) ?? [];
       list.push(m.userId);
       mentionsBy.set(m.messageId, list);
     }
-    return rows.map((r) => this.toMessageDto(r, attsBy.get(r.id) ?? [], mentionsBy.get(r.id) ?? []));
+
+    const reactionsBy = new Map<string, { emoji: string; userIds: string[] }[]>();
+    for (const r of reactions) {
+      const list = reactionsBy.get(r.messageId) ?? [];
+      let item = list.find((x) => x.emoji === r.emoji);
+      if (!item) {
+        item = { emoji: r.emoji, userIds: [] };
+        list.push(item);
+      }
+      item.userIds.push(r.userId);
+      reactionsBy.set(r.messageId, list);
+    }
+
+    const parentMap = new Map<string, { body: string | null; senderName: string }>();
+    for (const p of parents) {
+      parentMap.set(p.id, { body: p.body, senderName: p.senderName });
+    }
+
+    return rows.map((r) =>
+      this.toMessageDto(
+        r,
+        attsBy.get(r.id) ?? [],
+        mentionsBy.get(r.id) ?? [],
+        r.parentMessageId ? (parentMap.get(r.parentMessageId) ?? null) : null,
+        reactionsBy.get(r.id) ?? [],
+      ),
+    );
   }
 
   private toMessageDto(
-    r: MessageRow & { senderName: string; senderEmail: string; senderAvatar: string | null },
+    r: {
+      id: string;
+      conversationId: string;
+      senderId: string;
+      body: string | null;
+      editedAt: Date | null;
+      deletedAt: Date | null;
+      createdAt: Date;
+      parentMessageId: string | null;
+      senderName: string;
+      senderEmail: string;
+      senderAvatar: string | null;
+    },
     attachments: ChatAttachment[],
     mentionIds: string[],
+    parentMessage: { body: string | null; senderName: string } | null,
+    reactions: { emoji: string; userIds: string[] }[],
   ): ChatMessage {
     const deleted = !!r.deletedAt;
     return {
@@ -414,6 +488,9 @@ export class ChatService {
       body: deleted ? null : r.body,
       attachments: deleted ? [] : attachments,
       mentionIds: deleted ? [] : mentionIds,
+      parentMessageId: r.parentMessageId,
+      parentMessage: deleted ? null : parentMessage,
+      reactions: deleted ? [] : reactions,
       editedAt: r.editedAt ? r.editedAt.toISOString() : null,
       deletedAt: r.deletedAt ? r.deletedAt.toISOString() : null,
       createdAt: r.createdAt.toISOString(),
@@ -430,6 +507,7 @@ export class ChatService {
         editedAt: messages.editedAt,
         deletedAt: messages.deletedAt,
         createdAt: messages.createdAt,
+        parentMessageId: messages.parentMessageId,
         senderName: users.name,
         senderEmail: users.email,
         senderAvatar: users.avatarKey,
@@ -491,7 +569,12 @@ export class ChatService {
     const messageId = await this.db.transaction(async (tx) => {
       const [msg] = await tx
         .insert(messages)
-        .values({ conversationId, senderId: actor.id, body })
+        .values({
+          conversationId,
+          senderId: actor.id,
+          body,
+          parentMessageId: input.parentMessageId ?? null,
+        })
         .returning({ id: messages.id });
       if (attachments.length) {
         await tx.insert(messageAttachments).values(
@@ -564,6 +647,41 @@ export class ChatService {
       await this.db.delete(messageAttachments).where(eq(messageAttachments.messageId, messageId));
     }
     return { conversationId: row.conversationId };
+  }
+
+  async toggleReaction(actor: Actor, messageId: string, emoji: string): Promise<ChatMessage> {
+    const [msg] = await this.db.select().from(messages).where(eq(messages.id, messageId)).limit(1);
+    if (!msg) throw new NotFoundException('Message not found');
+    await this.assertCanAccess(msg.conversationId, actor);
+    if (msg.deletedAt) throw new BadRequestException('Cannot react to a deleted message');
+
+    const [existing] = await this.db
+      .select()
+      .from(messageReactions)
+      .where(
+        and(
+          eq(messageReactions.messageId, messageId),
+          eq(messageReactions.userId, actor.id),
+          eq(messageReactions.emoji, emoji),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      await this.db
+        .delete(messageReactions)
+        .where(eq(messageReactions.id, existing.id));
+    } else {
+      await this.db
+        .insert(messageReactions)
+        .values({
+          messageId,
+          userId: actor.id,
+          emoji,
+        });
+    }
+
+    return this.getMessageForBroadcast(messageId);
   }
 
   async markRead(actor: Actor, conversationId: string, _messageId?: string): Promise<{ lastReadAt: string }> {
