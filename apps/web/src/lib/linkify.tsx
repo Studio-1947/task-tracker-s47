@@ -34,11 +34,33 @@ function trimUrl(match: string): { href: string; tail: string } {
 }
 
 /**
+ * Link styling on a neutral surface (comments, other people's message bubbles).
+ */
+export const LINK_ON_SURFACE =
+  'text-indigo-600 decoration-indigo-300 hover:text-indigo-700 hover:decoration-indigo-500 dark:text-indigo-400 dark:decoration-indigo-500/50 dark:hover:text-indigo-300';
+
+/**
+ * Link styling on a saturated accent surface — your own chat bubble, which is an
+ * indigo→violet gradient in BOTH themes. The default indigo would render the link
+ * in almost exactly the bubble's own colour, so it must be light and theme-fixed
+ * (no `dark:` variants: the background doesn't change between themes).
+ */
+export const LINK_ON_ACCENT = 'text-white decoration-white/60 hover:decoration-white';
+
+/**
  * Turn bare URLs in plain text into clickable links. Input is rendered as text
  * nodes throughout — never dangerouslySetInnerHTML — so user content cannot
  * inject markup.
+ *
+ * `className` styles the anchor; pass LINK_ON_ACCENT when the text sits on a
+ * coloured background. `[overflow-wrap:anywhere]` lets a long URL break mid-token:
+ * plain `break-words` wraps visually but does NOT shrink min-content width, so
+ * inside a flex row it would stretch the container instead of wrapping.
  */
-export function linkify(text: string, keyPrefix = 'l'): ReactNode[] {
+export function linkify(
+  text: string,
+  { keyPrefix = 'l', className = LINK_ON_SURFACE }: { keyPrefix?: string; className?: string } = {},
+): ReactNode[] {
   return text.split(URL_RE).map((part, i) => {
     if (i % 2 === 0 || !/^https?:\/\//i.test(part)) return <span key={`${keyPrefix}${i}`}>{part}</span>;
 
@@ -49,7 +71,7 @@ export function linkify(text: string, keyPrefix = 'l'): ReactNode[] {
           href={href}
           target="_blank"
           rel="noopener noreferrer nofollow"
-          className="font-medium text-indigo-600 underline decoration-indigo-300 underline-offset-2 hover:text-indigo-700 hover:decoration-indigo-500 dark:text-indigo-400 dark:decoration-indigo-500/50 dark:hover:text-indigo-300"
+          className={`font-medium underline underline-offset-2 [overflow-wrap:anywhere] ${className}`}
           // Comments/messages can sit inside a clickable row — don't trigger it.
           onClick={(e) => e.stopPropagation()}
         >

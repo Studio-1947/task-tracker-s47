@@ -100,14 +100,16 @@ function MessageBubble({
   return (
     <div className={`group flex gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
       {!mine ? <Avatar user={msg.sender} size="sm" className="mt-auto" /> : null}
-      <div className={`flex max-w-[78%] flex-col ${mine ? 'items-end' : 'items-start'}`}>
+      {/* min-w-0: a flex item defaults to min-width:auto, so a long unbroken URL
+          would force the bubble past max-w and stretch the row. */}
+      <div className={`flex min-w-0 max-w-[78%] flex-col ${mine ? 'items-end' : 'items-start'}`}>
         {showSender && !mine ? (
           <span className="mb-0.5 px-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
             {msg.sender.name}
           </span>
         ) : null}
         <div
-          className={`rounded-2xl px-3.5 py-2 text-sm break-words ${
+          className={`max-w-full rounded-2xl px-3.5 py-2 text-sm break-words ${
             deleted
               ? 'bg-slate-100 italic text-slate-400 dark:bg-[#242424] dark:text-slate-500'
               : mine
@@ -120,7 +122,7 @@ function MessageBubble({
           ) : (
             <>
               {msg.body ? (
-                <span className="whitespace-pre-wrap">{renderBody(msg.body, memberNames)}</span>
+                <span className="whitespace-pre-wrap">{renderBody(msg.body, memberNames, mine)}</span>
               ) : null}
               {msg.attachments.map((a) => (
                 <AttachmentView key={a.id} att={a} />
