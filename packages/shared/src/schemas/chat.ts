@@ -11,6 +11,8 @@ export const chatAttachmentInputSchema = z.object({
 export type ChatAttachmentInput = z.infer<typeof chatAttachmentInputSchema>;
 
 export const MESSAGE_MAX_LEN = 4000;
+/** Attachments per message. The composer enforces the same cap before uploading. */
+export const MAX_MESSAGE_ATTACHMENTS = 10;
 
 /** A message must carry a non-empty body OR at least one attachment. */
 const messageContentRefine = (v: { body?: string; attachments?: unknown[] }) =>
@@ -19,7 +21,7 @@ const messageContentRefine = (v: { body?: string; attachments?: unknown[] }) =>
 export const sendMessageSchema = z
   .object({
     body: z.string().max(MESSAGE_MAX_LEN).optional(),
-    attachments: z.array(chatAttachmentInputSchema).max(10).optional(),
+    attachments: z.array(chatAttachmentInputSchema).max(MAX_MESSAGE_ATTACHMENTS).optional(),
     mentionIds: z.array(z.string().uuid()).max(50).optional(),
   })
   .refine(messageContentRefine, { message: 'A message needs text or an attachment', path: ['body'] });

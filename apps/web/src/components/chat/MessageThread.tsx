@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ChatAttachmentInput, ChatMessage, ConversationMember } from '@task-tracker/shared';
-import { apiBlob } from '../../lib/api';
+import {
+  MAX_MESSAGE_ATTACHMENTS,
+  type ChatAttachmentInput,
+  type ChatMessage,
+  type ConversationMember,
+} from '@task-tracker/shared';
+import { apiBlob, ApiRequestError } from '../../lib/api';
+import {
+  ACCEPT_ATTACHMENT,
+  ensureUploadableName,
+  filesFromTransfer,
+  MAX_UPLOAD_BYTES,
+} from '../../lib/uploads';
 import { useAuth } from '../../stores/auth';
 import { useChatUi } from '../../stores/chat';
 import { Avatar } from '../Avatar';
@@ -23,6 +34,16 @@ import { formatDayLabel, formatTime, GroupAvatar, PresenceDot, renderBody } from
 function isImage(mime: string): boolean {
   return mime.startsWith('image/');
 }
+
+/**
+ * A staged attachment: already uploaded, but not yet attached to a message.
+ *
+ * `previewUrl` is a local object URL of the file the user picked. It can't come
+ * from the server: GET /chat/attachments/:name authorizes via the message the
+ * file belongs to, and until this is sent there is no such message — so the
+ * server (correctly) 404s it.
+ */
+type PendingAttachment = ChatAttachmentInput & { previewUrl?: string };
 
 async function downloadFile(fileKey: string, fileName: string): Promise<void> {
   const blob = await apiBlob(`/chat/${fileKey}`);
@@ -168,10 +189,12 @@ export function MessageThread({
 
   const [text, setText] = useState('');
   const [editing, setEditing] = useState<ChatMessage | null>(null);
-  const [pending, setPending] = useState<ChatAttachmentInput[]>([]);
+  const [pending, setPending] = useState<PendingAttachment[]>([]);
   const [mentionIds, setMentionIds] = useState<Record<string, string>>({}); // id → name
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -187,6 +210,17 @@ export function MessageThread({
     setActive(conversationId);
     return () => setActive(null);
   }, [conversationId, setActive]);
+
+  // Release staged image previews if the thread unmounts (e.g. switching
+  // conversations) while attachments are still queued.
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
+  useEffect(
+    () => () => {
+      for (const a of pendingRef.current) if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+    },
+    [],
+  );
 
   // Mark read whenever the newest message changes while this thread is open.
   useEffect(() => {
@@ -238,19 +272,35 @@ export function MessageThread({
     const activeMentions = Object.entries(mentionIds)
       .filter(([, name]) => body.includes(`@${name}`))
       .map(([id]) => id);
+    const sentAttachments = pending;
     setText('');
     setPending([]);
     setMentionIds({});
     setMentionQuery(null);
+    setUploadError(null);
     emitTyping(conversationId, false);
     try {
+      // previewUrl is client-only — send just the fields the API models.
+      const attachments = sentAttachments.map(({ fileKey, fileName, mimeType, sizeBytes }) => ({
+        fileKey,
+        fileName,
+        mimeType,
+        sizeBytes,
+      }));
       await send.mutateAsync({
         body: body || undefined,
-        attachments: pending.length ? pending : undefined,
+        attachments: attachments.length ? attachments : undefined,
         mentionIds: activeMentions.length ? activeMentions : undefined,
       });
-    } catch {
-      setText(body); // restore on failure
+      // Sent: the thread now renders these from the server copy.
+      for (const a of sentAttachments) if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+    } catch (err) {
+      // Restore the whole draft — the attachments were cleared optimistically and
+      // would otherwise be silently lost along with the failed send.
+      setText(body);
+      setPending(sentAttachments);
+      setMentionIds(mentionIds);
+      setUploadError(err instanceof ApiRequestError ? err.message : 'Message failed to send — try again.');
     }
   };
 
@@ -267,15 +317,63 @@ export function MessageThread({
     setText(m.body ?? '');
   };
 
-  const onFile = async (file: File | undefined) => {
-    if (!file) return;
-    try {
-      const saved = await upload.mutateAsync(file);
-      setPending((p) => [...p, saved]);
-    } catch {
-      /* surfaced via button disabled state; keep simple */
+  /**
+   * Shared intake for the picker, paste and drop. Uploads immediately so the
+   * pending tray can show a real thumbnail and sending stays instant.
+   */
+  const addFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+    setUploadError(null);
+
+    const room = MAX_MESSAGE_ATTACHMENTS - pending.length;
+    if (room <= 0) {
+      setUploadError(`You can attach up to ${MAX_MESSAGE_ATTACHMENTS} files per message.`);
+      return;
+    }
+    const batch = files.slice(0, room);
+    if (files.length > room) {
+      setUploadError(`Only the first ${room} file(s) were attached — limit is ${MAX_MESSAGE_ATTACHMENTS} per message.`);
+    }
+
+    for (const raw of batch) {
+      if (raw.size > MAX_UPLOAD_BYTES) {
+        setUploadError(`"${raw.name}" is larger than 20 MB.`);
+        continue;
+      }
+      const file = ensureUploadableName(raw);
+      try {
+        const saved = await upload.mutateAsync(file);
+        setPending((p) => [
+          ...p,
+          { ...saved, previewUrl: isImage(file.type) ? URL.createObjectURL(file) : undefined },
+        ]);
+      } catch (err) {
+        // Previously swallowed — a rejected upload looked like nothing happened.
+        setUploadError(err instanceof ApiRequestError ? err.message : `Could not upload "${raw.name}"`);
+      }
     }
     if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const removePending = (index: number) =>
+    setPending((p) => {
+      const gone = p[index];
+      if (gone?.previewUrl) URL.revokeObjectURL(gone.previewUrl);
+      return p.filter((_, j) => j !== index);
+    });
+
+  /** Ctrl/Cmd+V of a screenshot or copied image. Text pastes fall through untouched. */
+  const onPaste = (e: React.ClipboardEvent) => {
+    const files = filesFromTransfer(e.clipboardData);
+    if (files.length === 0) return;
+    e.preventDefault(); // Otherwise the browser may also drop in a filename/markup.
+    void addFiles(files);
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    void addFiles(filesFromTransfer(e.dataTransfer));
   };
 
   const typingNames = useMemo(() => Object.values(typingForConv ?? {}), [typingForConv]);
@@ -395,7 +493,26 @@ export function MessageThread({
       ) : null}
 
       {/* Composer */}
-      <div className="relative border-t border-slate-100 px-3 py-3 dark:border-[#2d2d2d]">
+      <div
+        className="relative border-t border-slate-100 px-3 py-3 dark:border-[#2d2d2d]"
+        onDragOver={(e) => {
+          // Only react to a real file drag, not text selection dragging.
+          if (!e.dataTransfer.types.includes('Files')) return;
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={(e) => {
+          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+          setDragging(false);
+        }}
+        onDrop={onDrop}
+      >
+        {dragging ? (
+          <div className="pointer-events-none absolute inset-1 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-indigo-400 bg-indigo-50/90 text-sm font-semibold text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-300">
+            Drop to attach
+          </div>
+        ) : null}
+
         {mentionCandidates.length > 0 ? (
           <div className="absolute bottom-full left-3 mb-1 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-[#2d2d2d] dark:bg-[#1e1e1e]">
             {mentionCandidates.map((m) => (
@@ -417,20 +534,41 @@ export function MessageThread({
             {pending.map((a, i) => (
               <span
                 key={a.fileKey}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-xs text-slate-600 dark:bg-[#242424] dark:text-slate-300"
+                className="group/att relative inline-flex items-center gap-1.5 rounded-lg bg-slate-100 py-1 pl-1 pr-2 text-xs text-slate-600 dark:bg-[#242424] dark:text-slate-300"
               >
-                📎 <span className="max-w-[8rem] truncate">{a.fileName}</span>
+                {a.previewUrl ? (
+                  <img src={a.previewUrl} alt={a.fileName} className="h-9 w-9 rounded object-cover" />
+                ) : (
+                  <span className="flex h-9 w-9 items-center justify-center rounded bg-slate-200 dark:bg-[#333]">📎</span>
+                )}
+                <span className="max-w-[8rem] truncate">{a.fileName}</span>
                 <button
                   type="button"
-                  onClick={() => setPending((p) => p.filter((_, j) => j !== i))}
+                  onClick={() => removePending(i)}
                   className="text-slate-400 hover:text-red-500"
-                  aria-label="Remove attachment"
+                  aria-label={`Remove ${a.fileName}`}
                 >
                   ✕
                 </button>
               </span>
             ))}
+            {upload.isPending ? (
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-2 text-xs text-slate-500 dark:bg-[#242424] dark:text-slate-400">
+                Uploading…
+              </span>
+            ) : null}
           </div>
+        ) : upload.isPending ? (
+          <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">Uploading…</p>
+        ) : null}
+
+        {uploadError ? (
+          <p className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 dark:bg-red-950/20 dark:text-red-400">
+            <span className="min-w-0 flex-1">{uploadError}</span>
+            <button type="button" onClick={() => setUploadError(null)} aria-label="Dismiss error" className="shrink-0 font-bold">
+              ✕
+            </button>
+          </p>
         ) : null}
 
         {editing ? (
@@ -446,8 +584,11 @@ export function MessageThread({
           <input
             ref={fileRef}
             type="file"
+            multiple
+            accept={ACCEPT_ATTACHMENT}
             className="hidden"
-            onChange={(e) => void onFile(e.target.files?.[0])}
+            aria-label="Attach files"
+            onChange={(e) => void addFiles(Array.from(e.target.files ?? []))}
           />
           {!editing ? (
             <button
@@ -465,6 +606,7 @@ export function MessageThread({
           <textarea
             value={text}
             onChange={(e) => handleType(e.target.value)}
+            onPaste={editing ? undefined : onPaste}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -473,7 +615,7 @@ export function MessageThread({
             }}
             onBlur={() => emitTyping(conversationId, false)}
             rows={1}
-            placeholder="Type a message…"
+            placeholder={editing ? 'Edit your message…' : 'Type a message, or paste an image…'}
             className="max-h-32 min-h-[2.6rem] flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 dark:border-[#2d2d2d] dark:bg-[#1a1a1a] dark:text-white"
           />
           <button
