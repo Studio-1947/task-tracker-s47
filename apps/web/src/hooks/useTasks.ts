@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AuditEntry,
+  CreateLinkAttachmentInput,
   CreateSubtaskInput,
   CreateTaskInput,
   Paginated,
@@ -187,6 +188,20 @@ export function useUploadAttachment(taskId: string, workspaceId: string) {
       form.append('file', file);
       return http.upload<TaskAttachment>(`/tasks/${taskId}/attachments`, form);
     },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'attachments'] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });
+      qc.invalidateQueries({ queryKey: ['tasks', workspaceId] }); // attachmentCount
+    },
+  });
+}
+
+/** Attach an external link (Figma, Docs, …) rather than uploading bytes. */
+export function useAddLinkAttachment(taskId: string, workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateLinkAttachmentInput) =>
+      http.post<TaskAttachment>(`/tasks/${taskId}/attachments/links`, input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['task', taskId, 'attachments'] });
       qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });

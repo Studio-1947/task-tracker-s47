@@ -51,6 +51,29 @@ export const createCommentSchema = z.object({
 });
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
 
+/**
+ * Attach an external link (e.g. a Figma file) instead of uploading bytes.
+ * Only http(s) is accepted — `javascript:`, `data:` and friends are rejected here
+ * so they can never reach an href or an iframe src.
+ */
+export const createLinkAttachmentSchema = z.object({
+  url: z
+    .string()
+    .url()
+    .max(2000)
+    .refine((v) => {
+      try {
+        const scheme = new URL(v).protocol;
+        return scheme === 'http:' || scheme === 'https:';
+      } catch {
+        return false;
+      }
+    }, { message: 'Link must be an http(s) URL' }),
+  /** Display label. Falls back to the link's hostname when omitted. */
+  title: z.string().min(1).max(255).optional(),
+});
+export type CreateLinkAttachmentInput = z.infer<typeof createLinkAttachmentSchema>;
+
 /** Query params for the shared task list (Kanban/List/Table all read this). */
 export const taskQuerySchema = z.object({
   status: statusEnum.optional(),
