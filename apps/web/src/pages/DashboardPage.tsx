@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import {
   TASK_STATUSES,
   type AuditEntry,
+  type MyTaskItem,
   type StatusCounts,
   type UpcomingDeadline,
   type WorkloadEntry,
@@ -184,6 +185,100 @@ function deadlineChip(days: number): string {
   return `In ${days} days`;
 }
 
+/** G — At-Risk summary card showing overdue, due-this-week and on-track task counts. */
+function AtRiskCard({
+  items,
+  myTasks,
+}: {
+  items?: UpcomingDeadline[];
+  myTasks?: MyTaskItem[];
+}) {
+  // Admin: derive from UpcomingDeadline[]; Member: derive from MyTaskItem[]
+  const now = Date.now();
+  const weekMs = 7 * 24 * 60 * 60 * 1000;
+
+  let overdue = 0;
+  let dueThisWeek = 0;
+  let total = 0;
+
+  if (myTasks && myTasks.length > 0) {
+    total = myTasks.length;
+    for (const t of myTasks) {
+      if (!t.dueDate || t.status === 'DONE') continue;
+      const due = new Date(t.dueDate).getTime();
+      if (due < now) overdue++;
+      else if (due - now <= weekMs) dueThisWeek++;
+    }
+  } else if (items && items.length > 0) {
+    total = items.length;
+    overdue = items.filter((t) => t.dueInDays < 0).length;
+    dueThisWeek = items.filter((t) => t.dueInDays >= 0 && t.dueInDays <= 7).length;
+  }
+
+  const onTrack = Math.max(0, total - overdue - dueThisWeek);
+
+  const rows = [
+    {
+      icon: '🔴',
+      label: 'Overdue',
+      count: overdue,
+      color: overdue > 0
+        ? 'text-red-600 dark:text-red-400'
+        : 'text-slate-400 dark:text-slate-500',
+      bar: overdue > 0 ? 'bg-red-500' : 'bg-slate-200 dark:bg-slate-700',
+    },
+    {
+      icon: '🟡',
+      label: 'Due this week',
+      count: dueThisWeek,
+      color: dueThisWeek > 0
+        ? 'text-amber-600 dark:text-amber-400'
+        : 'text-slate-400 dark:text-slate-500',
+      bar: dueThisWeek > 0 ? 'bg-amber-400' : 'bg-slate-200 dark:bg-slate-700',
+    },
+    {
+      icon: '🟢',
+      label: 'On track',
+      count: onTrack,
+      color: 'text-emerald-600 dark:text-emerald-400',
+      bar: 'bg-emerald-500',
+    },
+  ];
+
+  const barTotal = total || 1;
+
+  return (
+    <Card className="p-6 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
+      <div className="mb-4 flex items-center gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-455 dark:text-slate-400">⚠️ At-Risk Tasks</span>
+        {overdue > 0 && (
+          <span className="ml-auto rounded-full bg-red-100 dark:bg-red-950/30 px-2 py-0.5 text-[10px] font-bold text-red-600 dark:text-red-400 animate-pulse">
+            {overdue} overdue
+          </span>
+        )}
+      </div>
+      <div className="space-y-3.5">
+        {rows.map((row) => (
+          <div key={row.label} className="flex items-center gap-3">
+            <span className="text-sm shrink-0">{row.icon}</span>
+            <span className={`w-28 shrink-0 text-xs font-semibold ${row.color}`}>{row.label}</span>
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800/80">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${row.bar}`}
+                style={{ width: `${Math.round((row.count / barTotal) * 100)}%` }}
+              />
+            </div>
+            <span className={`w-6 text-right text-xs font-bold tabular-nums ${row.color}`}>{row.count}</span>
+          </div>
+        ))}
+      </div>
+      {total === 0 && (
+        <p className="mt-2 text-sm text-slate-400 dark:text-slate-500">No upcoming deadlines tracked.</p>
+      )}
+    </Card>
+  );
+}
+
 function UpcomingDeadlinesCard({ items }: { items: UpcomingDeadline[] }) {
   return (
     <Card className="p-6 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
@@ -244,6 +339,8 @@ function AdminView() {
         <UpcomingDeadlinesCard items={data.upcomingDeadlines} />
         <ActivityFeed items={data.recentActivity} />
       </div>
+      {/* G — At-Risk widget */}
+      <AtRiskCard items={data.upcomingDeadlines} />
       <StatusBreakdown counts={data.tasksByStatus} />
     </div>
   );
@@ -309,6 +406,8 @@ function MemberView() {
         <StatusBreakdown counts={data.tasksByStatus} />
         <ActivityFeed items={data.recentActivity} />
       </div>
+      {/* G — At-Risk widget for member (my tasks overdue/near-due) */}
+      <AtRiskCard items={[]} myTasks={data.myTasks} />
     </div>
   );
 }

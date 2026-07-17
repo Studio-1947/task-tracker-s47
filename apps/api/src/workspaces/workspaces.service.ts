@@ -10,20 +10,24 @@ import {
 import { DRIZZLE, type Database } from '../database/database.module';
 import { projects, users, workspaceMembers, workspaces, type WorkspaceRow } from '../database/schema';
 import { UsersService } from '../users/users.service';
+import { FilesService } from '../files/files.service';
 
 @Injectable()
 export class WorkspacesService {
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly usersService: UsersService,
+    private readonly files: FilesService,
   ) {}
 
   private toSummary(w: WorkspaceRow, memberCount?: number, projectCount?: number): WorkspaceSummary {
     return {
       id: w.id,
       name: w.name,
+      subtitle: w.subtitle,
       description: w.description,
       color: w.color,
+      logoKey: w.logoKey,
       isArchived: w.isArchived,
       createdAt: w.createdAt.toISOString(),
       ...(memberCount !== undefined ? { memberCount } : {}),
@@ -112,6 +116,7 @@ export class WorkspacesService {
         .insert(workspaces)
         .values({
           name: input.name,
+          subtitle: input.subtitle ?? null,
           description: input.description ?? null,
           color: input.color ?? null,
           createdById,
@@ -135,11 +140,47 @@ export class WorkspacesService {
   async update(id: string, input: UpdateWorkspaceInput): Promise<WorkspaceSummary> {
     const [current] = await this.db.select({ id: workspaces.id }).from(workspaces).where(eq(workspaces.id, id)).limit(1);
     if (!current) throw new NotFoundException('Workspace not found');
+    // Treat an empty subtitle as "cleared" so the card doesn't render a blank line.
+    const patch = { ...input };
+    if (patch.subtitle !== undefined) patch.subtitle = patch.subtitle?.trim() || null;
     const [w] = await this.db
       .update(workspaces)
-      .set({ ...input, updatedAt: new Date() })
+      .set({ ...patch, updatedAt: new Date() })
       .where(eq(workspaces.id, id))
       .returning();
+    return this.toSummary(w!);
+  }
+
+  /**
+   * Set a workspace logo. Stored under the shared "avatars" bucket (images-only
+   * allowlist) and served via /api/files. Best-effort cleanup of the replaced
+   * image; the DB row is the source of truth.
+   */
+  async setLogo(id: string, file: Express.Multer.File): Promise<WorkspaceSummary> {
+    const [current] = await this.db.select().from(workspaces).where(eq(workspaces.id, id)).limit(1);
+    if (!current) throw new NotFoundException('Workspace not found');
+
+    const saved = await this.files.save('avatars', file);
+    const [w] = await this.db
+      .update(workspaces)
+      .set({ logoKey: saved.key, updatedAt: new Date() })
+      .where(eq(workspaces.id, id))
+      .returning();
+    if (current.logoKey) await this.files.remove(current.logoKey).catch(() => undefined);
+    return this.toSummary(w!);
+  }
+
+  /** Remove a workspace logo. */
+  async removeLogo(id: string): Promise<WorkspaceSummary> {
+    const [current] = await this.db.select().from(workspaces).where(eq(workspaces.id, id)).limit(1);
+    if (!current) throw new NotFoundException('Workspace not found');
+
+    const [w] = await this.db
+      .update(workspaces)
+      .set({ logoKey: null, updatedAt: new Date() })
+      .where(eq(workspaces.id, id))
+      .returning();
+    if (current.logoKey) await this.files.remove(current.logoKey).catch(() => undefined);
     return this.toSummary(w!);
   }
 

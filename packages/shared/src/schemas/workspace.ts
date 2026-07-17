@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 export const createWorkspaceSchema = z.object({
   name: z.string().min(1).max(120),
+  /** Secondary line shown under the name on the workspace card (a tagline). */
+  subtitle: z.string().max(200).optional(),
   description: z.string().max(2000).optional(),
   color: z
     .string()
@@ -21,6 +23,8 @@ export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>;
 export const updateWorkspaceSchema = z
   .object({
     name: z.string().min(1).max(120).optional(),
+    // Nullable so admins can clear it back to "no subtitle".
+    subtitle: z.string().max(200).nullable().optional(),
     description: z.string().max(2000).optional(),
     color: z
       .string()

@@ -1,15 +1,19 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, count, desc, eq, gte, ilike, inArray, lte, or, sql } from 'drizzle-orm';
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type {
   AuditEntry,
+  CreateSubtaskInput,
   CreateTaskInput,
   LabelRef,
   Paginated,
+  Priority,
+  SubtaskRef,
   TaskAttachment,
   TaskComment,
   TaskDetail,
   TaskListItem,
   TaskQuery,
+  TaskStatus,
   UpdateTaskInput,
   UserRef,
 } from '@task-tracker/shared';
@@ -85,21 +89,32 @@ export class TasksService {
     }
   }
 
-  /** Bulk-load assignees, labels, comment + attachment counts for a set of task ids. */
+  /** Bulk-load assignees, labels, comment + attachment + subtask counts for a set of task ids. */
   private async loadRelations(taskIds: string[]): Promise<{
     assignees: Map<string, UserRef[]>;
     labels: Map<string, LabelRef[]>;
     commentCounts: Map<string, number>;
     attachmentCounts: Map<string, number>;
+    subtaskCounts: Map<string, number>;
+    subtaskDoneCounts: Map<string, number>;
   }> {
     const assigneeMap = new Map<string, UserRef[]>();
     const labelMap = new Map<string, LabelRef[]>();
     const commentCounts = new Map<string, number>();
     const attachmentCounts = new Map<string, number>();
+    const subtaskCounts = new Map<string, number>();
+    const subtaskDoneCounts = new Map<string, number>();
     if (taskIds.length === 0)
-      return { assignees: assigneeMap, labels: labelMap, commentCounts, attachmentCounts };
+      return {
+        assignees: assigneeMap,
+        labels: labelMap,
+        commentCounts,
+        attachmentCounts,
+        subtaskCounts,
+        subtaskDoneCounts,
+      };
 
-    const [assigneeRows, labelRows, commentRows, attachmentRows] = await Promise.all([
+    const [assigneeRows, labelRows, commentRows, attachmentRows, subtaskRows] = await Promise.all([
       this.db
         .select({
           taskId: taskAssignees.taskId,
@@ -126,6 +141,11 @@ export class TasksService {
         .from(taskAttachments)
         .where(inArray(taskAttachments.taskId, taskIds))
         .groupBy(taskAttachments.taskId),
+      this.db
+        .select({ parentTaskId: tasks.parentTaskId, status: tasks.status, c: count() })
+        .from(tasks)
+        .where(inArray(tasks.parentTaskId, taskIds))
+        .groupBy(tasks.parentTaskId, tasks.status),
     ]);
 
     for (const r of assigneeRows) {
@@ -140,8 +160,13 @@ export class TasksService {
     }
     for (const r of commentRows) commentCounts.set(r.taskId, Number(r.c));
     for (const r of attachmentRows) attachmentCounts.set(r.taskId, Number(r.c));
+    for (const r of subtaskRows) {
+      if (!r.parentTaskId) continue;
+      subtaskCounts.set(r.parentTaskId, (subtaskCounts.get(r.parentTaskId) ?? 0) + Number(r.c));
+      if (r.status === 'DONE') subtaskDoneCounts.set(r.parentTaskId, Number(r.c));
+    }
 
-    return { assignees: assigneeMap, labels: labelMap, commentCounts, attachmentCounts };
+    return { assignees: assigneeMap, labels: labelMap, commentCounts, attachmentCounts, subtaskCounts, subtaskDoneCounts };
   }
 
   private toListItem(
@@ -153,6 +178,8 @@ export class TasksService {
       labels: Map<string, LabelRef[]>;
       commentCounts: Map<string, number>;
       attachmentCounts: Map<string, number>;
+      subtaskCounts: Map<string, number>;
+      subtaskDoneCounts: Map<string, number>;
     },
   ): TaskListItem {
     return {
@@ -170,6 +197,9 @@ export class TasksService {
       labels: rel.labels.get(t.id) ?? [],
       commentCount: rel.commentCounts.get(t.id) ?? 0,
       attachmentCount: rel.attachmentCounts.get(t.id) ?? 0,
+      parentTaskId: t.parentTaskId,
+      subtaskCount: rel.subtaskCounts.get(t.id) ?? 0,
+      subtaskDoneCount: rel.subtaskDoneCounts.get(t.id) ?? 0,
       isArchived: t.isArchived,
       createdAt: t.createdAt.toISOString(),
       updatedAt: t.updatedAt.toISOString(),
@@ -185,6 +215,68 @@ export class TasksService {
     return u ?? { id: userId, name: 'Unknown', email: '', avatarKey: null };
   }
 
+  /** Validates a would-be parent: same workspace/project, and not itself a subtask (single-level nesting only). */
+  private async assertParentEligible(
+    workspaceId: string,
+    projectId: string,
+    parentTaskId: string,
+  ): Promise<void> {
+    const parent = await this.loadTaskOrThrow(parentTaskId);
+    if (parent.workspaceId !== workspaceId || parent.projectId !== projectId) {
+      throw new NotFoundException('Parent task not found in this project');
+    }
+    if (parent.parentTaskId) {
+      throw new BadRequestException('A subtask cannot itself have subtasks');
+    }
+  }
+
+  /** Assignees for a set of tasks — lighter than `loadRelations` when that's all you need. */
+  private async assigneesFor(taskIds: string[]): Promise<Map<string, UserRef[]>> {
+    const map = new Map<string, UserRef[]>();
+    if (taskIds.length === 0) return map;
+    const rows = await this.db
+      .select({
+        taskId: taskAssignees.taskId,
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        avatarKey: users.avatarKey,
+      })
+      .from(taskAssignees)
+      .innerJoin(users, eq(users.id, taskAssignees.userId))
+      .where(inArray(taskAssignees.taskId, taskIds));
+    for (const r of rows) {
+      const list = map.get(r.taskId) ?? [];
+      list.push({ id: r.id, name: r.name, email: r.email, avatarKey: r.avatarKey });
+      map.set(r.taskId, list);
+    }
+    return map;
+  }
+
+  private async subtaskRefsFor(taskIds: string[]): Promise<Map<string, SubtaskRef>> {
+    const map = new Map<string, SubtaskRef>();
+    if (taskIds.length === 0) return map;
+    const [rows, assignees] = await Promise.all([
+      this.db
+        .select({ task: tasks, prefix: projects.taskPrefix })
+        .from(tasks)
+        .innerJoin(projects, eq(projects.id, tasks.projectId))
+        .where(inArray(tasks.id, taskIds)),
+      this.assigneesFor(taskIds),
+    ]);
+    for (const r of rows) {
+      map.set(r.task.id, {
+        id: r.task.id,
+        ref: this.ref(r.prefix, r.task.number),
+        title: r.task.title,
+        status: r.task.status as TaskStatus,
+        priority: r.task.priority as Priority,
+        assignees: assignees.get(r.task.id) ?? [],
+      });
+    }
+    return map;
+  }
+
   // ── commands ──────────────────────────────────────────────────────────────
 
   async create(workspaceId: string, actor: Actor, input: CreateTaskInput): Promise<TaskDetail> {
@@ -193,6 +285,9 @@ export class TasksService {
     const labelIds = input.labelIds ?? [];
     await this.assertAssigneesAreMembers(workspaceId, assigneeIds);
     await this.assertLabelsInWorkspace(workspaceId, labelIds);
+    if (input.parentTaskId) {
+      await this.assertParentEligible(workspaceId, input.projectId, input.parentTaskId);
+    }
 
     const created = await this.db.transaction(async (tx) => {
       // Atomically claim the next per-project number for the human-readable ref.
@@ -210,6 +305,7 @@ export class TasksService {
         .values({
           workspaceId,
           projectId: input.projectId,
+          parentTaskId: input.parentTaskId ?? null,
           number: seq.number,
           title: input.title,
           description: input.description ?? null,
@@ -252,10 +348,27 @@ export class TasksService {
     return this.getOne(created.task.id, actor);
   }
 
+  /** Convenience wrapper: creates a task as a subtask of `parentTaskId`, inheriting its workspace/project. */
+  async createSubtask(parentTaskId: string, actor: Actor, input: CreateSubtaskInput): Promise<TaskDetail> {
+    const parent = await this.loadTaskOrThrow(parentTaskId);
+    await this.workspaces.assertCanAccess(parent.workspaceId, actor);
+    if (parent.parentTaskId) {
+      throw new BadRequestException('A subtask cannot itself have subtasks');
+    }
+    return this.create(parent.workspaceId, actor, {
+      projectId: parent.projectId,
+      parentTaskId: parent.id,
+      title: input.title,
+      assigneeIds: input.assigneeIds,
+      dueDate: input.dueDate,
+    });
+  }
+
   async list(workspaceId: string, actor: Actor, query: TaskQuery): Promise<Paginated<TaskListItem>> {
     await this.workspaces.assertCanAccess(workspaceId, actor);
 
-    const conds = [eq(tasks.workspaceId, workspaceId)];
+    // Subtasks are shown nested under their parent (in the drawer), never as their own board row.
+    const conds = [eq(tasks.workspaceId, workspaceId), isNull(tasks.parentTaskId)];
     if (query.projectId) conds.push(eq(tasks.projectId, query.projectId));
     if (!query.includeArchived) conds.push(eq(tasks.isArchived, false));
     if (query.status) conds.push(eq(tasks.status, query.status));
@@ -323,7 +436,20 @@ export class TasksService {
     const rel = await this.loadRelations([taskId]);
     const base = this.toListItem(task, task.taskPrefix, task.projectName, rel);
     const createdBy = await this.userRef(task.createdById);
-    return { ...base, description: task.description, createdBy };
+
+    const subtaskRows = await this.db
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(eq(tasks.parentTaskId, taskId))
+      .orderBy(asc(tasks.createdAt));
+    const [subtaskRefs, parentRefs] = await Promise.all([
+      this.subtaskRefsFor(subtaskRows.map((r) => r.id)),
+      task.parentTaskId ? this.subtaskRefsFor([task.parentTaskId]) : Promise.resolve(new Map<string, SubtaskRef>()),
+    ]);
+    const subtasks = subtaskRows.map((r) => subtaskRefs.get(r.id)).filter((s): s is SubtaskRef => !!s);
+    const parentTask = task.parentTaskId ? (parentRefs.get(task.parentTaskId) ?? null) : null;
+
+    return { ...base, description: task.description, createdBy, parentTask, subtasks };
   }
 
   async update(taskId: string, actor: Actor, input: UpdateTaskInput): Promise<TaskDetail> {
@@ -457,6 +583,56 @@ export class TasksService {
       );
     });
     return { id: taskId, isArchived: true };
+  }
+
+  /** Recoverable: un-hides a previously archived task. */
+  async restore(taskId: string, actor: Actor): Promise<{ id: string; isArchived: boolean }> {
+    const current = await this.loadTaskOrThrow(taskId);
+    await this.workspaces.assertCanAccess(current.workspaceId, actor);
+    if (!current.isArchived) return { id: taskId, isArchived: false };
+    await this.db.update(tasks).set({ isArchived: false, updatedAt: new Date() }).where(eq(tasks.id, taskId));
+    return { id: taskId, isArchived: false };
+  }
+
+  /**
+   * Permanent, irreversible delete — admin-only. Cascades to the task's own
+   * subtasks/comments/attachments/assignees/labels at the DB level; audit rows
+   * referencing this task survive with `taskId` set to null (ON DELETE SET NULL).
+   */
+  async remove(taskId: string, actor: Actor): Promise<{ id: string }> {
+    if (actor.role !== Role.ADMIN) {
+      throw new ForbiddenException('Only an admin can permanently delete a task');
+    }
+    const current = await this.loadTaskOrThrow(taskId);
+    await this.workspaces.assertCanAccess(current.workspaceId, actor);
+
+    const subtaskRows = await this.db
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(eq(tasks.parentTaskId, taskId));
+    const idsToClean = [taskId, ...subtaskRows.map((r) => r.id)];
+    const attachmentRows = await this.db
+      .select({ storageKey: taskAttachments.storageKey })
+      .from(taskAttachments)
+      .where(inArray(taskAttachments.taskId, idsToClean));
+
+    await this.db.transaction(async (tx) => {
+      await this.audit.record(
+        {
+          workspaceId: current.workspaceId,
+          taskId,
+          userId: actor.id,
+          action: AuditAction.DELETED,
+          beforeValue: { title: current.title, ref: this.ref(current.taskPrefix, current.number) },
+        },
+        tx,
+      );
+      await tx.delete(tasks).where(eq(tasks.id, taskId));
+    });
+
+    // After commit; missing files are tolerated (mirrors removeAttachment).
+    await Promise.all(attachmentRows.map((a) => this.files.remove(a.storageKey).catch(() => undefined)));
+    return { id: taskId };
   }
 
   // ── comments ──────────────────────────────────────────────────────────────

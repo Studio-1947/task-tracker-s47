@@ -1,4 +1,4 @@
-import type { AuditAction, Priority, Role, TaskStatus } from './enums';
+import type { AuditAction, ConversationType, LeaveStatus, Priority, Role, TaskStatus } from './enums';
 
 /** Shape of the authenticated user echoed by the API (never includes passwordHash). */
 export interface AuthUser {
@@ -63,8 +63,12 @@ export interface CreatedUserWithTempPassword extends UserSummary {
 export interface WorkspaceSummary {
   id: string;
   name: string;
+  /** Secondary tagline shown under the name on the card. */
+  subtitle: string | null;
   description: string | null;
   color: string | null;
+  /** Storage key of the small square logo, e.g. "avatars/<uuid>.png"; served via /api/files. */
+  logoKey: string | null;
   isArchived: boolean;
   createdAt: string;
   memberCount?: number;
@@ -114,14 +118,30 @@ export interface TaskListItem {
   labels: LabelRef[];
   commentCount: number;
   attachmentCount: number;
+  /** Non-null when this task is a subtask of another. */
+  parentTaskId: string | null;
+  subtaskCount: number;
+  subtaskDoneCount: number;
   isArchived: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
+/** Compact row for a task's subtask list / a parent-task reference. */
+export interface SubtaskRef {
+  id: string;
+  ref: string;
+  title: string;
+  status: TaskStatus;
+  priority: Priority;
+  assignees: UserRef[];
+}
+
 export interface TaskDetail extends TaskListItem {
   description: string | null;
   createdBy: UserRef;
+  parentTask: SubtaskRef | null;
+  subtasks: SubtaskRef[];
 }
 
 export interface TaskComment {
@@ -262,4 +282,169 @@ export interface UserSession {
   ipAddress: string | null;
   lastActiveAt: string;
   createdAt: string;
+}
+
+/* ── Attendance & leave ── */
+
+export interface LeaveType {
+  id: string;
+  name: string;
+  color: string | null;
+  defaultBalance: number;
+  isActive: boolean;
+}
+
+/** A user's balance for one leave type. `allotted` = per-user override or the type default. */
+export interface LeaveBalance {
+  leaveTypeId: string;
+  typeName: string;
+  color: string | null;
+  allotted: number;
+  used: number;
+  remaining: number;
+}
+
+export interface LeaveRequestItem {
+  id: string;
+  user: UserRef;
+  leaveTypeId: string;
+  typeName: string;
+  color: string | null;
+  startDate: string;
+  endDate: string;
+  halfDay: boolean;
+  days: number;
+  reason: string | null;
+  status: LeaveStatus;
+  reviewedBy: UserRef | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  createdAt: string;
+}
+
+/** A single lat/lng punch location. */
+export interface GeoPoint {
+  lat: number;
+  lng: number;
+  accuracy: number | null;
+}
+
+export interface AttendanceRecordItem {
+  id: string;
+  workDate: string;
+  checkInAt: string;
+  checkOutAt: string | null;
+  checkInLocation: GeoPoint | null;
+  checkOutLocation: GeoPoint | null;
+}
+
+/** Admin team-log row: an attendance record plus the member it belongs to. */
+export interface AttendanceWithUser extends AttendanceRecordItem {
+  user: UserRef;
+}
+
+/** Today's punch state for the check-in/out button. */
+export interface AttendanceToday {
+  workDate: string;
+  checkedIn: boolean;
+  checkedOut: boolean;
+  record: AttendanceRecordItem | null;
+}
+
+/* ── Chat ── */
+
+/** A person you can start a DM with (org-wide directory). */
+export interface ChatContact {
+  id: string;
+  name: string;
+  email: string;
+  avatarKey: string | null;
+  designation: string | null;
+}
+
+export interface ChatAttachment {
+  id: string;
+  /** Server storage key, e.g. "attachments/<uuid>.png"; fetch bytes from /api/chat/<storageKey>. */
+  fileKey: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  conversationId: string;
+  sender: UserRef;
+  /** Null when the message is attachment-only or has been soft-deleted. */
+  body: string | null;
+  attachments: ChatAttachment[];
+  /** Ids of users @mentioned in this message. */
+  mentionIds: string[];
+  editedAt: string | null;
+  deletedAt: string | null;
+  createdAt: string;
+}
+
+export interface ConversationMember {
+  user: UserRef;
+  isAdmin: boolean;
+  lastReadAt: string | null;
+}
+
+/** Compact preview of the most recent message, for the conversation list. */
+export interface ConversationPreview {
+  body: string | null;
+  senderId: string;
+  senderName: string;
+  hasAttachment: boolean;
+  createdAt: string;
+}
+
+/** One row in the conversation list. Title/otherUser are resolved server-side per type. */
+export interface ConversationSummary {
+  id: string;
+  type: ConversationType;
+  /** Group title, project name, or the other person's name (DIRECT) — always display-ready. */
+  title: string;
+  /** For PROJECT conversations. */
+  projectId: string | null;
+  workspaceId: string | null;
+  /** The counterpart in a DIRECT conversation; null for groups/projects. */
+  otherUser: UserRef | null;
+  memberCount: number;
+  lastMessage: ConversationPreview | null;
+  lastMessageAt: string | null;
+  unreadCount: number;
+}
+
+export interface ConversationDetail extends ConversationSummary {
+  members: ConversationMember[];
+}
+
+/* Socket event payloads (server → client) */
+export interface MessageEvent {
+  conversationId: string;
+  message: ChatMessage;
+}
+export interface MessageDeletedEvent {
+  conversationId: string;
+  messageId: string;
+}
+export interface TypingEvent {
+  conversationId: string;
+  userId: string;
+  userName: string;
+  typing: boolean;
+}
+export interface ReadEvent {
+  conversationId: string;
+  userId: string;
+  lastReadAt: string;
+}
+export interface PresenceEvent {
+  userId: string;
+  online: boolean;
+}
+export interface ConversationCreatedEvent {
+  conversation: ConversationSummary;
 }

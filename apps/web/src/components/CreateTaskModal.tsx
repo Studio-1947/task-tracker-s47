@@ -3,6 +3,7 @@ import { PRIORITIES, TASK_STATUSES, type LabelRef, type Priority, type ProjectSu
 import { useCreateTask } from '../hooks/useTasks';
 import { ApiRequestError } from '../lib/api';
 import { statusLabel } from '../lib/format';
+import { AssigneePicker } from './AssigneePicker';
 import { Button, Input } from './ui';
 
 interface Props {
@@ -21,7 +22,7 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
   const [projectId, setProjectId] = useState(defaultProjectId ?? projects[0]?.id ?? '');
   const [status, setStatus] = useState<TaskStatus>('TODO');
   const [priority, setPriority] = useState<Priority>('MEDIUM');
-  const [assigneeId, setAssigneeId] = useState('');
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState('');
   const [labelIds, setLabelIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +37,10 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
       setError('Please select a project');
       return;
     }
+    if (!dueDate) {
+      setError('Please set a due date');
+      return;
+    }
     setError(null);
     try {
       await createTask.mutateAsync({
@@ -45,7 +50,7 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
         status,
         priority,
         dueDate: dueDate ? new Date(dueDate).toISOString() : null,
-        assigneeIds: assigneeId ? [assigneeId] : [],
+        assigneeIds,
         labelIds,
       });
       onClose();
@@ -141,27 +146,23 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
                 ))}
               </select>
             </label>
+            <div className="text-sm">
+              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Assignees</span>
+              <AssigneePicker
+                members={members}
+                selected={members.filter((m) => assigneeIds.includes(m.id))}
+                onChange={setAssigneeIds}
+              />
+            </div>
             <label className="text-sm">
-              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Assignee</span>
-              <select
-                aria-label="Assignee"
-                className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white"
-                value={assigneeId}
-                onChange={(e) => setAssigneeId(e.target.value)}
-              >
-                <option value="">Unassigned</option>
-                {members.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Due date</span>
+              <span className="mb-1 flex items-center gap-0.5 font-medium text-slate-600 dark:text-slate-300">
+                Due date
+                <span className="text-red-500 ml-0.5">*</span>
+              </span>
               <input
                 aria-label="Due date"
                 type="date"
+                required
                 className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}

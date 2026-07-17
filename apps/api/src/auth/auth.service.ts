@@ -30,7 +30,12 @@ export class AuthService {
   }
 
   private signAccess(u: UserRow, sessionId?: string): string {
-    const payload: JwtPayload = { sub: u.id, role: u.role as JwtPayload['role'], tokenVersion: u.tokenVersion, sessionId };
+    const payload: JwtPayload = {
+      sub: u.id,
+      role: u.role as JwtPayload['role'],
+      tokenVersion: u.tokenVersion,
+      sessionId,
+    };
     return this.jwt.sign(payload, {
       secret: this.config.get('JWT_ACCESS_SECRET', { infer: true }),
       expiresIn: this.config.get('JWT_ACCESS_TTL', { infer: true }),
@@ -38,7 +43,12 @@ export class AuthService {
   }
 
   signRefresh(u: UserRow, sessionId?: string): string {
-    const payload: JwtPayload = { sub: u.id, role: u.role as JwtPayload['role'], tokenVersion: u.tokenVersion, sessionId };
+    const payload: JwtPayload = {
+      sub: u.id,
+      role: u.role as JwtPayload['role'],
+      tokenVersion: u.tokenVersion,
+      sessionId,
+    };
     return this.jwt.sign(payload, {
       secret: this.config.get('JWT_REFRESH_SECRET', { infer: true }),
       expiresIn: this.config.get('JWT_REFRESH_TTL', { infer: true }),
@@ -46,7 +56,11 @@ export class AuthService {
   }
 
   private async findByEmail(email: string): Promise<UserRow | undefined> {
-    const [u] = await this.db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
+    const [u] = await this.db
+      .select()
+      .from(users)
+      .where(eq(users.email, email.toLowerCase()))
+      .limit(1);
     return u;
   }
 
@@ -85,7 +99,9 @@ export class AuthService {
   ): Promise<{ tokens: LoginResponse; refreshToken: string }> {
     const user = await this.findByEmail(email);
     // Constant-ish work whether or not the user exists — avoids user enumeration.
-    const hash = user?.passwordHash ?? '$argon2id$v=19$m=65536,t=3,p=4$deadbeefdeadbeef$0000000000000000000000000000000000000000000';
+    const hash =
+      user?.passwordHash ??
+      '$argon2id$v=19$m=65536,t=3,p=4$deadbeefdeadbeef$0000000000000000000000000000000000000000000';
     const ok = await argon2.verify(hash, password).catch(() => false);
 
     if (!user || !ok) throw new UnauthorizedException('Invalid email or password');
@@ -116,7 +132,11 @@ export class AuthService {
 
     let sessionId = payload.sessionId;
     if (sessionId) {
-      const [sess] = await this.db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1);
+      const [sess] = await this.db
+        .select()
+        .from(sessions)
+        .where(eq(sessions.id, sessionId))
+        .limit(1);
       if (!sess) {
         throw new UnauthorizedException('Session is no longer valid');
       }
@@ -144,22 +164,6 @@ export class AuthService {
       tokens: { accessToken: this.signAccess(user, sessionId), user: this.toAuthUser(user) },
       refreshToken: this.signRefresh(user, sessionId),
     };
-  }
-
-  /**
-   * Mint a normal user session for an arbitrary user id WITHOUT a password — used
-   * only by the super-dev console to impersonate a user (reproduce their view).
-   * Deactivated users cannot be impersonated.
-   */
-  async issueSessionForUser(
-    userId: string,
-    userAgent?: string | null,
-    ipAddress?: string | null,
-  ): Promise<{ tokens: LoginResponse; refreshToken: string }> {
-    const user = await this.findById(userId);
-    if (!user) throw new UnauthorizedException('User not found');
-    if (!user.isActive) throw new UnauthorizedException('Account is deactivated');
-    return this.makeSession(user, userAgent, ipAddress);
   }
 
   async me(userId: string): Promise<AuthUser> {

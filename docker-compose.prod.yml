@@ -29,6 +29,8 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      args:
+        CACHEBUST: ${CACHEBUST:-1}
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -68,6 +70,7 @@ services:
       args:
         # Baked into the static build at image-build time.
         VITE_API_URL: ${CORS_ORIGIN:-http://localhost}/api
+        CACHEBUST: ${CACHEBUST:-1}
     restart: unless-stopped
     ports:
       - '${WEB_PORT:-8080}:80'

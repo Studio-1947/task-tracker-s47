@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { AuthUser } from '@task-tracker/shared';
 import { http, setAccessToken } from '../lib/api';
+import { disconnectSocket } from '../lib/socket';
 
 interface AuthState {
   user: AuthUser | null;
@@ -35,6 +36,7 @@ export const useAuth = create<AuthState>((set) => ({
     try {
       await http.post('/auth/logout');
     } finally {
+      disconnectSocket();
       setAccessToken(null);
       set({ user: null, status: 'anonymous' });
     }

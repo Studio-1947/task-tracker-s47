@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   createColumnHelper,
   flexRender,
@@ -18,15 +18,18 @@ import {
 } from '../hooks/useTasks';
 import { useLabels } from '../hooks/useLabels';
 import { useProjects } from '../hooks/useProjects';
+import { useEnsureProjectConversation } from '../hooks/useChat';
 import { useAuth } from '../stores/auth';
 import { formatDate, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
 import { ApiRequestError } from '../lib/api';
-import { Badge, Button, Card, EmptyState, ErrorState, Input, LabelChip, Spinner } from '../components/ui';
+import { Button, Card, EmptyState, ErrorState, Input, LabelChip, Spinner } from '../components/ui';
+import { AvatarStack } from '../components/AvatarStack';
 import { TaskDrawer } from '../components/TaskDrawer';
 import { KanbanView } from '../components/KanbanView';
 import { CreateTaskModal } from '../components/CreateTaskModal';
 import { CreateProjectModal } from '../components/CreateProjectModal';
 import { WorkspaceSettings } from '../components/WorkspaceSettings';
+import { DueDateProgress, urgencyScore } from '../components/DueDateProgress';
 
 type View = 'list' | 'table' | 'kanban';
 
@@ -66,6 +69,12 @@ function Board({ workspaceId }: { workspaceId: string }) {
   const [showCreate, setShowCreate] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const navigate = useNavigate();
+  const ensureProjectConv = useEnsureProjectConversation();
+  const openProjectChat = async (projectId: string) => {
+    const conv = await ensureProjectConv.mutateAsync(projectId);
+    navigate(`/chat?c=${conv.id}`);
+  };
 
   // Project scope is navigational (?project=), not a persisted filter.
   const selectedProjectId = searchParams.get('project') ?? '';
@@ -81,11 +90,25 @@ function Board({ workspaceId }: { workspaceId: string }) {
   const [quickProjectId, setQuickProjectId] = useState('');
   const targetProjectId = selectedProjectId || quickProjectId || activeProjects[0]?.id || '';
 
+  // "urgency" is a computed score (time × priority), not a DB column, so the API
+  // can't sort by it. Fetch with a neutral backend sort and re-order the page
+  // client-side below. (Scope: sorts within the current page.)
+  const isUrgencySort = filters.sort === 'urgency';
+  const apiFilters: TaskFilters = isUrgencySort
+    ? { ...filters, sort: 'dueDate', order: 'asc' }
+    : filters;
+
   const { data, isLoading, error } = useTasks(workspaceId, {
-    ...filters,
+    ...apiFilters,
     projectId: selectedProjectId || undefined,
     page,
   });
+
+  const displayTasks = useMemo(() => {
+    if (!data) return [];
+    if (!isUrgencySort) return data.items;
+    return [...data.items].sort((a, b) => urgencyScore(b) - urgencyScore(a));
+  }, [data, isUrgencySort]);
 
   const paramTaskId = searchParams.get('task');
   useEffect(() => {
@@ -109,7 +132,16 @@ function Board({ workspaceId }: { workspaceId: string }) {
   // Reset to page 1 whenever a filter changes.
   useEffect(() => {
     setPage(1);
-  }, [filters.status, filters.assigneeId, filters.labelId, filters.search, filters.sort, filters.order, filters.pageSize]);
+  }, [
+    filters.status,
+    filters.assigneeId,
+    filters.labelId,
+    filters.search,
+    filters.sort,
+    filters.order,
+    filters.pageSize,
+    filters.includeArchived,
+  ]);
 
   const createTask = useCreateTask(workspaceId);
   const [newTitle, setNewTitle] = useState('');
@@ -120,7 +152,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
   );
 
   const filtersActive =
-    !!filters.search || !!filters.status || !!filters.assigneeId || !!filters.labelId;
+    !!filters.search || !!filters.status || !!filters.assigneeId || !!filters.labelId || !!filters.includeArchived;
 
   const pageSize = data?.pageSize ?? 15;
   const totalPages = data ? Math.max(1, Math.ceil(data.total / pageSize)) : 1;
@@ -193,6 +225,20 @@ function Board({ workspaceId }: { workspaceId: string }) {
           >
             + New project
           </button>
+          {selectedProjectId ? (
+            <button
+              type="button"
+              onClick={() => void openProjectChat(selectedProjectId)}
+              disabled={ensureProjectConv.isPending}
+              title="Open this project's chat channel"
+              className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-100 disabled:opacity-50 dark:bg-indigo-950/30 dark:text-indigo-400 dark:hover:bg-indigo-950/50 transition-colors cursor-pointer"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              Open chat
+            </button>
+          ) : null}
         </div>
 
         {/* Create + filters */}
@@ -273,11 +319,36 @@ function Board({ workspaceId }: { workspaceId: string }) {
                 </option>
               ))}
             </select>
+            <label className="flex w-full items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 lg:w-auto cursor-pointer">
+              <input
+                type="checkbox"
+                className="cursor-pointer accent-indigo-600"
+                checked={!!filters.includeArchived}
+                onChange={(e) => setFilters((f) => ({ ...f, includeArchived: e.target.checked }))}
+              />
+              Show archived
+            </label>
             {filtersActive ? (
               <Button variant="ghost" className="w-full lg:w-auto text-xs py-2 px-3" onClick={() => setFilters({ ...DEFAULT_FILTERS })}>
                 Reset filters
               </Button>
             ) : null}
+            {/* H — Urgency sort */}
+            <select
+              aria-label="Sort by"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 px-3 py-2 text-xs text-slate-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all lg:w-auto"
+              value={`${filters.sort ?? 'createdAt'}:${filters.order ?? 'desc'}`}
+              onChange={(e) => {
+                const [sort, order] = e.target.value.split(':') as [string, 'asc' | 'desc'];
+                setFilters((f) => ({ ...f, sort, order }));
+              }}
+            >
+              <option value="createdAt:desc">Newest first</option>
+              <option value="createdAt:asc">Oldest first</option>
+              <option value="dueDate:asc">Due date ↑</option>
+              <option value="dueDate:desc">Due date ↓</option>
+              <option value="urgency:desc">⚡ Urgency (highest first)</option>
+            </select>
           </div>
         </Card>
 
@@ -299,13 +370,13 @@ function Board({ workspaceId }: { workspaceId: string }) {
               }
             />
           ) : view === 'list' ? (
-            <ListView tasks={data.items} onOpen={setOpenTaskId} showProject={!selectedProjectId} />
+            <ListView tasks={displayTasks} onOpen={setOpenTaskId} showProject={!selectedProjectId} workspaceId={workspaceId} />
           ) : view === 'table' ? (
-            <TableView tasks={data.items} onOpen={setOpenTaskId} showProject={!selectedProjectId} />
+            <TableView tasks={displayTasks} onOpen={setOpenTaskId} showProject={!selectedProjectId} workspaceId={workspaceId} />
           ) : (
             <KanbanView
               workspaceId={workspaceId}
-              tasks={data.items}
+              tasks={displayTasks}
               onOpen={setOpenTaskId}
               showProject={!selectedProjectId}
             />
@@ -355,6 +426,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
           members={memberRefs}
           labels={labels ?? []}
           onClose={closeTask}
+          onOpenTask={setOpenTaskId}
         />
       ) : null}
       {showCreate ? (
@@ -414,15 +486,88 @@ function ProjectPill({
 }
 
 function StatusBadge({ t }: { t: TaskListItem }) {
-  return <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${statusClasses[t.status]}`}>{statusLabel(t.status)}</span>;
+  const icon = {
+    TODO: (
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+        <circle cx="12" cy="12" r="10" />
+      </svg>
+    ),
+    IN_PROGRESS: (
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+        <path d="M21 12a9 9 0 1 1-9-9" />
+      </svg>
+    ),
+    IN_REVIEW: (
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    ),
+    DONE: (
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" className="shrink-0">
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+    ),
+  }[t.status];
+
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${statusClasses[t.status]}`}>
+      {icon}
+      {statusLabel(t.status)}
+    </span>
+  );
 }
+
 function PriorityBadge({ t }: { t: TaskListItem }) {
-  return <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${priorityClasses[t.priority]}`}>{t.priority}</span>;
+  const icon = {
+    LOW: (
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+        <path d="M12 5v14M19 12l-7 7-7-7" />
+      </svg>
+    ),
+    MEDIUM: (
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+        <path d="M5 12h14" />
+      </svg>
+    ),
+    HIGH: (
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+        <path d="M12 19V5M5 12l7-7 7 7" />
+      </svg>
+    ),
+    URGENT: (
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+        <path d="m18 17-6-6-6 6M18 12l-6-6-6 6" />
+      </svg>
+    ),
+  }[t.priority];
+
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${priorityClasses[t.priority]}`}>
+      {icon}
+      {t.priority}
+    </span>
+  );
+}
+
+function SubtaskProgress({ count, done }: { count: number; done: number }) {
+  return (
+    <span className="shrink-0 inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-80 shrink-0">
+        <polyline points="9 11 12 14 22 4" />
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+      </svg>
+      {done}/{count}
+    </span>
+  );
 }
 
 function ProjectTag({ name }: { name: string }) {
   return (
-    <span className="shrink-0 rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+    <span className="shrink-0 inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-80 shrink-0">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+      </svg>
       {name}
     </span>
   );
@@ -432,10 +577,12 @@ function ListView({
   tasks,
   onOpen,
   showProject,
+  workspaceId,
 }: {
   tasks: TaskListItem[];
   onOpen: (id: string) => void;
   showProject?: boolean;
+  workspaceId: string;
 }) {
   return (
     <div className="space-y-2.5">
@@ -444,9 +591,9 @@ function ListView({
           key={t.id}
           type="button"
           onClick={() => onOpen(t.id)}
-          className="w-full rounded-xl border border-slate-100 bg-white/70 dark:border-slate-800/40 dark:bg-slate-900/30 p-3.5 text-left hover:border-indigo-500 dark:hover:border-indigo-500/50 hover:shadow-md hover:shadow-indigo-500/[0.01] hover:-translate-y-0.5 transition-all duration-150 sm:flex sm:items-center sm:gap-4 sm:px-5"
+          className="w-full rounded-xl border border-slate-100 bg-white/70 dark:border-slate-800/40 dark:bg-slate-900/30 p-3.5 text-left hover:border-indigo-500 dark:hover:border-indigo-500/50 hover:shadow-md hover:shadow-indigo-500/[0.01] hover:-translate-y-0.5 transition-all duration-150 flex flex-col sm:px-5"
         >
-          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-4 sm:flex-1 min-w-0">
+          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-4 sm:flex-1 min-w-0 w-full">
             {/* Primary Row: Ref, Title, Mobile Status */}
             <div className="flex items-center justify-between sm:justify-start gap-3 min-w-0 sm:flex-1">
               <span className="font-mono text-xs text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded w-16 text-center shrink-0">{t.ref}</span>
@@ -459,6 +606,12 @@ function ListView({
             {/* Metadata Row: project, labels, assignee, due date, priority, status */}
             <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:shrink-0 sm:gap-4">
               {showProject ? <ProjectTag name={t.projectName} /> : null}
+              {t.isArchived ? (
+                <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+                  Archived
+                </span>
+              ) : null}
+              {t.subtaskCount > 0 ? <SubtaskProgress count={t.subtaskCount} done={t.subtaskDoneCount} /> : null}
               {t.labels.length > 0 ? (
                 <div className="flex flex-wrap gap-1 sm:hidden lg:flex">
                   {t.labels.slice(0, 2).map((l) => (
@@ -466,15 +619,22 @@ function ListView({
                   ))}
                 </div>
               ) : null}
-              {t.assignees[0] ? (
-                <span className="sm:hidden md:inline-flex">
-                  <Badge>{t.assignees[0].name}</Badge>
+              {t.assignees.length ? (
+                <span className="sm:hidden md:inline-flex items-center gap-1.5 rounded-full bg-slate-100/60 dark:bg-slate-800/40 px-2 py-0.5 text-[10px] font-semibold text-slate-650 dark:text-slate-350 border border-slate-200/30 dark:border-slate-700/50 shadow-xs">
+                  <AvatarStack users={t.assignees} max={3} />
+                  <span>{t.assignees.length === 1 ? t.assignees[0]!.name : `${t.assignees.length} assignees`}</span>
                 </span>
               ) : null}
               {t.dueDate ? (
                 <span
-                  className={`text-xs font-semibold ${isOverdue(t.dueDate) ? 'text-red-500 dark:text-red-400' : 'text-slate-450 dark:text-slate-500'}`}
+                  className={`inline-flex items-center gap-1.5 text-xs font-semibold ${isOverdue(t.dueDate) ? 'text-red-500 dark:text-red-400' : 'text-slate-450 dark:text-slate-500'}`}
                 >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-80 shrink-0">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
                   {formatDate(t.dueDate)}
                 </span>
               ) : null}
@@ -484,6 +644,8 @@ function ListView({
               </span>
             </div>
           </div>
+          {/* Due date progress bar — features A-E, I */}
+          <DueDateProgress t={t} workspaceId={workspaceId} />
         </button>
       ))}
     </div>
@@ -496,10 +658,12 @@ function TableView({
   tasks,
   onOpen,
   showProject,
+  workspaceId,
 }: {
   tasks: TaskListItem[];
   onOpen: (id: string) => void;
   showProject?: boolean;
+  workspaceId: string;
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const columns = useMemo(
@@ -516,10 +680,22 @@ function TableView({
         : []),
       columnHelper.accessor('status', { header: 'Status', cell: (c) => <StatusBadge t={c.row.original} /> }),
       columnHelper.accessor('priority', { header: 'Priority', cell: (c) => <PriorityBadge t={c.row.original} /> }),
-      columnHelper.accessor((r) => r.assignees[0]?.name ?? '', {
+      columnHelper.accessor((r) => r.assignees, {
         id: 'assignee',
-        header: 'Assignee',
-        cell: (c) => <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">{c.getValue() || '—'}</span>,
+        header: 'Assignees',
+        cell: (c) => {
+          const assignees = c.getValue();
+          if (assignees.length === 0)
+            return <span className="text-slate-455 dark:text-slate-600 font-medium">—</span>;
+          return (
+            <span className="inline-flex items-center gap-2 font-semibold text-slate-650 dark:text-slate-350">
+              <AvatarStack users={assignees} max={3} />
+              <span className="whitespace-nowrap">
+                {assignees.length === 1 ? assignees[0]!.name : `${assignees.length} assignees`}
+              </span>
+            </span>
+          );
+        },
       }),
       columnHelper.accessor('dueDate', {
         header: 'Due',
@@ -529,8 +705,14 @@ function TableView({
           </span>
         ),
       }),
+      // F — Timeline column with mini progress bar
+      columnHelper.display({
+        id: 'timeline',
+        header: 'Timeline',
+        cell: (c) => <DueDateProgress t={c.row.original} workspaceId={workspaceId} />,
+      }),
     ],
-    [showProject],
+    [showProject, workspaceId],
   );
 
   const table = useReactTable({

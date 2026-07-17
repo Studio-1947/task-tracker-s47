@@ -30,7 +30,7 @@ export class AuthController {
       secure: isProd,
       sameSite: 'lax',
       domain: this.config.get('COOKIE_DOMAIN', { infer: true }),
-      path: '/auth',
+      path: '/api/auth',
       maxAge: 7 * 24 * 60 * 60 * 1000, // mirror JWT_REFRESH_TTL default (7d)
     };
   }

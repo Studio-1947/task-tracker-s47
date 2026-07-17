@@ -22,10 +22,12 @@ import type { Response } from 'express';
 import { memoryStorage } from 'multer';
 import {
   createCommentSchema,
+  createSubtaskSchema,
   createTaskSchema,
   taskQuerySchema,
   updateTaskSchema,
   type CreateCommentInput,
+  type CreateSubtaskInput,
   type CreateTaskInput,
   type TaskQuery,
   type UpdateTaskInput,
@@ -80,8 +82,27 @@ export class TasksController {
   }
 
   @Delete(':id')
+  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.tasks.remove(id, user);
+  }
+
+  @Post(':id/archive')
   archive(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
     return this.tasks.archive(id, user);
+  }
+
+  @Post(':id/restore')
+  restore(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.tasks.restore(id, user);
+  }
+
+  @Post(':id/subtasks')
+  createSubtask(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(createSubtaskSchema)) body: CreateSubtaskInput,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.tasks.createSubtask(id, user, body);
   }
 
   @Get(':id/comments')

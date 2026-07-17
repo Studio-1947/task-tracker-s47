@@ -12,6 +12,12 @@ export default defineConfig({
         target: process.env.VITE_API_URL ?? 'http://localhost:3000',
         changeOrigin: true,
       },
+      // Socket.IO (chat realtime) — served at /socket.io on the API, needs ws upgrade.
+      '/socket.io': {
+        target: process.env.VITE_API_URL ?? 'http://localhost:3000',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
 });

@@ -14,7 +14,9 @@ import { CSS } from '@dnd-kit/utilities';
 import { TASK_STATUSES, type TaskListItem, type TaskStatus } from '@task-tracker/shared';
 import { useUpdateTask } from '../hooks/useTasks';
 import { formatDate, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
+import { AvatarStack } from './AvatarStack';
 import { LabelChip } from './ui';
+import { DueDateProgress } from './DueDateProgress';
 
 interface Props {
   workspaceId: string;
@@ -62,10 +64,11 @@ export function KanbanView({ workspaceId, tasks, onOpen, showProject }: Props) {
             tasks={byStatus[status] ?? []}
             onOpen={onOpen}
             showProject={showProject}
+            workspaceId={workspaceId}
           />
         ))}
       </div>
-      <DragOverlay>{activeTask ? <Card task={activeTask} overlay showProject={showProject} /> : null}</DragOverlay>
+      <DragOverlay>{activeTask ? <Card task={activeTask} overlay showProject={showProject} workspaceId={workspaceId} /> : null}</DragOverlay>
     </DndContext>
   );
 }
@@ -75,11 +78,13 @@ function Column({
   tasks,
   onOpen,
   showProject,
+  workspaceId,
 }: {
   status: TaskStatus;
   tasks: TaskListItem[];
   onOpen: (id: string) => void;
   showProject?: boolean;
+  workspaceId: string;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   return (
@@ -97,7 +102,7 @@ function Column({
         }`}
       >
         {tasks.map((t) => (
-          <DraggableCard key={t.id} task={t} onOpen={onOpen} showProject={showProject} />
+          <DraggableCard key={t.id} task={t} onOpen={onOpen} showProject={showProject} workspaceId={workspaceId} />
         ))}
         {tasks.length === 0 ? (
           <div className="py-8 text-center text-xs font-semibold uppercase tracking-wider text-slate-350 dark:text-slate-600 border border-dashed border-slate-200/60 dark:border-[#2d2d2d] rounded-xl bg-white/30 dark:bg-[#1a1a1a]/10">Drop target</div>
@@ -111,10 +116,12 @@ function DraggableCard({
   task,
   onOpen,
   showProject,
+  workspaceId,
 }: {
   task: TaskListItem;
   onOpen: (id: string) => void;
   showProject?: boolean;
+  workspaceId: string;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id });
   const style = { transform: CSS.Translate.toString(transform), opacity: isDragging ? 0.4 : 1 };
@@ -127,12 +134,12 @@ function DraggableCard({
       onClick={() => onOpen(task.id)}
       className="cursor-grab touch-none rounded-xl border border-slate-150/60 dark:border-[#2d2d2d] bg-white dark:bg-[#1e1e1e] p-4 shadow-[0_2px_8px_-2px_rgba(15,23,42,0.02)] active:cursor-grabbing hover:border-indigo-400 dark:hover:border-indigo-500/40 transition duration-150"
     >
-      <Card task={task} showProject={showProject} />
+      <Card task={task} showProject={showProject} workspaceId={workspaceId} />
     </div>
   );
 }
 
-function Card({ task, overlay = false, showProject }: { task: TaskListItem; overlay?: boolean; showProject?: boolean }) {
+function Card({ task, overlay = false, showProject, workspaceId }: { task: TaskListItem; overlay?: boolean; showProject?: boolean; workspaceId: string }) {
   return (
     <div className={overlay ? 'w-64 rounded-xl border border-indigo-400 bg-white dark:bg-[#1e1e1e] p-4 shadow-xl dark:shadow-none' : ''}>
       <div className="flex items-center justify-between gap-2">
@@ -147,6 +154,15 @@ function Card({ task, overlay = false, showProject }: { task: TaskListItem; over
         </span>
       </div>
       <p className="mt-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200 leading-snug break-words">{task.title}</p>
+      {task.subtaskCount > 0 ? (
+        <span className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-[#252525] px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-80 shrink-0">
+            <polyline points="9 11 12 14 22 4" />
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+          </svg>
+          {task.subtaskDoneCount}/{task.subtaskCount} subtasks
+        </span>
+      ) : null}
       {task.labels.length ? (
         <div className="mt-2.5 flex flex-wrap gap-1">
           {task.labels.slice(0, 3).map((l) => (
@@ -154,20 +170,28 @@ function Card({ task, overlay = false, showProject }: { task: TaskListItem; over
           ))}
         </div>
       ) : null}
-      <div className="mt-3.5 flex items-center justify-between text-[11px] font-semibold">
-        <span className="truncate text-slate-500 dark:text-slate-400 flex items-center gap-1">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-            <circle cx="12" cy="7" r="4" />
-          </svg>
-          {task.assignees[0]?.name ?? 'Unassigned'}
-        </span>
+      <div className="mt-3.5 flex items-center justify-between gap-2 text-[11px] font-semibold">
+        {task.assignees.length ? (
+          <span className="flex min-w-0 items-center gap-1.5 text-slate-500 dark:text-slate-400">
+            <AvatarStack users={task.assignees} max={3} />
+            {task.assignees.length === 1 ? <span className="truncate">{task.assignees[0]!.name}</span> : null}
+          </span>
+        ) : (
+          <span className="truncate text-slate-500 dark:text-slate-400 flex items-center gap-1">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+            Unassigned
+          </span>
+        )}
         {task.dueDate ? (
           <span className={isOverdue(task.dueDate) ? 'text-red-500 dark:text-red-400 font-bold' : 'text-slate-400 dark:text-slate-500'}>
             {formatDate(task.dueDate)}
           </span>
         ) : null}
       </div>
+      <DueDateProgress t={task} workspaceId={workspaceId} />
     </div>
   );
 }
