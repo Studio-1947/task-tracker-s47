@@ -81,3 +81,13 @@ export const AuditAction = {
 } as const;
 export type AuditAction = (typeof AuditAction)[keyof typeof AuditAction];
 export const AUDIT_ACTIONS = Object.values(AuditAction);
+
+export const NotificationType = {
+  TASK_ASSIGNED: 'TASK_ASSIGNED',
+  TASK_STATUS_CHANGED: 'TASK_STATUS_CHANGED',
+  TASK_COMMENT: 'TASK_COMMENT',
+  TASK_DUE_SOON: 'TASK_DUE_SOON',
+} as const;
+export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
+export const NOTIFICATION_TYPES = Object.values(NotificationType);
+
