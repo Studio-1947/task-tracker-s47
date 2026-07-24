@@ -5,6 +5,11 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { queryClient } from './lib/queryClient';
 import './index.css';
+import { registerSW } from 'virtual:pwa-register';
+
+// Boot service worker with auto-update
+registerSW({ immediate: true });
+
 
 const rootEl = document.getElementById('root');
 if (!rootEl) throw new Error('Root element #root not found');

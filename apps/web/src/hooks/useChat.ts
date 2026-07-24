@@ -351,6 +351,9 @@ export function useChatBridge(): void {
     const onPresence = ({ userId, online }: PresenceEvent) => ui.getState().setPresence(userId, online);
     const onConversationNew = () => void qc.invalidateQueries({ queryKey: keys.conversations });
     const onMention = () => void qc.invalidateQueries({ queryKey: keys.conversations });
+    const onNotificationNew = () => {
+      void qc.invalidateQueries({ queryKey: ['notifications'] });
+    };
 
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
@@ -362,6 +365,7 @@ export function useChatBridge(): void {
     socket.on('presence', onPresence);
     socket.on('conversation:new', onConversationNew);
     socket.on('mention', onMention);
+    socket.on('notification:new', onNotificationNew);
     if (socket.connected) onConnect();
 
     return () => {
@@ -375,7 +379,9 @@ export function useChatBridge(): void {
       socket.off('presence', onPresence);
       socket.off('conversation:new', onConversationNew);
       socket.off('mention', onMention);
+      socket.off('notification:new', onNotificationNew);
     };
+
   }, [status, qc, ui]);
 }
 
