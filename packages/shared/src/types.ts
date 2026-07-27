@@ -6,6 +6,7 @@ import type {
   Priority,
   Role,
   TaskStatus,
+  NotificationType,
 } from './enums';
 
 /** Shape of the authenticated user echoed by the API (never includes passwordHash). */
@@ -478,3 +479,29 @@ export interface PresenceEvent {
 export interface ConversationCreatedEvent {
   conversation: ConversationSummary;
 }
+
+/* ── Notifications ── */
+export interface NotificationItem {
+  id: string;
+  userId: string;
+  sender: UserRef | null;
+  type: NotificationType;
+  title: string;
+  message: string;
+  data: Record<string, any> | null;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface NotificationSubscriptionInput {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+}
+
+export interface NotificationCreatedEvent {
+  notification: NotificationItem;
+}
+

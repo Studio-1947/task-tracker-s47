@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { and, asc, count, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type {
   AuditEntry,
@@ -36,17 +36,23 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { FilesService } from '../files/files.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 type Actor = { id: string; role: string };
 
 @Injectable()
 export class TasksService {
+  private readonly logger = new Logger(TasksService.name);
+
+
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly workspaces: WorkspacesService,
     private readonly audit: AuditService,
     private readonly files: FilesService,
+    private readonly notifications: NotificationsService,
   ) {}
+
 
   // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -348,8 +354,28 @@ export class TasksService {
       return { task, prefix: seq.prefix };
     });
 
-    return this.getOne(created.task.id, actor);
+    const detail = await this.getOne(created.task.id, actor);
+
+    // Trigger Notification for assignees
+    if (assigneeIds.length > 0) {
+      const taskRef = detail.ref;
+      for (const assigneeId of assigneeIds) {
+        if (assigneeId !== actor.id) {
+          void this.notifications.createNotification(
+            assigneeId,
+            actor.id,
+            'TASK_ASSIGNED',
+            'New Task Assigned',
+            `You have been assigned to task ${taskRef}: "${detail.title}"`,
+            { taskId: detail.id, workspaceId, taskRef },
+          ).catch((err) => this.logger.error(`Failed to trigger notification: ${err.message}`));
+        }
+      }
+    }
+
+    return detail;
   }
+
 
   /** Convenience wrapper: creates a task as a subtask of `parentTaskId`, inheriting its workspace/project. */
   async createSubtask(parentTaskId: string, actor: Actor, input: CreateSubtaskInput): Promise<TaskDetail> {
@@ -570,8 +596,45 @@ export class TasksService {
       }
     });
 
-    return this.getOne(taskId, actor);
+    const detail = await this.getOne(taskId, actor);
+
+    // Trigger Notification for new assignees
+    if (input.assigneeIds) {
+      const addedAssignees = input.assigneeIds.filter((id) => !currentAssignees.includes(id));
+      for (const assigneeId of addedAssignees) {
+        if (assigneeId !== actor.id) {
+          void this.notifications.createNotification(
+            assigneeId,
+            actor.id,
+            'TASK_ASSIGNED',
+            'New Task Assigned',
+            `You have been assigned to task ${detail.ref}: "${detail.title}"`,
+            { taskId, workspaceId: current.workspaceId, taskRef: detail.ref },
+          ).catch((err) => this.logger.error(`Failed to trigger notification: ${err.message}`));
+        }
+      }
+    }
+
+    // Trigger Notification for status changes
+    if (input.status !== undefined && input.status !== current.status) {
+      const taskAssigneesList = detail.assignees;
+      for (const assignee of taskAssigneesList) {
+        if (assignee.id !== actor.id) {
+          void this.notifications.createNotification(
+            assignee.id,
+            actor.id,
+            'TASK_STATUS_CHANGED',
+            'Task Status Updated',
+            `Task ${detail.ref} status was updated to "${input.status}"`,
+            { taskId, workspaceId: current.workspaceId, taskRef: detail.ref },
+          ).catch((err) => this.logger.error(`Failed to trigger notification: ${err.message}`));
+        }
+      }
+    }
+
+    return detail;
   }
+
 
   async archive(taskId: string, actor: Actor): Promise<{ id: string; isArchived: boolean }> {
     const current = await this.loadTaskOrThrow(taskId);
@@ -674,8 +737,50 @@ export class TasksService {
     });
 
     const user = await this.userRef(actor.id);
-    return { id: comment.id, body: comment.body, user, createdAt: comment.createdAt.toISOString() };
+    const commentDetail = { id: comment.id, body: comment.body, user, createdAt: comment.createdAt.toISOString() };
+
+    // Trigger Notification for comment in the background
+    void (async () => {
+      try {
+        const assigneeRows = await this.db
+          .select({ userId: taskAssignees.userId })
+          .from(taskAssignees)
+          .where(eq(taskAssignees.taskId, taskId));
+        const assigneeIds = assigneeRows.map((r) => r.userId);
+
+        const previousCommentersRows = await this.db
+          .select({ userId: taskComments.userId })
+          .from(taskComments)
+          .where(eq(taskComments.taskId, taskId));
+        const previousCommenterIds = previousCommentersRows.map((r) => r.userId);
+
+        const recipients = new Set<string>([
+          ...assigneeIds,
+          current.createdById,
+          ...previousCommenterIds,
+        ]);
+        recipients.delete(actor.id); // Don't notify the actor who commented
+
+        const taskRef = this.ref(current.taskPrefix, current.number);
+
+        for (const recipientId of recipients) {
+          await this.notifications.createNotification(
+            recipientId,
+            actor.id,
+            'TASK_COMMENT',
+            'New Comment on Task',
+            `New comment from ${user.name} on task ${taskRef}: "${current.title}"`,
+            { taskId, workspaceId: current.workspaceId, commentId: comment.id, taskRef },
+          );
+        }
+      } catch (err: any) {
+        this.logger.error(`Failed to trigger comment notifications: ${err.message}`);
+      }
+    })();
+
+    return commentDetail;
   }
+
 
   async listComments(taskId: string, actor: Actor): Promise<TaskComment[]> {
     const current = await this.loadTaskOrThrow(taskId);

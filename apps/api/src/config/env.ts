@@ -13,7 +13,11 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
   /** Directory for uploaded files (avatars, attachments); relative paths resolve against cwd. */
   UPLOAD_DIR: z.string().default('uploads'),
+  VAPID_SUBJECT: z.string().default('mailto:admin@example.com'),
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
 });
+
 
 export type Env = z.infer<typeof envSchema>;
 

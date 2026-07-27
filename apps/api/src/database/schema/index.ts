@@ -9,3 +9,5 @@ export * from './audit';
 export * from './sessions';
 export * from './attendance';
 export * from './chat';
+export * from './notifications';
+

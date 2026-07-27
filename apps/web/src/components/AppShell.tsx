@@ -7,6 +7,7 @@ import { GlobalSearch } from './GlobalSearch';
 import { Topbar } from './Topbar';
 import { Button } from './ui';
 import { ThemeToggle } from './ThemeToggle';
+import { NotificationCenter } from './NotificationCenter';
 
 const nav = [
   {
@@ -213,6 +214,7 @@ export function AppShell() {
               <line x1="21" y1="21" x2="16.5" y2="16.5" />
             </svg>
           </button>
+          <NotificationCenter />
           <button
             type="button"
             aria-label="Open menu"
