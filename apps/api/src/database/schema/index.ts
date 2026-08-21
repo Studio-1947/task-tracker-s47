@@ -10,3 +10,4 @@ export * from './sessions';
 export * from './attendance';
 export * from './chat';
 export * from './meetings';
+export * from './notifications';

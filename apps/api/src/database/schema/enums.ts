@@ -10,6 +10,7 @@ import {
   MEETING_SLOTS,
   BOARD_ITEM_STATUSES,
   MOOD_LEVELS,
+  NOTIFICATION_TYPES,
 } from '@task-tracker/shared';
 
 // Postgres enums derived from the shared TS enums (single source of truth).
@@ -23,3 +24,4 @@ export const attachmentKindEnum = pgEnum('attachment_kind', ATTACHMENT_KINDS as 
 export const meetingSlotEnum = pgEnum('meeting_slot', MEETING_SLOTS as [string, ...string[]]);
 export const boardItemStatusEnum = pgEnum('board_item_status', BOARD_ITEM_STATUSES as [string, ...string[]]);
 export const moodLevelEnum = pgEnum('mood_level', MOOD_LEVELS as [string, ...string[]]);
+export const notificationTypeEnum = pgEnum('notification_type', NOTIFICATION_TYPES as [string, ...string[]]);

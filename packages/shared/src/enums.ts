@@ -130,3 +130,11 @@ export const MOOD_META: Record<MoodLevel, { label: string; emoji: string; color:
   LOW: { label: 'Low', emoji: '😕', color: '#f97316' },
   BLOCKED: { label: 'Blocked', emoji: '😣', color: '#ef4444' },
 };
+export const NotificationType = {
+  TASK_ASSIGNED: 'TASK_ASSIGNED',
+  TASK_STATUS_CHANGED: 'TASK_STATUS_CHANGED',
+  TASK_COMMENT: 'TASK_COMMENT',
+  TASK_DUE_SOON: 'TASK_DUE_SOON',
+} as const;
+export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
+export const NOTIFICATION_TYPES = Object.values(NotificationType);

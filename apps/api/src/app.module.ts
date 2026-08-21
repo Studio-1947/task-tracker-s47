@@ -18,6 +18,7 @@ import { FilesModule } from './files/files.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { ChatModule } from './chat/chat.module';
 import { MeetingsModule } from './meetings/meetings.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -48,7 +49,9 @@ import { HealthController } from './health/health.controller';
     AttendanceModule,
     ChatModule,
     MeetingsModule,
+    NotificationsModule,
   ],
+
   controllers: [HealthController],
   providers: [
     // Auth-by-default: JwtAuthGuard runs globally; opt out with @Public().
