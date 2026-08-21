@@ -17,6 +17,7 @@ import { SearchModule } from './search/search.module';
 import { FilesModule } from './files/files.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { ChatModule } from './chat/chat.module';
+import { MeetingsModule } from './meetings/meetings.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -46,6 +47,7 @@ import { HealthController } from './health/health.controller';
     FilesModule,
     AttendanceModule,
     ChatModule,
+    MeetingsModule,
   ],
   controllers: [HealthController],
   providers: [

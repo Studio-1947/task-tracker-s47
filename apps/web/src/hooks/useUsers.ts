@@ -8,10 +8,12 @@ import type {
 } from '@task-tracker/shared';
 import { http } from '../lib/api';
 
-export function useUsers() {
+/** Admin-only endpoint — pass `enabled: false` from member-facing screens. */
+export function useUsers(enabled = true) {
   return useQuery({
     queryKey: ['users'],
     queryFn: () => http.get<UserSummary[]>('/users'),
+    enabled,
   });
 }
 

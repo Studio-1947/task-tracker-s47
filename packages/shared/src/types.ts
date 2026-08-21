@@ -1,8 +1,11 @@
 import type {
   AttachmentKind,
   AuditAction,
+  BoardItemStatus,
   ConversationType,
   LeaveStatus,
+  MeetingSlot,
+  MoodLevel,
   Priority,
   Role,
   TaskStatus,
@@ -477,4 +480,92 @@ export interface PresenceEvent {
 }
 export interface ConversationCreatedEvent {
   conversation: ConversationSummary;
+}
+
+/* ── Weekly meeting mood board ── */
+
+/** One card placed in a day/half cell of the week board. */
+export interface BoardItem {
+  id: string;
+  boardId: string;
+  user: UserRef;
+  /** YYYY-MM-DD — always a working day inside the board's week. */
+  dayDate: string;
+  slot: MeetingSlot;
+  title: string;
+  note: string | null;
+  status: BoardItemStatus;
+  position: number;
+  /** Number of comments on this card (bodies are fetched on demand). */
+  commentCount: number;
+  createdBy: UserRef | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A board-level meeting note, or a comment on a card when `itemId` is set. */
+export interface BoardNote {
+  id: string;
+  boardId: string;
+  itemId: string | null;
+  author: UserRef;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BoardMood {
+  user: UserRef;
+  mood: MoodLevel;
+  note: string | null;
+  updatedAt: string;
+}
+
+/** Completion roll-up. `percent` counts DONE only; `inProgress` is shown as a lighter bar segment. */
+export interface BoardProgress {
+  total: number;
+  done: number;
+  inProgress: number;
+  pending: number;
+  percent: number;
+}
+
+/** One member's row on the board: their cards' roll-up plus this week's mood. */
+export interface BoardMemberSummary {
+  user: UserRef;
+  mood: BoardMood | null;
+  progress: BoardProgress;
+  /** Per-half breakdown, so admins can see whether the week front- or back-loaded. */
+  firstHalf: BoardProgress;
+  secondHalf: BoardProgress;
+}
+
+/** The whole week in one payload — the board page renders entirely from this. */
+export interface MeetingBoardDetail {
+  id: string;
+  /** Monday of the week, YYYY-MM-DD. */
+  weekStart: string;
+  /** Friday of the week, YYYY-MM-DD. */
+  weekEnd: string;
+  /** The five working days Mon–Fri, in order. */
+  days: string[];
+  title: string | null;
+  agenda: string | null;
+  isLocked: boolean;
+  items: BoardItem[];
+  notes: BoardNote[];
+  members: BoardMemberSummary[];
+  progress: BoardProgress;
+  createdAt: string;
+}
+
+/** Lightweight row for the week switcher / admin history list. */
+export interface MeetingWeekSummary {
+  id: string;
+  weekStart: string;
+  title: string | null;
+  isLocked: boolean;
+  progress: BoardProgress;
+  memberCount: number;
 }

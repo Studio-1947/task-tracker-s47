@@ -81,3 +81,52 @@ export const AuditAction = {
 } as const;
 export type AuditAction = (typeof AuditAction)[keyof typeof AuditAction];
 export const AUDIT_ACTIONS = Object.values(AuditAction);
+
+/* ── Weekly meeting mood board ── */
+
+/** Each working day of the board is split into two halves. */
+export const MeetingSlot = {
+  FIRST: 'FIRST',
+  SECOND: 'SECOND',
+} as const;
+export type MeetingSlot = (typeof MeetingSlot)[keyof typeof MeetingSlot];
+export const MEETING_SLOTS = Object.values(MeetingSlot);
+
+export const MEETING_SLOT_LABELS: Record<MeetingSlot, string> = {
+  FIRST: '1st Half',
+  SECOND: '2nd Half',
+};
+
+/** Lifecycle of a board card. Deliberately lighter than TaskStatus. */
+export const BoardItemStatus = {
+  PENDING: 'PENDING',
+  IN_PROGRESS: 'IN_PROGRESS',
+  DONE: 'DONE',
+} as const;
+export type BoardItemStatus = (typeof BoardItemStatus)[keyof typeof BoardItemStatus];
+export const BOARD_ITEM_STATUSES = Object.values(BoardItemStatus);
+
+export const BOARD_ITEM_STATUS_LABELS: Record<BoardItemStatus, string> = {
+  PENDING: 'Pending',
+  IN_PROGRESS: 'In Progress',
+  DONE: 'Done',
+};
+
+/** A member's self-reported mood for the week — one check-in per member per board. */
+export const MoodLevel = {
+  GREAT: 'GREAT',
+  GOOD: 'GOOD',
+  OKAY: 'OKAY',
+  LOW: 'LOW',
+  BLOCKED: 'BLOCKED',
+} as const;
+export type MoodLevel = (typeof MoodLevel)[keyof typeof MoodLevel];
+export const MOOD_LEVELS = Object.values(MoodLevel);
+
+export const MOOD_META: Record<MoodLevel, { label: string; emoji: string; color: string }> = {
+  GREAT: { label: 'Great', emoji: '😄', color: '#10b981' },
+  GOOD: { label: 'Good', emoji: '🙂', color: '#22c55e' },
+  OKAY: { label: 'Okay', emoji: '😐', color: '#f59e0b' },
+  LOW: { label: 'Low', emoji: '😕', color: '#f97316' },
+  BLOCKED: { label: 'Blocked', emoji: '😣', color: '#ef4444' },
+};

@@ -65,6 +65,7 @@ Open http://localhost:5173 and sign in with the seeded admin.
 | `pnpm db:migrate` | Apply migrations |
 | `pnpm db:studio` | Open Drizzle Studio |
 | `pnpm db:seed` | Seed the admin user |
+| `pnpm test:meetings` | Smoke-test the weekly meeting board against a running API |
 
 ## What's built
 
@@ -83,6 +84,15 @@ Open http://localhost:5173 and sign in with the seeded admin.
 - ✅ **Labels**: per-workspace label CRUD, assign/toggle on tasks (chips on rows +
   Kanban cards, inline create in the drawer), filter tasks by label
 - ✅ **Saved filters** persisted per workspace + reset; richer empty states
+- ✅ **Weekly meeting mood board** (`/meetings`): a Mon–Fri week calendar where each
+  day is split into a **1st half / 2nd half** lane, team members drop multiple
+  lightweight cards into any cell (drag-and-drop on desktop, day/half pickers on
+  mobile), each member does one **mood check-in** per week, and per-member +
+  team-wide **progress bars** roll up for admins. Two views: **By day** (half-bands
+  across the week) and **By member** (swimlane overview — names pinned left, the whole
+  week across, admins also see who has *nothing planned* and can drag a card onto
+  another person to reassign it). Board-level meeting notes and per-card comments
+  included; admins can title, set an agenda for, and **lock** a week
 - ✅ Web: auth flow, workspaces, users admin, a **workspace task board with
   List + Table (TanStack Table) + Kanban views** + a task detail drawer (inline edit,
   labels, comments, history timeline), and role-aware dashboards — all with
