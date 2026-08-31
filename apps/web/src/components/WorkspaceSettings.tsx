@@ -299,15 +299,35 @@ export function WorkspaceSettings({ workspaceId, onClose }: Props) {
 
               <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-850 dark:divide-slate-800">
                 {(members ?? []).map((m) => (
-                  <li key={m.id} className="flex items-center justify-between py-2.5">
+                  <li key={m.id} className="flex items-center justify-between gap-2 py-2.5">
                     <div className="flex min-w-0 items-center gap-2.5">
                       <Avatar user={m} size="sm" />
                       <div className="min-w-0">
-                        <div className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">{m.name}</div>
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <span
+                            className={`truncate text-sm font-medium ${
+                              m.isActive
+                                ? 'text-slate-700 dark:text-slate-200'
+                                : 'text-slate-400 dark:text-slate-500'
+                            }`}
+                          >
+                            {m.name}
+                          </span>
+                          {/* Removing somebody deletes their membership outright, so
+                              anyone inactive here is suspended, not removed. */}
+                          {m.isActive ? null : (
+                            <span
+                              title="Deactivated — cannot sign in, and is not offered for new assignments"
+                              className="shrink-0 rounded-full bg-amber-50 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+                            >
+                              Deactivated
+                            </span>
+                          )}
+                        </div>
                         <div className="truncate text-xs text-slate-400 dark:text-slate-500">{m.email}</div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-2">
                       <Badge>{m.role}</Badge>
                       <Button
                         variant="danger"

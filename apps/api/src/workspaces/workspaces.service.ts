@@ -184,6 +184,13 @@ export class WorkspacesService {
     return this.toSummary(w!);
   }
 
+  /**
+   * Members of the workspace. Removing somebody from the org deletes their
+   * membership row outright, so they drop out of here on their own. A merely
+   * *deactivated* person keeps their membership — a suspension is meant to be
+   * reversible — so `isActive` ships with each row and the UI marks them rather
+   * than showing them as an ordinary member who can still be assigned work.
+   */
   async listMembers(id: string, actor: { id: string; role: string }) {
     await this.assertCanAccess(id, actor);
     return this.db
@@ -193,6 +200,7 @@ export class WorkspacesService {
         email: users.email,
         role: users.role,
         avatarKey: users.avatarKey,
+        isActive: users.isActive,
         joinedAt: workspaceMembers.joinedAt,
       })
       .from(workspaceMembers)

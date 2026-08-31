@@ -31,23 +31,41 @@ export function useUpdateUser() {
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: UpdateUserInput }) =>
       http.patch<UserSummary>(`/users/${id}`, patch),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['users'] });
+      // Deactivating somebody changes how they read in every workspace member
+      // list, which is keyed ['workspace', id, …] — note the singular.
+      void qc.invalidateQueries({ queryKey: ['workspace'] });
+    },
   });
 }
 
 /**
- * Removes a person from the org. Also refreshes workspaces and tasks, since the
- * call drops their memberships and releases their task assignments.
+ * Removes a person from the org. The call drops their workspace memberships,
+ * releases their task assignments, kills their sessions and — when nothing
+ * references them — deletes the row along with any meeting cards they owned.
+ *
+ * So a lot of already-rendered lists are now wrong, and the singular
+ * `['workspace', …]` prefix matters: it is what the member list of an open
+ * workspace drawer is keyed under. Invalidating only the plural `['workspaces']`
+ * left removed people sitting in that list until a full page reload.
  */
 export function useRemoveUser() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => http.del<RemovedUser>(`/users/${id}`),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['users'] });
-      void qc.invalidateQueries({ queryKey: ['workspaces'] });
-      void qc.invalidateQueries({ queryKey: ['tasks'] });
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      for (const key of [
+        ['users'],
+        ['workspace'],
+        ['workspaces'],
+        ['tasks'],
+        ['sessions'],
+        ['meeting-board'],
+        ['meeting-weeks'],
+      ]) {
+        void qc.invalidateQueries({ queryKey: key });
+      }
     },
   });
 }

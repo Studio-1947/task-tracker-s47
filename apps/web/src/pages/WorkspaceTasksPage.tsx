@@ -146,8 +146,13 @@ function Board({ workspaceId }: { workspaceId: string }) {
   const createTask = useCreateTask(workspaceId);
   const [newTitle, setNewTitle] = useState('');
 
+  // Assignee pickers offer only people who can still sign in — a suspended
+  // member keeps their membership but should not collect new work.
   const memberRefs = useMemo(
-    () => (members ?? []).map((m) => ({ id: m.id, name: m.name, email: m.email, avatarKey: m.avatarKey ?? null })),
+    () =>
+      (members ?? [])
+        .filter((m) => m.isActive)
+        .map((m) => ({ id: m.id, name: m.name, email: m.email, avatarKey: m.avatarKey ?? null })),
     [members],
   );
 

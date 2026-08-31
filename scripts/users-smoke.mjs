@@ -52,8 +52,38 @@ async function call(token, method, path, body) {
 const stamp = Date.now();
 const addr = (slug) => `users-smoke-${slug}-${stamp}@example.com`;
 
-/** Creates a user and walks them through the forced first-login password change. */
-async function onboard(admin, name, email, workspaceIds) {
+/**
+ * Creates a user and walks them through the forced first-login password change.
+ *
+ * `reuse` is for the fixture that ends up authoring something: `audit_logs.user_id`
+ * is RESTRICT, so once somebody has acted their row can never be hard-deleted and
+ * a per-run address would leak one account on every single run. Reused accounts
+ * are reactivated and re-added to the workspace instead.
+ */
+async function onboard(admin, name, email, workspaceIds, reuse = false) {
+  if (reuse) {
+    const found = ((await call(admin, 'GET', '/users')).body ?? []).find((u) => u.email === email);
+    if (found) {
+      await call(admin, 'PATCH', `/users/${found.id}`, { isActive: true });
+      if (workspaceIds?.length) {
+        for (const ws of workspaceIds) {
+          await call(admin, 'POST', `/workspaces/${ws}/members`, { add: [found.id] });
+        }
+      }
+      // The temp password is shown once, so reuse means minting a new one.
+      const reset = await call(admin, 'POST', `/users/${found.id}/reset-password`);
+      const password = `Smoke-${stamp}-Aa1!`;
+      const first = await call(null, 'POST', '/auth/login', {
+        email,
+        password: reset.body.tempPassword,
+      });
+      await call(first.body.accessToken, 'POST', '/auth/change-password', {
+        currentPassword: reset.body.tempPassword,
+        newPassword: password,
+      });
+      return { id: found.id, email, password };
+    }
+  }
   const created = await call(admin, 'POST', '/users', {
     name,
     email,
@@ -75,6 +105,11 @@ async function onboard(admin, name, email, workspaceIds) {
 
 async function login(email, password) {
   return call(null, 'POST', '/auth/login', { email, password });
+}
+
+async function workspaceMember(admin, workspaceId, userId) {
+  const r = await call(admin, 'GET', `/workspaces/${workspaceId}/members`);
+  return (r.body ?? []).find((m) => m.id === userId) ?? null;
 }
 
 async function sessionCount(admin, userId) {
@@ -158,7 +193,14 @@ async function main() {
   if (!project) {
     console.log('⚠ no seeded workspace/project — skipping the history-removal checks');
   } else {
-    const author = await onboard(admin, 'History Author', addr('history'), [ws.id]);
+    // Fixed address + reuse: this one authors a task and so can never be erased.
+    const author = await onboard(
+      admin,
+      'History Author',
+      'users-smoke-history@example.com',
+      [ws.id],
+      true,
+    );
     const authorToken = (await login(author.email, author.password)).body.accessToken;
     const authored = await call(authorToken, 'POST', `/workspaces/${ws.id}/tasks`, {
       projectId: project.id,
@@ -178,6 +220,23 @@ async function main() {
       'each project tag carries its workspace and task count',
     );
 
+    console.log('\n── workspace membership follows the account ──');
+    const asMember = await workspaceMember(admin, ws.id, author.id);
+    assert(Boolean(asMember), 'a new member shows up in the workspace member list');
+    assert(asMember?.isActive === true, 'the member row reports whether they can sign in');
+
+    // Suspension keeps the membership — it is meant to be reversible — but the
+    // row has to say so, or they read as an ordinary member who can take work.
+    await call(admin, 'PATCH', `/users/${author.id}`, { isActive: false });
+    const suspendedMember = await workspaceMember(admin, ws.id, author.id);
+    assert(Boolean(suspendedMember), 'a deactivated person keeps their workspace membership');
+    assert(suspendedMember?.isActive === false, 'the member list flags them as deactivated');
+    await call(admin, 'PATCH', `/users/${author.id}`, { isActive: true });
+    // The deactivation above deleted their sessions, so sign back in to give the
+    // removal below something to revoke.
+    await login(author.email, author.password);
+
+    const beforeCount = (await call(admin, 'GET', `/workspaces/${ws.id}`)).body?.memberCount ?? 0;
     assert((await sessionCount(admin, author.id)) > 0, 'they have a live session before removal');
     const removed = await call(admin, 'DELETE', `/users/${author.id}`);
     assert(removed.status === 200, 'an admin can remove a user with history');
@@ -187,6 +246,17 @@ async function main() {
     assert(Boolean(after), 'the kept row is still listed');
     assert(after?.isActive === false, 'the removed user is deactivated');
     assert(after?.workspaceCount === 0, 'they are off every workspace');
+    // The reported bug: removing somebody left them sitting in this list.
+    assert(
+      (await workspaceMember(admin, ws.id, author.id)) === null,
+      'a removed person is gone from the workspace member list',
+    );
+    const afterCount = (await call(admin, 'GET', `/workspaces/${ws.id}`)).body?.memberCount ?? 0;
+    assert(
+      afterCount === beforeCount - 1,
+      "the workspace's member count drops by one",
+      `${beforeCount} -> ${afterCount}`,
+    );
     assert((after?.projects ?? []).length === 0, 'their project tags are cleared');
     assert((await sessionCount(admin, author.id)) === 0, 'every session of theirs is revoked');
     assert(
@@ -244,7 +314,7 @@ async function main() {
     process.exit(1);
   }
   console.log(
-    '\n✓ Users smoke passed — password reset, deactivate/reactivate, self-lockout guards, removal (both paths), deactivated-vs-removed separation, project tags',
+    '\n✓ Users smoke passed — password reset, deactivate/reactivate, self-lockout guards, removal (both paths), workspace-membership follow-through, deactivated-vs-removed separation, project tags',
   );
   process.exit(0);
 }

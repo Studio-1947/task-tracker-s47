@@ -44,10 +44,12 @@ export function useWorkspace(id: string) {
   });
 }
 
+export type WorkspaceMember = UserRef & { role: string; isActive: boolean };
+
 export function useWorkspaceMembers(id: string) {
   return useQuery({
     queryKey: ['workspace', id, 'members'],
-    queryFn: () => http.get<(UserRef & { role: string })[]>(`/workspaces/${id}/members`),
+    queryFn: () => http.get<WorkspaceMember[]>(`/workspaces/${id}/members`),
   });
 }
 

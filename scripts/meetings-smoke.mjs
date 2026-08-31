@@ -185,8 +185,24 @@ async function main() {
   );
 
   console.log('\n── permissions ──');
-  const email = `board-smoke-${Date.now()}@example.com`;
-  const created = await call(admin, 'POST', '/users', { name: 'Board Smoke', email, role: 'MEMBER' });
+  // Reused across runs rather than minted fresh each time: a per-run account
+  // can never be hard-deleted once it has touched anything, so the old approach
+  // left a deactivated "Board Smoke" row behind on every single run.
+  const email = 'board-smoke@example.com';
+  const directory = (await call(admin, 'GET', '/users')).body ?? [];
+  const existing = directory.find((u) => u.email === email);
+  const created = existing
+    ? // The temp password is only shown once, so reuse means resetting it.
+      {
+        status: 201,
+        body: {
+          ...existing,
+          ...(await call(admin, 'POST', `/users/${existing.id}/reset-password`)).body,
+        },
+      }
+    : await call(admin, 'POST', '/users', { name: 'Board Smoke', email, role: 'MEMBER' });
+  // A previous run may have left it deactivated; it must be able to log in.
+  if (existing) await call(admin, 'PATCH', `/users/${existing.id}`, { isActive: true });
   assert(created.status === 201, 'throwaway member created', JSON.stringify(created.body));
   const member = await login(email, created.body.tempPassword);
 
@@ -448,6 +464,10 @@ async function main() {
     await call(admin, 'DELETE', `/meeting-boards/items/${filed.body.id}`);
     const orphan = await call(admin, 'GET', `/tasks/${filed.body.taskId}`);
     assert(orphan.status === 200, 'deleting the card never deletes the mirrored task');
+
+    // That surviving task is the assertion's whole point, so the suite has to be
+    // the one to clear it up — otherwise every run leaves one behind.
+    await call(admin, 'DELETE', `/tasks/${filed.body.taskId}`);
   }
 
   console.log('\n── validation & cascade ──');
@@ -466,7 +486,7 @@ async function main() {
   // Leave the board and the user directory as we found them.
   for (const item of pruned.items) await call(admin, 'DELETE', `/meeting-boards/items/${item.id}`);
   for (const n of pruned.notes) await call(admin, 'DELETE', `/meeting-boards/notes/${n.id}`);
-  await call(admin, 'PATCH', `/users/${created.body.id}`, { isActive: false });
+  // The account is deliberately left in place for the next run to reuse.
 
   if (failures > 0) {
     console.error(`\n✗ Meeting board smoke failed — ${failures} assertion(s)`);

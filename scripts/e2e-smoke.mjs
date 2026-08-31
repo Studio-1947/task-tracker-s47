@@ -96,6 +96,18 @@ async function main() {
     'exactly one STATUS_CHANGED audit row',
   );
 
+  // 7. tidy up. Creating a *fresh* workspace is real coverage here (it asserts the
+  // auto-provisioned "General" project), so this can't reuse one — but there is no
+  // DELETE for workspaces, so archive it and drop the task to keep the active
+  // surface from growing by one workspace on every run.
+  await fetch(`${API}/tasks/${task.id}`, { method: 'DELETE', headers: H });
+  const tidied = await fetch(`${API}/workspaces/${ws.id}`, {
+    method: 'PATCH',
+    headers: H,
+    body: JSON.stringify({ isArchived: true }),
+  });
+  assert(tidied.ok, `archive the smoke workspace (${tidied.status})`);
+
   console.log(`\n✓ E2E smoke passed — audit trail: [${actions.join(', ')}]`);
 }
 

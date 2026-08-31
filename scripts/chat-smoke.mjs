@@ -293,6 +293,17 @@ async function main() {
   const mDm = await fetch(`${API}/chat/conversations/${dm.id}/messages`, { headers: member.H });
   assert(mDm.status === 403, `outsider denied someone else's DM (${mDm.status})`);
 
+  // Tidy up what can be tidied. A fresh workspace is required here — the test
+  // hinges on the member NOT being in it yet — and workspaces have no DELETE, so
+  // archive it. The project channel itself has no delete endpoint either, so
+  // conversations are the one thing this suite still leaves behind per run.
+  const archived = await fetch(`${API}/workspaces/${ws.id}`, {
+    method: 'PATCH',
+    headers: a.H,
+    body: JSON.stringify({ isArchived: true }),
+  });
+  assert(archived.ok, `archive the smoke workspace (${archived.status})`);
+
   console.log(
     '\n✓ Chat smoke passed — DM, unread, read receipt, edit, delete, realtime, groups, project channels',
   );
