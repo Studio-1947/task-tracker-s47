@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // End-to-end smoke test for the weekly meeting mood board against a RUNNING API.
 // Exercises week normalisation, 1st/2nd-half cards, progress roll-ups, mood
-// check-ins, notes/comments, drag-and-drop reordering, and the member-vs-admin
+// check-ins, notes/comments, drag-and-drop reordering, carry-forward of unfinished
+// work, project filing with its mirrored workspace task, and the member-vs-admin
 // permission rules (including the week lock).
 //
 //   node scripts/meetings-smoke.mjs      (defaults to http://localhost:3000/api)
@@ -268,6 +269,187 @@ async function main() {
   assert(adminEdit.body?.status === 'DONE', 'an admin can still edit a locked week');
   await call(admin, 'PATCH', `/meeting-boards/${board.id}`, { isLocked: false });
 
+  console.log('\n── carry-forward of unfinished work ──');
+  // Monday cards that never finished should reappear on every later day up to
+  // today; anything already DONE must not.
+  const carryBoard = (await call(admin, 'GET', `/meeting-boards?date=${board.weekStart}`)).body;
+  const elapsed = carryBoard.days.filter((d) => d > mon && d <= ymd(new Date()));
+  assert(Array.isArray(carryBoard.carryOver), 'the board payload carries a carryOver list');
+
+  const openCarry = carryBoard.carryOver.filter((i) => i.id === c2.body.id);
+  assert(
+    openCarry.length === elapsed.length,
+    `an unfinished Monday card is carried onto each elapsed later day (${elapsed.length})`,
+    `got ${openCarry.length}`,
+  );
+  assert(
+    openCarry.every((i) => i.carriedFrom === mon),
+    'each carried copy points back at the day it was planned for',
+  );
+  assert(
+    openCarry.every((i) => elapsed.includes(i.dayDate)),
+    'carried copies only land on days that have already happened',
+  );
+  assert(
+    !carryBoard.carryOver.some((i) => i.id === c1.body.id),
+    'a finished card is not carried forward',
+  );
+  assert(
+    carryBoard.items.every((i) => i.carriedFrom === null),
+    'stored cards never claim to be carried copies',
+  );
+  assert(
+    carryBoard.progress.total === carryBoard.items.length,
+    'carried copies are excluded from the roll-up',
+    `${carryBoard.progress.total} vs ${carryBoard.items.length}`,
+  );
+
+  // Closing the card retires every copy at once — they are one row, shown twice.
+  await call(admin, 'PATCH', `/meeting-boards/items/${c2.body.id}`, { status: 'DONE' });
+  const closed = (await call(admin, 'GET', `/meeting-boards?date=${board.weekStart}`)).body;
+  assert(
+    !closed.carryOver.some((i) => i.id === c2.body.id),
+    'finishing the card clears all of its carried copies',
+  );
+  await call(admin, 'PATCH', `/meeting-boards/items/${c2.body.id}`, { status: 'IN_PROGRESS' });
+
+  // On a Monday nothing later has elapsed yet, so the assertions above can only
+  // prove the negative. Replay the same rules on a week that has fully run out.
+  const pastWeek = plusDays(board.weekStart, -14);
+  const past = (await call(admin, 'GET', `/meeting-boards?date=${pastWeek}`)).body;
+  const [pastMon, pastTue] = past.days;
+  const stale = await call(admin, 'POST', `/meeting-boards/${past.id}/items`, {
+    dayDate: pastMon,
+    slot: 'FIRST',
+    title: 'Never finished this',
+    status: 'IN_PROGRESS',
+  });
+  const shipped = await call(admin, 'POST', `/meeting-boards/${past.id}/items`, {
+    dayDate: pastMon,
+    slot: 'FIRST',
+    title: 'Finished this one',
+    status: 'DONE',
+  });
+  const trailed = (await call(admin, 'GET', `/meeting-boards?date=${pastWeek}`)).body;
+  const trail = trailed.carryOver.filter((i) => i.id === stale.body.id);
+  assert(trail.length === 4, 'an elapsed week trails an open card Tue-Fri', `got ${trail.length}`);
+  assert(
+    trail.map((i) => i.dayDate).join(',') === trailed.days.slice(1).join(','),
+    'the trail lands on consecutive days after the planned one',
+  );
+  assert(
+    !trailed.carryOver.some((i) => i.id === shipped.body.id),
+    'a card finished on the day it was planned leaves no trail',
+  );
+
+  // A card planned mid-week only trails from its own day onward.
+  const late = await call(admin, 'POST', `/meeting-boards/${past.id}/items`, {
+    dayDate: pastTue,
+    slot: 'SECOND',
+    title: 'Started Tuesday',
+  });
+  const lateTrail = (await call(admin, 'GET', `/meeting-boards?date=${pastWeek}`)).body.carryOver.filter(
+    (i) => i.id === late.body.id,
+  );
+  assert(lateTrail.length === 3, 'a Tuesday card trails Wed-Fri only', `got ${lateTrail.length}`);
+  assert(
+    lateTrail.every((i) => i.dayDate > pastTue),
+    'a card is never carried backwards',
+  );
+
+  for (const item of [stale, shipped, late]) {
+    await call(admin, 'DELETE', `/meeting-boards/items/${item.body.id}`);
+  }
+
+  console.log('\n── project filing & the mirrored task ──');
+  const options = await call(admin, 'GET', '/meeting-boards/projects');
+  assert(options.status === 200 && Array.isArray(options.body), 'the project picker lists options');
+  const project = options.body[0];
+
+  if (!project) {
+    console.log('⚠ no projects seeded — skipping the mirror-task checks');
+  } else {
+    assert(
+      Boolean(project.workspaceId && project.taskPrefix && project.workspaceName),
+      'a project option carries its workspace and task prefix',
+    );
+
+    const filed = await call(admin, 'POST', `/meeting-boards/${board.id}/items`, {
+      dayDate: mon,
+      slot: 'SECOND',
+      title: 'Ship the pricing page',
+      note: 'Agreed in the meeting',
+      projectId: project.id,
+    });
+    assert(filed.status === 201, 'a card can be filed under a project', JSON.stringify(filed.body));
+    assert(filed.body?.project?.id === project.id, 'the card reports the project it is filed under');
+    assert(Boolean(filed.body?.taskId), 'filing the card mirrors it as a workspace task');
+    assert(
+      filed.body?.taskRef?.startsWith(`${project.taskPrefix}-`),
+      'the mirror task gets a human-readable ref',
+      String(filed.body?.taskRef),
+    );
+
+    const task = await call(admin, 'GET', `/tasks/${filed.body.taskId}`);
+    assert(task.status === 200, 'the mirror task is a real task in the tracker');
+    assert(task.body?.title === 'Ship the pricing page', 'the mirror task copies the card title');
+    assert(task.body?.description === 'Agreed in the meeting', 'the card note becomes the description');
+    assert(task.body?.status === 'TODO', 'PENDING maps to TODO', String(task.body?.status));
+    assert(task.body?.projectId === project.id, 'the mirror task lands in the chosen project');
+
+    // Board -> task.
+    await call(admin, 'PATCH', `/meeting-boards/items/${filed.body.id}`, {
+      status: 'IN_PROGRESS',
+      title: 'Ship the pricing page v2',
+    });
+    const pushed = await call(admin, 'GET', `/tasks/${filed.body.taskId}`);
+    assert(pushed.body?.status === 'IN_PROGRESS', 'moving the card moves the task');
+    assert(pushed.body?.title === 'Ship the pricing page v2', 'renaming the card renames the task');
+
+    // Task -> board, reconciled on the next board read.
+    await call(admin, 'PATCH', `/tasks/${filed.body.taskId}`, { status: 'DONE' });
+    const synced = (await call(admin, 'GET', `/meeting-boards?date=${board.weekStart}`)).body;
+    const back = synced.items.find((i) => i.id === filed.body.id);
+    assert(back?.status === 'DONE', 'completing the task ticks the card off', String(back?.status));
+    assert(Boolean(back?.completedAt), 'the reconciled card gets a completedAt stamp');
+
+    // IN_REVIEW has no board equivalent and must fold into IN_PROGRESS.
+    await call(admin, 'PATCH', `/tasks/${filed.body.taskId}`, { status: 'IN_REVIEW' });
+    const review = (await call(admin, 'GET', `/meeting-boards?date=${board.weekStart}`)).body;
+    assert(
+      review.items.find((i) => i.id === filed.body.id)?.status === 'IN_PROGRESS',
+      'IN_REVIEW folds back to IN_PROGRESS on the card',
+    );
+    const stable = await call(admin, 'GET', `/tasks/${filed.body.taskId}`);
+    assert(stable.body?.status === 'IN_REVIEW', 'reconciling the card leaves the task alone');
+
+    const grouped = review.projects.find((g) => g.project?.id === project.id);
+    assert(Boolean(grouped), 'the board reports a per-project roll-up');
+    assert(
+      review.projects.some((g) => g.project === null),
+      'unfiled cards get their own roll-up row',
+    );
+
+    const unfiled = await call(admin, 'PATCH', `/meeting-boards/items/${filed.body.id}`, {
+      projectId: null,
+    });
+    assert(unfiled.body?.project === null, 'a card can be detached from its project');
+    const survivor = await call(admin, 'GET', `/tasks/${filed.body.taskId}`);
+    assert(survivor.status === 200, 'detaching the card leaves the task standing');
+
+    const badProject = await call(admin, 'POST', `/meeting-boards/${board.id}/items`, {
+      dayDate: mon,
+      slot: 'FIRST',
+      title: 'Nowhere',
+      projectId: '00000000-0000-0000-0000-000000000000',
+    });
+    assert(badProject.status === 404, 'an unknown project is rejected', `status ${badProject.status}`);
+
+    await call(admin, 'DELETE', `/meeting-boards/items/${filed.body.id}`);
+    const orphan = await call(admin, 'GET', `/tasks/${filed.body.taskId}`);
+    assert(orphan.status === 200, 'deleting the card never deletes the mirrored task');
+  }
+
   console.log('\n── validation & cascade ──');
   const emptyTitle = await call(admin, 'POST', `/meeting-boards/${board.id}/items`, {
     dayDate: mon,
@@ -290,7 +472,9 @@ async function main() {
     console.error(`\n✗ Meeting board smoke failed — ${failures} assertion(s)`);
     process.exit(1);
   }
-  console.log('\n✓ Meeting board smoke passed — calendar, halves, progress, mood, notes, permissions, locking');
+  console.log(
+    '\n✓ Meeting board smoke passed — calendar, halves, progress, mood, notes, carry-forward, projects & mirror tasks, permissions, locking',
+  );
   process.exit(0);
 }
 

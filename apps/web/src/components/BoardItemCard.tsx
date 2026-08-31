@@ -2,6 +2,7 @@ import type { BoardItem, BoardItemStatus } from '@task-tracker/shared';
 import { useUpdateBoardItem } from '../hooks/useMeetings';
 import { ApiRequestError } from '../lib/api';
 import { Avatar } from './Avatar';
+import { BoardProjectChip } from './BoardProjectChip';
 
 /** Clicking the status dot walks Pending -> In progress -> Done -> Pending. */
 const NEXT_STATUS: Record<BoardItemStatus, BoardItemStatus> = {
@@ -10,10 +11,19 @@ const NEXT_STATUS: Record<BoardItemStatus, BoardItemStatus> = {
   DONE: 'PENDING',
 };
 
+const weekdayShort = (d: string) =>
+  new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short' });
+
 /**
- * A single card on the meeting board. Shared by the by-day cells and the
- * by-member swimlanes; `compact` drops the owner footer, which is redundant in
- * the swimlane view where the row already names the person.
+ * A single card on the meeting board. Shared by the by-day cells, the by-member
+ * swimlanes and the by-project lanes; `compact` drops the owner footer, which is
+ * redundant wherever the row already names the person.
+ *
+ * A carried-forward copy (`item.carriedFrom`) is the same underlying card shown
+ * again on a later day because it never got finished. It is dimmed and can't be
+ * dragged — moving it would move the original off the day it was planned for —
+ * but its status still toggles, since ticking yesterday's leftover off today is
+ * exactly what the copy is there for.
  */
 export function BoardItemCard({
   item,
@@ -33,6 +43,7 @@ export function BoardItemCard({
   onDragStart: (id: string | null) => void;
 }) {
   const updateItem = useUpdateBoardItem();
+  const carried = item.carriedFrom !== null;
   const accent =
     item.status === 'DONE'
       ? 'border-l-emerald-500'
@@ -67,12 +78,14 @@ export function BoardItemCard({
 
   return (
     <div
-      draggable={draggable}
+      draggable={draggable && !carried}
       onDragStart={() => onDragStart(item.id)}
       onDragEnd={() => onDragStart(null)}
       className={`group rounded-lg border border-l-[3px] border-slate-200/80 bg-white shadow-sm transition hover:shadow-md dark:border-[#2d2d2d] dark:bg-[#212121] ${accent} ${
         compact ? 'p-1.5' : 'p-2'
-      } ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`}
+      } ${draggable && !carried ? 'cursor-grab active:cursor-grabbing' : ''} ${
+        carried ? 'border-dashed opacity-75' : ''
+      }`}
     >
       <div className="flex items-start gap-1.5">
         <button
@@ -115,6 +128,29 @@ export function BoardItemCard({
         {/* In the swimlanes the row already says who owns this, so only the meta shows. */}
         {compact ? meta : null}
       </div>
+
+      {(carried || item.rolledOver || item.project) && (
+        <div className="mt-1 flex flex-wrap items-center gap-1 pl-5">
+          {carried ? (
+            <span
+              title={`Still open from ${weekdayShort(item.carriedFrom as string)} — carried forward`}
+              className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+            >
+              ↷ {weekdayShort(item.carriedFrom as string)}
+            </span>
+          ) : item.rolledOver ? (
+            <span
+              title="Rolled over from last week, still unfinished"
+              className="inline-flex items-center rounded-full bg-orange-50 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-orange-700 dark:bg-orange-950/30 dark:text-orange-400"
+            >
+              ↷ Last week
+            </span>
+          ) : null}
+          {item.project ? (
+            <BoardProjectChip project={item.project} taskRef={item.taskRef} size="xs" />
+          ) : null}
+        </div>
+      )}
 
       {compact ? null : (
         <button type="button" onClick={onOpen} className="mt-1.5 flex w-full items-center gap-1.5 pl-5 text-left">

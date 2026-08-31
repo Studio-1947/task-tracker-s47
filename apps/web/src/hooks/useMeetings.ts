@@ -6,6 +6,7 @@ import type {
   CreateBoardItemInput,
   CreateBoardNoteInput,
   MeetingBoardDetail,
+  MeetingProjectOption,
   MeetingWeekSummary,
   ReorderBoardItemsInput,
   SetMoodInput,
@@ -31,6 +32,18 @@ export function useMeetingBoard(weekStart: string) {
   return useQuery({
     queryKey: boardKey(weekStart),
     queryFn: () => http.get<MeetingBoardDetail>(`/meeting-boards?date=${weekStart}`),
+  });
+}
+
+/**
+ * Projects the signed-in user may file a card under. Rarely changes mid-meeting,
+ * so it is cached for the session rather than refetched with every board poll.
+ */
+export function useMeetingProjectOptions() {
+  return useQuery({
+    queryKey: ['meeting-projects'],
+    queryFn: () => http.get<MeetingProjectOption[]>('/meeting-boards/projects'),
+    staleTime: 5 * 60 * 1000,
   });
 }
 

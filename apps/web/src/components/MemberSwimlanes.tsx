@@ -8,9 +8,8 @@ import {
   type MeetingBoardDetail,
   type MeetingSlot,
 } from '@task-tracker/shared';
-import { useCreateBoardItem } from '../hooks/useMeetings';
-import { ApiRequestError } from '../lib/api';
 import { Avatar } from './Avatar';
+import { BoardCardComposer } from './BoardCardComposer';
 import { BoardItemCard } from './BoardItemCard';
 import { ProgressBar } from './ProgressBar';
 import { EmptyState } from './ui';
@@ -33,6 +32,7 @@ export function MemberSwimlanes({
   isAdmin,
   currentUserId,
   canWrite,
+  defaultProjectId = '',
   onOpen,
   onError,
   onDragStart,
@@ -44,6 +44,8 @@ export function MemberSwimlanes({
   isAdmin: boolean;
   currentUserId?: string;
   canWrite: boolean;
+  /** Project new cards are filed under by default — the board's active filter. */
+  defaultProjectId?: string;
   onOpen: (id: string) => void;
   onError: (m: string | null) => void;
   onDragStart: (id: string | null) => void;
@@ -144,6 +146,7 @@ export function MemberSwimlanes({
                       isAdmin={isAdmin}
                       currentUserId={currentUserId}
                       canWrite={canWrite}
+                      defaultProjectId={defaultProjectId}
                       onOpen={onOpen}
                       onError={onError}
                       onDragStart={onDragStart}
@@ -176,6 +179,7 @@ function SwimlaneCell({
   isAdmin,
   currentUserId,
   canWrite,
+  defaultProjectId,
   onOpen,
   onError,
   onDragStart,
@@ -189,37 +193,18 @@ function SwimlaneCell({
   isAdmin: boolean;
   currentUserId?: string;
   canWrite: boolean;
+  defaultProjectId: string;
   onOpen: (id: string) => void;
   onError: (m: string | null) => void;
   onDragStart: (id: string | null) => void;
   onDropOnMember: (userId: string, day: string, slot: MeetingSlot) => void;
 }) {
-  const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState('');
   const [over, setOver] = useState(false);
-  const createItem = useCreateBoardItem();
 
   const isMine = member.user.id === currentUserId;
   // You fill your own lane; an admin can also plan on somebody else's behalf.
   const canAdd = canWrite && (isMine || isAdmin);
   const canEdit = isAdmin || (isMine && !board.isLocked);
-
-  const submit = () => {
-    const title = draft.trim();
-    if (!title) {
-      setAdding(false);
-      return;
-    }
-    onError(null);
-    // Cleared up front so a blur landing before the POST resolves can't double-submit.
-    setDraft('');
-    createItem
-      .mutateAsync({
-        boardId: board.id,
-        input: { dayDate: day, slot, title, ...(isMine ? {} : { userId: member.user.id }) },
-      })
-      .catch((e: unknown) => onError(e instanceof ApiRequestError ? e.message : 'Could not add the card'));
-  };
 
   return (
     <div
@@ -249,7 +234,7 @@ function SwimlaneCell({
       <div className="space-y-1">
         {items.map((item) => (
           <BoardItemCard
-            key={item.id}
+            key={`${item.id}-${item.dayDate}`}
             item={item}
             compact
             draggable={canEdit}
@@ -262,39 +247,16 @@ function SwimlaneCell({
       </div>
 
       {canAdd ? (
-        adding ? (
-          <textarea
-            autoFocus
-            rows={2}
-            value={draft}
-            placeholder={isMine ? 'What are you working on?' : `Add for ${member.user.name.split(' ')[0]}…`}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={() => {
-              submit();
-              setAdding(false);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                submit();
-              }
-              if (e.key === 'Escape') {
-                setDraft('');
-                setAdding(false);
-              }
-            }}
-            className="mt-1 w-full resize-none rounded border border-indigo-400 bg-white px-1.5 py-1 text-[11px] outline-none dark:border-indigo-500 dark:bg-[#1a1a1a] dark:text-white dark:placeholder-slate-500"
-          />
-        ) : (
-          <button
-            type="button"
-            aria-label={`Add a card for ${member.user.name}`}
-            onClick={() => setAdding(true)}
-            className="mt-1 w-full rounded py-0.5 text-[10px] font-semibold text-slate-300 transition hover:bg-slate-50 hover:text-indigo-600 dark:text-slate-600 dark:hover:bg-[#232323] dark:hover:text-indigo-400"
-          >
-            + Add
-          </button>
-        )
+        <BoardCardComposer
+          boardId={board.id}
+          dayDate={day}
+          slot={slot}
+          {...(isMine ? {} : { ownerId: member.user.id })}
+          defaultProjectId={defaultProjectId}
+          placeholder={isMine ? 'What are you working on?' : `Add for ${member.user.name.split(' ')[0]}…`}
+          size="sm"
+          onError={onError}
+        />
       ) : null}
     </div>
   );

@@ -55,6 +55,21 @@ export interface Paginated<T> {
   pageSize: number;
 }
 
+/**
+ * A project a person is actually working in — derived from the tasks assigned to
+ * them, not from workspace membership. Membership grants access to every project
+ * in the workspace, which says nothing about where the person's work sits.
+ */
+export interface UserProjectTag {
+  id: string;
+  name: string;
+  color: string | null;
+  workspaceId: string;
+  workspaceName: string;
+  /** Open (non-archived) tasks assigned to this person in the project. */
+  taskCount: number;
+}
+
 export interface UserSummary {
   id: string;
   name: string;
@@ -63,8 +78,25 @@ export interface UserSummary {
   avatarKey: string | null;
   designation: string | null;
   isActive: boolean;
+  /**
+   * When the person was removed rather than merely deactivated. Both states are
+   * `isActive: false`; this is what separates an offboarding from a suspension.
+   * Read it through `userStatus()` rather than testing it directly.
+   */
+  removedAt: string | null;
   createdAt: string;
   workspaceCount?: number;
+  /** Projects the person has assigned work in, busiest first. Omitted on writes. */
+  projects?: UserProjectTag[];
+}
+
+/**
+ * Outcome of removing a person. `deleted` is false when the row had to be kept
+ * because other records still point at it — they are fully offboarded either way.
+ */
+export interface RemovedUser {
+  id: string;
+  deleted: boolean;
 }
 
 /** Returned once on user creation when onboarding via temp password (PRD §11.1). */
@@ -485,6 +517,16 @@ export interface ConversationCreatedEvent {
 
 /* ── Weekly meeting mood board ── */
 
+/** The project a card is filed under, plus the workspace its mirror task lives in. */
+export interface BoardProjectRef {
+  id: string;
+  workspaceId: string;
+  workspaceName: string;
+  name: string;
+  color: string | null;
+  taskPrefix: string;
+}
+
 /** One card placed in a day/half cell of the week board. */
 export interface BoardItem {
   id: string;
@@ -497,6 +539,19 @@ export interface BoardItem {
   note: string | null;
   status: BoardItemStatus;
   position: number;
+  /** Project the card is filed under, or null for unfiled work. */
+  project: BoardProjectRef | null;
+  /** The mirrored workspace task, created the moment the card gets a project. */
+  taskId: string | null;
+  /** Human-readable ref of the mirror task, e.g. "WEB-12". */
+  taskRef: string | null;
+  /**
+   * Only set on the read-only clones in `MeetingBoardDetail.carryOver`: the day
+   * the work was originally planned for. Always null on a stored card.
+   */
+  carriedFrom: string | null;
+  /** True when the card was rolled onto this board from the previous week, still unfinished. */
+  rolledOver: boolean;
   /** Number of comments on this card (bodies are fetched on demand). */
   commentCount: number;
   createdBy: UserRef | null;
@@ -532,6 +587,14 @@ export interface BoardProgress {
   percent: number;
 }
 
+/** One project's slice of the week. The `project: null` row collects unfiled cards. */
+export interface BoardProjectSummary {
+  project: BoardProjectRef | null;
+  progress: BoardProgress;
+  /** How many people have a card under this project this week. */
+  memberCount: number;
+}
+
 /** One member's row on the board: their cards' roll-up plus this week's mood. */
 export interface BoardMemberSummary {
   user: UserRef;
@@ -555,10 +618,29 @@ export interface MeetingBoardDetail {
   agenda: string | null;
   isLocked: boolean;
   items: BoardItem[];
+  /**
+   * Read-only clones of still-open cards, repeated on every later working day up
+   * to today so unfinished work follows the team forward. They share the stored
+   * card's `id` — render them keyed by `id + dayDate` — and are deliberately kept
+   * out of `items` so no roll-up counts the same work twice.
+   */
+  carryOver: BoardItem[];
   notes: BoardNote[];
   members: BoardMemberSummary[];
+  /** Per-project roll-up, busiest first, with unfiled work last. */
+  projects: BoardProjectSummary[];
   progress: BoardProgress;
   createdAt: string;
+}
+
+/** A project the caller may file a card under — the board's project picker. */
+export interface MeetingProjectOption {
+  id: string;
+  name: string;
+  color: string | null;
+  taskPrefix: string;
+  workspaceId: string;
+  workspaceName: string;
 }
 
 /** Lightweight row for the week switcher / admin history list. */

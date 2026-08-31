@@ -6,6 +6,7 @@ import {
   type CreateUserInput,
   type UpdateUserInput,
 } from '@task-tracker/shared';
+import { CurrentUser, type RequestUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
@@ -45,8 +46,19 @@ export class UsersController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodValidationPipe(updateUserSchema)) body: UpdateUserInput,
+    @CurrentUser() actor: RequestUser,
   ) {
-    return this.users.update(id, body);
+    return this.users.update(id, body, actor.id);
+  }
+
+  /**
+   * Remove a person from the org: sessions killed, memberships and task
+   * assignments dropped, account deactivated — and the row itself deleted when
+   * nothing in the history still references them.
+   */
+  @Delete(':id')
+  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: RequestUser) {
+    return this.users.remove(id, actor.id);
   }
 
   @Post(':id/reset-password')

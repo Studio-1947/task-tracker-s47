@@ -8,14 +8,19 @@ import {
   useUploadWorkspaceLogo,
 } from '../hooks/useWorkspaces';
 import { useProjects, useUpdateProject } from '../hooks/useProjects';
+import { useMediaQuery, useResizableWidth } from '../hooks/useResizableWidth';
 import { ApiRequestError } from '../lib/api';
 import { Avatar } from './Avatar';
 import { AuthImage } from './AuthImage';
 import { CreateProjectModal } from './CreateProjectModal';
+import { UserPicker } from './UserPicker';
 import { Badge, Button, Input, Spinner } from './ui';
 
 const IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif';
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+
+/** Drawer widths in px: the comfortable default, the floor, and the "expanded" snap. */
+const DRAWER = { initial: 448, min: 360, wide: 880 };
 
 interface Props {
   workspaceId: string;
@@ -41,6 +46,14 @@ export function WorkspaceSettings({ workspaceId, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [imgError, setImgError] = useState<string | null>(null);
   const logoInput = useRef<HTMLInputElement>(null);
+
+  // Below `sm` the drawer is already near-fullscreen and there is no pointer to
+  // drag with, so resizing is a desktop-only affordance.
+  const canResize = useMediaQuery('(min-width: 640px)');
+  const { width, resizing, startResize, toggleWide, isWide, nudge } = useResizableWidth(
+    'tt.workspace-settings-width',
+    DRAWER,
+  );
 
   // Seed local edit state from the loaded workspace once.
   const nameVal = name ?? workspace?.name ?? '';
@@ -102,13 +115,70 @@ export function WorkspaceSettings({ workspaceId, onClose }: Props) {
       <div className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/60 backdrop-blur-xs animate-fade-in" onClick={onClose} />
 
       {/* Drawer content */}
-      <div className="relative z-50 flex h-full w-[calc(100%-3rem)] sm:w-full sm:max-w-md flex-col overflow-y-auto border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-[#181818] shadow-xl animate-slide-in">
+      <div
+        className="animate-slide-in relative z-50 flex h-full w-[calc(100%-3rem)] flex-col border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-[#181818] shadow-xl"
+        style={canResize ? { width, maxWidth: '100%' } : undefined}
+      >
+        {canResize ? (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize panel — drag, or use the arrow keys"
+            aria-valuenow={width}
+            aria-valuemin={DRAWER.min}
+            tabIndex={0}
+            onPointerDown={startResize}
+            onDoubleClick={toggleWide}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                nudge(32);
+              }
+              if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                nudge(-32);
+              }
+            }}
+            className={`group absolute inset-y-0 left-0 z-10 w-1.5 -translate-x-1/2 cursor-col-resize outline-none ${
+              resizing ? 'bg-indigo-500' : 'hover:bg-indigo-400/60 focus-visible:bg-indigo-500'
+            }`}
+          >
+            {/* A wider invisible strip so the 6px border is easy to grab. */}
+            <span className="absolute inset-y-0 -left-1.5 -right-1.5" />
+          </div>
+        ) : null}
+
+        <div className="flex-1 overflow-y-auto">
         {isLoading || !workspace ? (
           <Spinner />
         ) : (
           <div className="flex flex-col gap-6 p-4 sm:p-6">
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Workspace settings</h2>
+              <div className="flex shrink-0 items-center gap-1">
+              {canResize ? (
+                <button
+                  type="button"
+                  aria-label={isWide ? 'Collapse panel' : 'Expand panel'}
+                  title={isWide ? 'Collapse panel' : 'Expand panel'}
+                  className="rounded-md p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                  onClick={toggleWide}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    {isWide ? (
+                      <>
+                        <path d="M13 5l6 7-6 7" />
+                        <path d="M5 5l6 7-6 7" />
+                      </>
+                    ) : (
+                      <>
+                        <path d="M11 5l-6 7 6 7" />
+                        <path d="M19 5l-6 7 6 7" />
+                      </>
+                    )}
+                  </svg>
+                </button>
+              ) : null}
               <button
                 type="button"
                 aria-label="Close"
@@ -120,6 +190,7 @@ export function WorkspaceSettings({ workspaceId, onClose }: Props) {
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
               </button>
+              </div>
             </div>
 
             {/* Details */}
@@ -203,21 +274,17 @@ export function WorkspaceSettings({ workspaceId, onClose }: Props) {
               <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
                 Members ({members?.length ?? 0})
               </h3>
-              <div className="flex gap-2">
-                <select
-                  aria-label="Add user to workspace"
-                  className="flex-1 rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 text-sm bg-white dark:bg-[#252525] dark:text-white"
+              <div className="flex items-start gap-2">
+                <UserPicker
+                  users={addableUsers}
                   value={addUserId}
-                  onChange={(e) => setAddUserId(e.target.value)}
-                >
-                  <option value="">Add a user…</option>
-                  {addableUsers.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} ({u.email})
-                    </option>
-                  ))}
-                </select>
+                  onChange={setAddUserId}
+                  placeholder="Search people by name or email…"
+                  disabled={updateMembers.isPending}
+                  emptyHint="Everyone active is already a member."
+                />
                 <Button
+                  className="shrink-0"
                   disabled={!addUserId || updateMembers.isPending}
                   onClick={() => {
                     updateMembers.mutate(
@@ -303,6 +370,7 @@ export function WorkspaceSettings({ workspaceId, onClose }: Props) {
             </section>
           </div>
         )}
+        </div>
       </div>
 
       {showCreateProject ? (

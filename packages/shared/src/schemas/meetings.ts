@@ -36,6 +36,11 @@ export const createBoardItemSchema = z
     title: z.string().min(1).max(200),
     note: z.string().max(2000).nullable().optional(),
     status: itemStatusEnum.optional(),
+    /**
+     * File the card under a project. Doing so mirrors it as a real task in that
+     * project's workspace, so meeting work shows up alongside everything else.
+     */
+    projectId: z.string().uuid().nullable().optional(),
   })
   .strict();
 export type CreateBoardItemInput = z.infer<typeof createBoardItemSchema>;
@@ -49,6 +54,8 @@ export const updateBoardItemSchema = z
     note: z.string().max(2000).nullable().optional(),
     status: itemStatusEnum.optional(),
     position: z.number().int().min(0).max(10_000).optional(),
+    /** Re-file the card. `null` detaches it; the mirror task is left in place. */
+    projectId: z.string().uuid().nullable().optional(),
   })
   .strict();
 export type UpdateBoardItemInput = z.infer<typeof updateBoardItemSchema>;

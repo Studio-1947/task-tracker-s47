@@ -66,6 +66,7 @@ Open http://localhost:5173 and sign in with the seeded admin.
 | `pnpm db:studio` | Open Drizzle Studio |
 | `pnpm db:seed` | Seed the admin user |
 | `pnpm test:meetings` | Smoke-test the weekly meeting board against a running API |
+| `pnpm test:users` | Smoke-test the admin user directory (reset, deactivate, remove) |
 
 ## What's built
 
@@ -88,11 +89,32 @@ Open http://localhost:5173 and sign in with the seeded admin.
   day is split into a **1st half / 2nd half** lane, team members drop multiple
   lightweight cards into any cell (drag-and-drop on desktop, day/half pickers on
   mobile), each member does one **mood check-in** per week, and per-member +
-  team-wide **progress bars** roll up for admins. Two views: **By day** (half-bands
-  across the week) and **By member** (swimlane overview — names pinned left, the whole
+  team-wide **progress bars** roll up for admins. Three views: **By day** (half-bands
+  across the week), **By member** (swimlane overview — names pinned left, the whole
   week across, admins also see who has *nothing planned* and can drag a card onto
-  another person to reassign it). Board-level meeting notes and per-card comments
-  included; admins can title, set an agenda for, and **lock** a week
+  another person to reassign it) and **By project** (one lane per project, unfiled
+  work called out at the bottom), plus a project filter. Board-level meeting notes
+  and per-card comments included; admins can title, set an agenda for, and **lock** a week
+- ✅ **Unfinished work carries forward.** A card that isn't DONE reappears on every
+  later day of the week up to today, as a dimmed read-only copy of the same card —
+  tick it off anywhere and it clears everywhere, and the roll-ups still count it
+  once. Across the week boundary it is materialised: the first time the current
+  week's board is opened, whatever was still open on last week's board is copied
+  onto the Monday, badged **↷ Last week**
+- ✅ **Meeting cards mirror into the tracker.** File a card under a project and the
+  API opens a real task in that project's workspace — same title, note as the
+  description, owner as assignee — and keeps the two in step: editing the card
+  pushes to the task, and moving the task on the workspace board is reflected back
+  on the card the next time the board loads (`IN_REVIEW` folds into `IN_PROGRESS`).
+  The mirror task outlives the card: detaching or deleting a card never deletes
+  work from the tracker
+- ✅ **Admin user directory** (`/users`): split into **Team** and **No longer active**, the
+  latter separating *deactivated* (suspended — comes back intact) from *removed*
+  (offboarded — signed out, dropped from every workspace, task assignments released,
+  and the account row deleted outright when no history references it). Each person is
+  tagged with the **projects they have open assigned work in**. Resetting a password
+  and removing someone are confirmed first and report their result in a dialog; admins
+  cannot deactivate, demote or remove themselves
 - ✅ Web: auth flow, workspaces, users admin, a **workspace task board with
   List + Table (TanStack Table) + Kanban views** + a task detail drawer (inline edit,
   labels, comments, history timeline), and role-aware dashboards — all with

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   BOARD_ITEM_STATUSES,
   BOARD_ITEM_STATUS_LABELS,
@@ -21,6 +22,7 @@ import {
 import { useAuth } from '../stores/auth';
 import { ApiRequestError } from '../lib/api';
 import { Avatar } from './Avatar';
+import { BoardProjectSelect } from './BoardProjectSelect';
 import { Button, ErrorState, Spinner } from './ui';
 
 const dayLabel = (d: string) =>
@@ -104,10 +106,15 @@ export function MeetingItemDrawer({
         {/* header */}
         <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-slate-100 bg-white/95 px-5 py-4 backdrop-blur dark:border-slate-800/60 dark:bg-[#181818]/95">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+            <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
               <span>{dayLabel(item.dayDate)}</span>
               <span className="text-slate-300 dark:text-slate-600">•</span>
               <span>{MEETING_SLOT_LABELS[item.slot]}</span>
+              {item.rolledOver ? (
+                <span className="rounded-full bg-orange-50 px-1.5 py-px text-[9px] text-orange-700 dark:bg-orange-950/30 dark:text-orange-400">
+                  ↷ Rolled over from last week
+                </span>
+              ) : null}
             </div>
             <div className="mt-1.5 flex items-center gap-2">
               <Avatar user={item.user} size="sm" />
@@ -207,6 +214,38 @@ export function MeetingItemDrawer({
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* project — filing the card mirrors it into that project as a task */}
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+              Project
+            </label>
+            <BoardProjectSelect
+              value={item.project?.id ?? ''}
+              disabled={!canEdit}
+              onChange={(projectId) => void patch({ projectId: projectId === '' ? null : projectId })}
+            />
+            {item.project && item.taskId ? (
+              <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
+                Mirrored as{' '}
+                <Link
+                  to={`/workspaces/${item.project.workspaceId}?task=${item.taskId}`}
+                  className="font-semibold text-indigo-600 hover:underline dark:text-indigo-400"
+                >
+                  {item.taskRef ?? 'this task'}
+                </Link>{' '}
+                in {item.project.workspaceName}. Title, note and status stay in step both ways.
+              </p>
+            ) : item.project ? (
+              <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
+                Filed under {item.project.name}.
+              </p>
+            ) : (
+              <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
+                Pick a project to mirror this card as a task in the workspace.
+              </p>
+            )}
           </div>
 
           {/* reassign — admin only */}
@@ -374,6 +413,11 @@ export function MeetingItemDrawer({
             >
               Delete card
             </Button>
+            {item.taskId ? (
+              <p className="mt-2 text-center text-[11px] text-slate-400 dark:text-slate-500">
+                The mirrored task stays in the workspace with its history.
+              </p>
+            ) : null}
           </div>
         ) : null}
       </div>

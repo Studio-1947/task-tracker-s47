@@ -7,6 +7,7 @@ import {
   type BoardItem,
   type BoardMemberSummary,
   type BoardProgress,
+  type BoardProjectSummary,
   type MeetingBoardDetail,
   type MeetingSlot,
   type MoodLevel,
@@ -14,7 +15,6 @@ import {
 import { useAuth } from '../stores/auth';
 import { useUsers } from '../hooks/useUsers';
 import {
-  useCreateBoardItem,
   useCreateBoardNote,
   useDeleteBoardNote,
   useMeetingBoard,
@@ -27,10 +27,13 @@ import {
 } from '../hooks/useMeetings';
 import { ApiRequestError } from '../lib/api';
 import { Avatar } from '../components/Avatar';
+import { BoardCardComposer } from '../components/BoardCardComposer';
 import { BoardItemCard } from '../components/BoardItemCard';
+import { BoardProjectChip } from '../components/BoardProjectChip';
 import { MeetingItemDrawer } from '../components/MeetingItemDrawer';
 import { MemberSwimlanes } from '../components/MemberSwimlanes';
 import { ProgressBar } from '../components/ProgressBar';
+import { ProjectLanes } from '../components/ProjectLanes';
 import { Button, Card, EmptyState, ErrorState, Spinner } from '../components/ui';
 
 /* ── date helpers (local time, matching the API's week maths) ── */
@@ -70,8 +73,13 @@ function rollUp(items: BoardItem[]): BoardProgress {
 }
 
 type Tab = 'board' | 'team' | 'notes';
-/** 'day' = the week split into two half-bands; 'member' = one swimlane per person. */
-type ViewMode = 'day' | 'member';
+/**
+ * 'day' = the week split into two half-bands; 'member' = one swimlane per person;
+ * 'project' = one lane per project, with unfiled work called out at the bottom.
+ */
+type ViewMode = 'day' | 'member' | 'project';
+/** 'all' | 'none' (unfiled work) | a project id. */
+type ProjectFilter = string;
 
 export function MeetingBoardPage() {
   const { user } = useAuth();
@@ -81,6 +89,7 @@ export function MeetingBoardPage() {
   const [tab, setTab] = useState<Tab>('board');
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [ownerFilter, setOwnerFilter] = useState<'all' | 'mine'>('all');
+  const [projectFilter, setProjectFilter] = useState<ProjectFilter>('all');
   const [viewMode, setViewMode] = useState<ViewMode>(
     () => (localStorage.getItem('tt.meetings-view') as ViewMode | null) ?? 'day',
   );
@@ -103,10 +112,55 @@ export function MeetingBoardPage() {
     setMobileDay((prev) => (prev && board.days.includes(prev) ? prev : board.days.includes(today) ? today : board.days[0] ?? null));
   }, [board?.id, board?.days.join(',')]);
 
-  const visibleItems = useMemo(() => {
-    if (!board) return [];
-    return ownerFilter === 'mine' ? board.items.filter((i) => i.user.id === user?.id) : board.items;
-  }, [board, ownerFilter, user?.id]);
+  /**
+   * Two lists on purpose. `visibleItems` is the real cards and is what every
+   * roll-up counts; `displayItems` adds the server's carry-forward copies of
+   * still-open work, which are only ever rendered — counting them would report
+   * one unfinished card as four.
+   */
+  const matches = (i: BoardItem) =>
+    (ownerFilter === 'all' || i.user.id === user?.id) &&
+    (projectFilter === 'all' ||
+      (projectFilter === 'none' ? i.project === null : i.project?.id === projectFilter));
+
+  const visibleItems = useMemo(
+    () => (board ? board.items.filter(matches) : []),
+    [board, ownerFilter, projectFilter, user?.id],
+  );
+
+  const displayItems = useMemo(
+    () => (board ? [...visibleItems, ...board.carryOver.filter(matches)] : []),
+    [board, visibleItems, ownerFilter, projectFilter, user?.id],
+  );
+
+  /**
+   * Lanes for the by-project view, recomputed from the filtered cards so the
+   * percentages match what's actually on screen rather than the whole week.
+   */
+  const projectRows = useMemo<BoardProjectSummary[]>(() => {
+    const groups = new Map<string, BoardItem[]>();
+    for (const i of visibleItems) {
+      const key = i.project?.id ?? '';
+      groups.set(key, [...(groups.get(key) ?? []), i]);
+    }
+    return [...groups.entries()]
+      .map(([key, group]) => ({
+        project: key === '' ? null : (group[0]?.project ?? null),
+        progress: rollUp(group),
+        memberCount: new Set(group.map((i) => i.user.id)).size,
+      }))
+      .sort(
+        (a, b) =>
+          (a.project ? 0 : 1) - (b.project ? 0 : 1) ||
+          b.progress.total - a.progress.total ||
+          (a.project?.name ?? '').localeCompare(b.project?.name ?? ''),
+      );
+  }, [visibleItems]);
+
+  /** The project new cards inherit when one is filtered — 'all'/'none' mean unfiled. */
+  const composerProjectId = projectFilter === 'all' || projectFilter === 'none' ? '' : projectFilter;
+
+  const carriedCount = displayItems.length - visibleItems.length;
 
   const pickView = (v: ViewMode) => {
     setViewMode(v);
@@ -157,7 +211,7 @@ export function MeetingBoardPage() {
   };
 
   const cellItems = (day: string, slot: MeetingSlot) =>
-    visibleItems
+    displayItems
       .filter((i) => i.dayDate === day && i.slot === slot)
       .sort((a, b) => a.position - b.position || a.createdAt.localeCompare(b.createdAt));
 
@@ -203,6 +257,32 @@ export function MeetingBoardPage() {
       reorder.mutateAsync({
         boardId: board.id,
         input: { items: [{ id: dragged.id, dayDate: day, slot, position: occupied }] },
+      }),
+    );
+  };
+
+  /**
+   * Drop inside the project lanes. Landing in a different lane re-files the card,
+   * which mints a fresh task in that project — the old one is left where it is,
+   * with whatever history it has already collected.
+   */
+  const onDropOnProject = (projectId: string | null, day: string, slot: MeetingSlot) => {
+    if (!board || !dragId) return;
+    const dragged = board.items.find((i) => i.id === dragId);
+    setDragId(null);
+    if (!dragged) return;
+    const from = dragged.project?.id ?? null;
+    if (dragged.dayDate === day && dragged.slot === slot && from === projectId) return;
+    const occupied = board.items.filter((i) => i.dayDate === day && i.slot === slot).length;
+    void run(() =>
+      updateItem.mutateAsync({
+        itemId: dragged.id,
+        patch: {
+          dayDate: day,
+          slot,
+          position: occupied,
+          ...(from !== projectId ? { projectId } : {}),
+        },
       }),
     );
   };
@@ -275,6 +355,7 @@ export function MeetingBoardPage() {
               {([
                 { key: 'day', label: 'By day' },
                 { key: 'member', label: 'By member' },
+                { key: 'project', label: 'By project' },
               ] as { key: ViewMode; label: string }[]).map((v) => (
                 <button
                   key={v.key}
@@ -290,8 +371,27 @@ export function MeetingBoardPage() {
                 </button>
               ))}
             </div>
+            {/* Only projects that actually have work this week, so the list stays short. */}
+            <select
+              value={projectFilter}
+              onChange={(e) => setProjectFilter(e.target.value)}
+              aria-label="Filter by project"
+              className="rounded-lg border border-slate-200 bg-white/80 px-2.5 py-1.5 text-xs font-semibold text-slate-600 outline-none transition focus:border-indigo-500 dark:border-[#2d2d2d] dark:bg-[#1a1a1a] dark:text-slate-300"
+            >
+              <option value="all">All projects</option>
+              {board.projects
+                .filter((p) => p.project)
+                .map((p) => (
+                  <option key={p.project!.id} value={p.project!.id}>
+                    {p.project!.name}
+                  </option>
+                ))}
+              <option value="none">No project</option>
+            </select>
+
             <span className="text-xs text-slate-400 dark:text-slate-500">
               {visibleItems.length} card{visibleItems.length === 1 ? '' : 's'} this week
+              {carriedCount > 0 ? ` · ${carriedCount} carried forward` : ''}
             </span>
           </div>
 
@@ -301,7 +401,7 @@ export function MeetingBoardPage() {
           <div className="lg:hidden">
             <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1">
               {board.days.map((d) => {
-                const count = visibleItems.filter((i) => i.dayDate === d).length;
+                const count = displayItems.filter((i) => i.dayDate === d).length;
                 const active = mobileDay === d;
                 return (
                   <button
@@ -335,6 +435,7 @@ export function MeetingBoardPage() {
                       currentUserId={user?.id}
                       isAdmin={isAdmin}
                       draggable={false}
+                      defaultProjectId={composerProjectId}
                       onOpen={setOpenItemId}
                       onError={setError}
                       onDragStart={setDragId}
@@ -383,6 +484,7 @@ export function MeetingBoardPage() {
                         currentUserId={user?.id}
                         isAdmin={isAdmin}
                         draggable
+                        defaultProjectId={composerProjectId}
                         onOpen={setOpenItemId}
                         onError={setError}
                         onDragStart={setDragId}
@@ -395,18 +497,32 @@ export function MeetingBoardPage() {
             </div>
           </div>
             </>
-          ) : (
+          ) : viewMode === 'member' ? (
             <MemberSwimlanes
               board={board}
               rows={swimlaneRows}
-              items={visibleItems}
+              items={displayItems}
+              isAdmin={isAdmin}
+              currentUserId={user?.id}
+              canWrite={canWrite}
+              defaultProjectId={composerProjectId}
+              onOpen={setOpenItemId}
+              onError={setError}
+              onDragStart={setDragId}
+              onDropOnMember={onDropOnMember}
+            />
+          ) : (
+            <ProjectLanes
+              board={board}
+              rows={projectRows}
+              items={displayItems}
               isAdmin={isAdmin}
               currentUserId={user?.id}
               canWrite={canWrite}
               onOpen={setOpenItemId}
               onError={setError}
               onDragStart={setDragId}
-              onDropOnMember={onDropOnMember}
+              onDropOnProject={onDropOnProject}
             />
           )}
         </>
@@ -654,6 +770,7 @@ function Cell({
   currentUserId,
   isAdmin,
   draggable,
+  defaultProjectId,
   onOpen,
   onError,
   onDragStart,
@@ -667,30 +784,13 @@ function Cell({
   currentUserId?: string;
   isAdmin: boolean;
   draggable: boolean;
+  defaultProjectId: string;
   onOpen: (id: string) => void;
   onError: (m: string | null) => void;
   onDragStart: (id: string | null) => void;
   onDrop: (day: string, slot: MeetingSlot) => void;
 }) {
-  const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState('');
   const [over, setOver] = useState(false);
-  const createItem = useCreateBoardItem();
-
-  const submit = () => {
-    const title = draft.trim();
-    if (!title) {
-      setAdding(false);
-      return;
-    }
-    onError(null);
-    // Cleared up front: a blur that lands before the POST resolves would otherwise
-    // resubmit the same title and create a duplicate card.
-    setDraft('');
-    createItem
-      .mutateAsync({ boardId: board.id, input: { dayDate: day, slot, title } })
-      .catch((e: unknown) => onError(e instanceof ApiRequestError ? e.message : 'Could not add the card'));
-  };
 
   return (
     <div
@@ -717,55 +817,30 @@ function Cell({
         {weekdayLong(day)}
       </p>
 
-      {items.map((item) => (
-        <BoardItemCard
-          key={item.id}
-          item={item}
-          draggable={draggable && (isAdmin || (item.user.id === currentUserId && !board.isLocked))}
-          canToggle={isAdmin || (item.user.id === currentUserId && !board.isLocked)}
-          onOpen={() => onOpen(item.id)}
-          onError={onError}
-          onDragStart={onDragStart}
-        />
-      ))}
+      {/* A carry-forward copy shares its card's id, so the day disambiguates the key. */}
+      {items.map((item) => {
+        const mayEdit = isAdmin || (item.user.id === currentUserId && !board.isLocked);
+        return (
+          <BoardItemCard
+            key={`${item.id}-${item.dayDate}`}
+            item={item}
+            draggable={draggable && mayEdit}
+            canToggle={mayEdit}
+            onOpen={() => onOpen(item.id)}
+            onError={onError}
+            onDragStart={onDragStart}
+          />
+        );
+      })}
 
       {canWrite ? (
-        adding ? (
-          <textarea
-            autoFocus
-            rows={2}
-            value={draft}
-            placeholder="What are you working on?"
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={() => {
-              submit();
-              setAdding(false);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                submit();
-              }
-              if (e.key === 'Escape') {
-                setDraft('');
-                setAdding(false);
-              }
-            }}
-            className="w-full resize-none rounded-lg border border-indigo-400 bg-white px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500/10 dark:border-indigo-500 dark:bg-[#1a1a1a] dark:text-white dark:placeholder-slate-500"
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-slate-200 py-1.5 text-[11px] font-semibold text-slate-400 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-[#2d2d2d] dark:text-slate-500 dark:hover:border-indigo-700 dark:hover:text-indigo-400"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            Add
-          </button>
-        )
+        <BoardCardComposer
+          boardId={board.id}
+          dayDate={day}
+          slot={slot}
+          defaultProjectId={defaultProjectId}
+          onError={onError}
+        />
       ) : null}
     </div>
   );
@@ -778,6 +853,42 @@ function TeamPanel({ board, onPickWeek }: { board: MeetingBoardDetail; onPickWee
 
   return (
     <div className="space-y-5">
+      <Card className="p-4 sm:p-5">
+        <h2 className="mb-4 text-sm font-bold text-slate-700 dark:text-slate-200">Where the week went</h2>
+        {board.projects.length === 0 ? (
+          <EmptyState
+            title="No cards on the board yet"
+            hint="File cards under a project and the split shows up here."
+          />
+        ) : (
+          <ul className="space-y-3.5">
+            {board.projects.map((p) => (
+              <li key={p.project?.id ?? 'unfiled'}>
+                <div className="flex flex-wrap items-center gap-2">
+                  {p.project ? (
+                    <BoardProjectChip project={p.project} />
+                  ) : (
+                    <span className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:border-[#2d2d2d] dark:text-slate-400">
+                      No project
+                    </span>
+                  )}
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                    {p.progress.done}/{p.progress.total} done · {p.memberCount} member
+                    {p.memberCount === 1 ? '' : 's'}
+                  </span>
+                  <span className="ml-auto text-sm font-bold text-slate-600 dark:text-slate-300">
+                    {p.progress.percent}%
+                  </span>
+                </div>
+                <div className="mt-1.5">
+                  <ProgressBar progress={p.progress} size="sm" showLabel={false} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
       <Card className="p-4 sm:p-5">
         <h2 className="mb-4 text-sm font-bold text-slate-700 dark:text-slate-200">Per-member progress</h2>
         {board.members.length === 0 ? (

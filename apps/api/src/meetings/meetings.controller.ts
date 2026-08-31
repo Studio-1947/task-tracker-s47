@@ -52,6 +52,15 @@ export class MeetingsController {
     return this.meetings.listWeeks(Number.isFinite(n) ? n : 12);
   }
 
+  /**
+   * Projects the caller may file a card under. Declared before `:id` routes for
+   * the same reason as `weeks` — a literal segment must win over the param.
+   */
+  @Get('projects')
+  projectOptions(@CurrentUser() user: RequestUser) {
+    return this.meetings.listProjectOptions(user);
+  }
+
   /** The board for the week containing `date` (defaults to today). Created on first open. */
   @Get()
   board(@CurrentUser() user: RequestUser, @Query('date') date?: string) {

@@ -12,6 +12,14 @@ export const users = pgTable('users', {
   /** Job title shown under the name (e.g. "Executive Director"); admin-settable. */
   designation: varchar('designation', { length: 120 }),
   isActive: boolean('is_active').notNull().default(true),
+  /**
+   * Stamped when an admin *removes* the person rather than merely deactivating
+   * them. Both end up inactive, but they mean different things: a deactivated
+   * account is suspended and comes back intact, whereas a removed one has already
+   * been stripped of its workspaces and task assignments. Null for both active
+   * and suspended users; cleared again if the person is ever reinstated.
+   */
+  removedAt: timestamp('removed_at', { withTimezone: true }),
   /** Forces a password change on next login (temp-password onboarding, PRD §11.1). */
   mustChangePassword: boolean('must_change_password').notNull().default(false),
   /** Bumped on deactivation / forced logout to invalidate outstanding refresh tokens (PRD §3.7 / §11.2). */

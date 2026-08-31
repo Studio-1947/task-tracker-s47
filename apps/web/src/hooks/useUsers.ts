@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   CreatedUserWithTempPassword,
   CreateUserInput,
+  RemovedUser,
   UpdateUserInput,
   UserSummary,
   UserSession,
@@ -31,6 +32,23 @@ export function useUpdateUser() {
     mutationFn: ({ id, patch }: { id: string; patch: UpdateUserInput }) =>
       http.patch<UserSummary>(`/users/${id}`, patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+}
+
+/**
+ * Removes a person from the org. Also refreshes workspaces and tasks, since the
+ * call drops their memberships and releases their task assignments.
+ */
+export function useRemoveUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => http.del<RemovedUser>(`/users/${id}`),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['users'] });
+      void qc.invalidateQueries({ queryKey: ['workspaces'] });
+      void qc.invalidateQueries({ queryKey: ['tasks'] });
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
+    },
   });
 }
 

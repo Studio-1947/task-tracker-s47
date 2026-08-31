@@ -11,6 +11,8 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
+import { projects } from './projects';
+import { tasks } from './tasks';
 import { boardItemStatusEnum, meetingSlotEnum, moodLevelEnum } from './enums';
 
 /**
@@ -42,6 +44,12 @@ export type NewMeetingBoardRow = typeof meetingBoards.$inferInsert;
  * A card owned by one member, placed in a (day, half) cell of the board.
  * `position` orders cards within a cell; `completedAt` is stamped on the
  * PENDING/IN_PROGRESS → DONE transition so progress history is auditable.
+ *
+ * A card may be filed under a project, in which case it is mirrored by a real
+ * task in that project (`taskId`) so meeting work lands in the workspace board
+ * too. Both references are `set null` rather than `cascade`: archiving a project
+ * or deleting the mirror task should quietly unfile the card, never erase the
+ * week's history.
  */
 export const meetingBoardItems = pgTable(
   'meeting_board_items',
@@ -60,6 +68,15 @@ export const meetingBoardItems = pgTable(
     note: varchar('note', { length: 2000 }),
     status: boardItemStatusEnum('status').notNull().default('PENDING'),
     position: integer('position').notNull().default(0),
+    /** Project this card belongs to, or null for unfiled work. */
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
+    /** The mirror task in the project's workspace, created when the card is filed. */
+    taskId: uuid('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+    /**
+     * Set when the card was rolled onto this board from the previous week because
+     * it was still open on Friday. Purely informational — the copy is its own card.
+     */
+    rolledOver: boolean('rolled_over').notNull().default(false),
     createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -69,6 +86,8 @@ export const meetingBoardItems = pgTable(
     index('meeting_items_board_idx').on(t.boardId),
     index('meeting_items_board_user_idx').on(t.boardId, t.userId),
     index('meeting_items_cell_idx').on(t.boardId, t.dayDate, t.slot),
+    index('meeting_items_project_idx').on(t.projectId),
+    index('meeting_items_task_idx').on(t.taskId),
   ],
 );
 

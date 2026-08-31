@@ -127,6 +127,7 @@ export class SearchService {
       avatarKey: u.avatarKey,
       designation: u.designation,
       isActive: u.isActive,
+      removedAt: u.removedAt ? u.removedAt.toISOString() : null,
       createdAt: u.createdAt.toISOString(),
     }));
   }

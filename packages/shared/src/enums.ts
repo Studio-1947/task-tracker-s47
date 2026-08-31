@@ -138,3 +138,54 @@ export const NotificationType = {
 } as const;
 export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
 export const NOTIFICATION_TYPES = Object.values(NotificationType);
+
+/* ── Meeting board ↔ workspace task mirroring ── */
+
+/**
+ * A board card filed under a project is mirrored by a real workspace task. The
+ * board's three-step pipeline is coarser than the task's four, so the mapping is
+ * lossy one way on purpose: IN_REVIEW folds back into IN_PROGRESS, and pushing
+ * that board status forward again leaves the task in IN_REVIEW untouched.
+ */
+export const BOARD_STATUS_TO_TASK_STATUS: Record<BoardItemStatus, TaskStatus> = {
+  PENDING: 'TODO',
+  IN_PROGRESS: 'IN_PROGRESS',
+  DONE: 'DONE',
+};
+
+export const TASK_STATUS_TO_BOARD_STATUS: Record<TaskStatus, BoardItemStatus> = {
+  TODO: 'PENDING',
+  IN_PROGRESS: 'IN_PROGRESS',
+  IN_REVIEW: 'IN_PROGRESS',
+  DONE: 'DONE',
+};
+
+/* ── Account lifecycle ── */
+
+/**
+ * The three states an account can be in. Only ACTIVE is stored as a flag;
+ * DEACTIVATED and REMOVED are both `isActive: false` and are told apart by
+ * `removedAt`, so that a suspension and an offboarding never look alike.
+ */
+export const UserStatus = {
+  /** Can sign in and work. */
+  ACTIVE: 'ACTIVE',
+  /** Suspended: locked out, but workspaces and task assignments are untouched. */
+  DEACTIVATED: 'DEACTIVATED',
+  /** Offboarded: locked out and already stripped of workspaces and assignments. */
+  REMOVED: 'REMOVED',
+} as const;
+export type UserStatus = (typeof UserStatus)[keyof typeof UserStatus];
+export const USER_STATUSES = Object.values(UserStatus);
+
+export const USER_STATUS_LABELS: Record<UserStatus, string> = {
+  ACTIVE: 'Active',
+  DEACTIVATED: 'Deactivated',
+  REMOVED: 'Removed',
+};
+
+/** Derives the account state. Keep API and web reading it the same way. */
+export function userStatus(user: { isActive: boolean; removedAt?: string | null }): UserStatus {
+  if (user.isActive) return UserStatus.ACTIVE;
+  return user.removedAt ? UserStatus.REMOVED : UserStatus.DEACTIVATED;
+}
