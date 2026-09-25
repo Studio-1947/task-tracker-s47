@@ -7,7 +7,7 @@ const priorityEnum = z.enum(PRIORITIES as [Priority, ...Priority[]]);
 export const createTaskSchema = z.object({
   /** Project the task belongs to (must be a project of the target workspace). */
   projectId: z.string().uuid(),
-  title: z.string().min(1).max(300),
+  title: z.string().min(1).max(1000),
   description: z.string().max(20000).optional(),
   status: statusEnum.optional(),
   priority: priorityEnum.optional(),
@@ -22,7 +22,7 @@ export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 
 /** Lightweight create form used by the "+ Add subtask" quick-add under a task. */
 export const createSubtaskSchema = z.object({
-  title: z.string().min(1).max(300),
+  title: z.string().min(1).max(1000),
   assigneeIds: z.array(z.string().uuid()).optional(),
   dueDate: z.string().datetime().nullable().optional(),
 });
@@ -34,7 +34,7 @@ export type CreateSubtaskInput = z.infer<typeof createSubtaskSchema>;
  */
 export const updateTaskSchema = z
   .object({
-    title: z.string().min(1).max(300).optional(),
+    title: z.string().min(1).max(1000).optional(),
     description: z.string().max(20000).nullable().optional(),
     status: statusEnum.optional(),
     priority: priorityEnum.optional(),

@@ -31,6 +31,7 @@ import { AssigneePicker } from './AssigneePicker';
 import { Attachments } from './Attachments';
 import { Avatar } from './Avatar';
 import { Button, Spinner } from './ui';
+import { TextLinkButton } from './TextLinkButton';
 
 interface Props {
   workspaceId: string;
@@ -208,11 +209,13 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
               </label>
               {/* A task can have any number of assignees (task_assignees is M2M). */}
               <div className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
-                <span className="mb-1.5 block">Assignees</span>
+                <span className="mb-1.5 block">Tag people</span>
                 <AssigneePicker
                   members={members}
                   selected={task.assignees}
                   onChange={(assigneeIds) => patch({ assigneeIds })}
+                  emptyLabel="No people tagged"
+                  pluralLabel="people tagged"
                 />
               </div>
             </div>
@@ -306,6 +309,7 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                 />
+                <TextLinkButton value={comment} onChange={setComment} />
                 <Button type="submit" className="py-2 px-4" disabled={addComment.isPending}>
                   Send
                 </Button>
@@ -386,6 +390,7 @@ function TitleEditor({ value, onSave }: { value: string; onSave: (v: string) => 
       <textarea
         autoFocus
         rows={2}
+        maxLength={1000}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
@@ -964,6 +969,7 @@ function DescriptionEditor({ value, onSave }: { value: string; onSave: (v: strin
           <Button variant="ghost" className="py-1.5 px-3.5 text-xs font-semibold" onClick={cancel}>
             Cancel
           </Button>
+          <TextLinkButton value={text} onChange={setText} />
         </div>
         <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">
           Press <kbd className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded border border-slate-200 dark:border-slate-700">Ctrl</kbd> + <kbd className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded border border-slate-200 dark:border-slate-700">Enter</kbd> to save

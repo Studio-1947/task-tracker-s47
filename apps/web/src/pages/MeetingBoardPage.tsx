@@ -11,6 +11,7 @@ import {
   type MeetingBoardDetail,
   type MeetingSlot,
   type MoodLevel,
+  type UserRef,
 } from '@task-tracker/shared';
 import { useAuth } from '../stores/auth';
 import { useUsers } from '../hooks/useUsers';
@@ -25,8 +26,11 @@ import {
   useUpdateBoardNote,
   useUpdateMeetingBoard,
 } from '../hooks/useMeetings';
-import { ApiRequestError } from '../lib/api';
+import { apiBlob, ApiRequestError } from '../lib/api';
+import { linkify } from '../lib/linkify';
 import { Avatar } from '../components/Avatar';
+import { AssigneePicker } from '../components/AssigneePicker';
+import { TextLinkButton } from '../components/TextLinkButton';
 import { BoardCardComposer } from '../components/BoardCardComposer';
 import { BoardItemCard } from '../components/BoardItemCard';
 import { BoardProjectChip } from '../components/BoardProjectChip';
@@ -88,7 +92,8 @@ export function MeetingBoardPage() {
   const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
   const [tab, setTab] = useState<Tab>('board');
   const [openItemId, setOpenItemId] = useState<string | null>(null);
-  const [ownerFilter, setOwnerFilter] = useState<'all' | 'mine'>('all');
+  const [ownerFilter, setOwnerFilter] = useState<'all' | 'mine' | 'selected'>('all');
+  const [watchedMemberIds, setWatchedMemberIds] = useState<string[]>([]);
   const [projectFilter, setProjectFilter] = useState<ProjectFilter>('all');
   const [viewMode, setViewMode] = useState<ViewMode>(
     () => (localStorage.getItem('tt.meetings-view') as ViewMode | null) ?? 'day',
@@ -118,19 +123,28 @@ export function MeetingBoardPage() {
    * still-open work, which are only ever rendered — counting them would report
    * one unfinished card as four.
    */
+  const membersToWatch = useMemo<UserRef[]>(() => {
+    const people = isAdmin && allUsers
+      ? allUsers.filter((u) => u.isActive).map((u) => ({ id: u.id, name: u.name, email: u.email, avatarKey: u.avatarKey }))
+      : board?.members.map((m) => m.user) ?? [];
+    return [...people].sort((a, b) => a.name.localeCompare(b.name));
+  }, [allUsers, board?.members, isAdmin]);
+
   const matches = (i: BoardItem) =>
-    (ownerFilter === 'all' || i.user.id === user?.id) &&
+    (ownerFilter === 'all' ||
+      (ownerFilter === 'mine' && i.user.id === user?.id) ||
+      (ownerFilter === 'selected' && watchedMemberIds.includes(i.user.id))) &&
     (projectFilter === 'all' ||
       (projectFilter === 'none' ? i.project === null : i.project?.id === projectFilter));
 
   const visibleItems = useMemo(
     () => (board ? board.items.filter(matches) : []),
-    [board, ownerFilter, projectFilter, user?.id],
+    [board, ownerFilter, projectFilter, user?.id, watchedMemberIds],
   );
 
   const displayItems = useMemo(
     () => (board ? [...visibleItems, ...board.carryOver.filter(matches)] : []),
-    [board, visibleItems, ownerFilter, projectFilter, user?.id],
+    [board, visibleItems, ownerFilter, projectFilter, user?.id, watchedMemberIds],
   );
 
   /**
@@ -188,14 +202,18 @@ export function MeetingBoardPage() {
         });
       }
     }
-    const filtered = ownerFilter === 'mine' ? rows.filter((m) => m.user.id === user?.id) : rows;
+    const filtered = ownerFilter === 'mine'
+      ? rows.filter((m) => m.user.id === user?.id)
+      : ownerFilter === 'selected'
+        ? rows.filter((m) => watchedMemberIds.includes(m.user.id))
+        : rows;
     // People with work planned float to the top; the empty rows collect underneath.
     return filtered.sort(
       (a, b) =>
         (b.progress.total > 0 ? 1 : 0) - (a.progress.total > 0 ? 1 : 0) ||
         a.user.name.localeCompare(b.user.name),
     );
-  }, [board, allUsers, isAdmin, ownerFilter, user?.id]);
+  }, [board, allUsers, isAdmin, ownerFilter, user?.id, watchedMemberIds]);
 
   const openItem = board?.items.find((i) => i.id === openItemId) ?? null;
   const myMood = board?.members.find((m) => m.user.id === user?.id)?.mood ?? null;
@@ -302,6 +320,8 @@ export function MeetingBoardPage() {
         onError={setError}
       />
 
+      {isAdmin ? <MeetingReportDownloads /> : null}
+
       {error ? <ErrorState message={error} /> : null}
 
       <MoodCheckIn board={board} current={myMood?.mood ?? null} note={myMood?.note ?? null} canWrite={canWrite} onError={setError} />
@@ -332,25 +352,27 @@ export function MeetingBoardPage() {
         <>
           {/* filters */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-lg border border-slate-200 p-0.5 dark:border-[#2d2d2d]">
-              {([
-                { key: 'all', label: 'Everyone' },
-                { key: 'mine', label: 'Just me' },
-              ] as { key: 'all' | 'mine'; label: string }[]).map((f) => (
-                <button
-                  key={f.key}
-                  type="button"
-                  onClick={() => setOwnerFilter(f.key)}
-                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-                    ownerFilter === f.key
-                      ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-400'
-                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
+            <select
+              value={ownerFilter}
+              onChange={(e) => setOwnerFilter(e.target.value as 'all' | 'mine' | 'selected')}
+              aria-label="Choose whose cards to watch"
+              className="rounded-lg border border-slate-200 bg-white/80 px-2.5 py-1.5 text-xs font-semibold text-slate-600 outline-none transition focus:border-indigo-500 dark:border-[#2d2d2d] dark:bg-[#1a1a1a] dark:text-slate-300"
+            >
+              <option value="all">Everyone</option>
+              <option value="mine">Just me</option>
+              <option value="selected">Selected people</option>
+            </select>
+            {ownerFilter === 'selected' ? (
+              <div className="min-w-52">
+                <AssigneePicker
+                  members={membersToWatch}
+                  selected={membersToWatch.filter((member) => watchedMemberIds.includes(member.id))}
+                  onChange={setWatchedMemberIds}
+                  emptyLabel="Choose people"
+                  pluralLabel="people selected"
+                />
+              </div>
+            ) : null}
             <div className="flex rounded-lg border border-slate-200 p-0.5 dark:border-[#2d2d2d]">
               {([
                 { key: 'day', label: 'By day' },
@@ -542,6 +564,20 @@ export function MeetingBoardPage() {
       ) : null}
     </div>
   );
+}
+
+function MeetingReportDownloads() {
+  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [loading, setLoading] = useState<'pdf' | 'csv' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const download = async (format: 'pdf' | 'csv') => {
+    setLoading(format); setError(null);
+    try {
+      const blob = await apiBlob(`/meeting-boards/reports/monthly.${format}?month=${month}`);
+      const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `meeting-report-${month}.${format}`; document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
+    } catch (e) { setError(e instanceof ApiRequestError ? e.message : 'Could not download the meeting report'); } finally { setLoading(null); }
+  };
+  return <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-end sm:justify-between"><div><div className="text-xs font-bold uppercase tracking-wider text-slate-455 dark:text-slate-400">Meeting reports</div><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Monthly delivery, carry-over, team, and project analysis.</p></div><div className="flex flex-wrap items-end gap-2"><label className="text-xs font-semibold text-slate-500 dark:text-slate-400"><span className="mb-1 block">Report month</span><input type="month" value={month} max={new Date().toISOString().slice(0, 7)} onChange={(e) => setMonth(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500 dark:border-[#2d2d2d] dark:bg-[#1a1a1a] dark:text-white" /></label><Button disabled={!month || loading !== null} onClick={() => void download('pdf')} className="px-3 py-2 text-xs">{loading === 'pdf' ? 'Preparing PDF...' : 'Download PDF'}</Button><Button variant="ghost" disabled={!month || loading !== null} onClick={() => void download('csv')} className="px-3 py-2 text-xs">{loading === 'csv' ? 'Preparing CSV...' : 'Download CSV'}</Button></div>{error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}</Card>;
 }
 
 /* ── week header ─────────────────────────────────────────────────────────── */
@@ -1019,6 +1055,7 @@ function NotesPanel({
       <Card className="p-4 sm:p-5">
         <h2 className="mb-2 text-sm font-bold text-slate-700 dark:text-slate-200">Agenda</h2>
         {isAdmin ? (
+          <div>
           <textarea
             value={agenda}
             rows={4}
@@ -1032,8 +1069,10 @@ function NotesPanel({
             }}
             className="w-full resize-y rounded-lg border border-slate-200 bg-white/80 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 dark:border-[#2d2d2d] dark:bg-[#1a1a1a] dark:text-white dark:placeholder-slate-500"
           />
+          <div className="mt-2"><TextLinkButton value={agenda} onChange={setAgenda} /></div>
+          </div>
         ) : board.agenda ? (
-          <p className="whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-350">{board.agenda}</p>
+          <p className="whitespace-pre-wrap break-words text-sm text-slate-600 dark:text-slate-350">{linkify(board.agenda)}</p>
         ) : (
           <p className="text-sm text-slate-400 dark:text-slate-500">No agenda set for this week.</p>
         )}
@@ -1085,7 +1124,7 @@ function NotesPanel({
                         </div>
                       </div>
                     ) : (
-                      <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-slate-600 dark:text-slate-350">{n.body}</p>
+                      <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-slate-600 dark:text-slate-350">{linkify(n.body)}</p>
                     )}
                     {(mine || isAdmin) && editingId !== n.id ? (
                       <div className="mt-1 flex gap-3 text-[11px] font-medium text-slate-400 dark:text-slate-500">
@@ -1126,6 +1165,7 @@ function NotesPanel({
               onChange={(e) => setDraft(e.target.value)}
               className="flex-1 resize-y rounded-lg border border-slate-200 bg-white/80 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 dark:border-[#2d2d2d] dark:bg-[#1a1a1a] dark:text-white dark:placeholder-slate-500"
             />
+            <TextLinkButton value={draft} onChange={setDraft} className="self-start sm:self-end" />
             <Button
               className="self-end px-4 py-2 text-xs sm:self-stretch"
               disabled={!draft.trim() || createNote.isPending}

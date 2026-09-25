@@ -105,7 +105,7 @@ export function BoardCardComposer({
     >
       <textarea
         autoFocus
-        rows={2}
+        rows={3}
         value={draft}
         placeholder={placeholder}
         onChange={(e) => setDraft(e.target.value)}
@@ -117,7 +117,8 @@ export function BoardCardComposer({
           }
           if (e.key === 'Escape') close();
         }}
-        className={`w-full resize-none rounded-lg border border-indigo-400 bg-white outline-none focus:ring-2 focus:ring-indigo-500/10 dark:border-indigo-500 dark:bg-[#1a1a1a] dark:text-white dark:placeholder-slate-500 ${
+        maxLength={1000}
+        className={`w-full resize-y rounded-lg border border-indigo-400 bg-white outline-none focus:ring-2 focus:ring-indigo-500/10 dark:border-indigo-500 dark:bg-[#1a1a1a] dark:text-white dark:placeholder-slate-500 ${
           size === 'sm' ? 'px-1.5 py-1 text-[11px]' : 'px-2 py-1.5 text-xs'
         }`}
       />

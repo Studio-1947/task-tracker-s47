@@ -64,7 +64,7 @@ export const meetingBoardItems = pgTable(
     /** Working day inside the board's week (Mon–Fri). */
     dayDate: date('day_date').notNull(),
     slot: meetingSlotEnum('slot').notNull(),
-    title: varchar('title', { length: 200 }).notNull(),
+    title: varchar('title', { length: 1000 }).notNull(),
     note: varchar('note', { length: 2000 }),
     status: boardItemStatusEnum('status').notNull().default('PENDING'),
     position: integer('position').notNull().default(0),

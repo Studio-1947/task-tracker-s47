@@ -33,7 +33,7 @@ export const createBoardItemSchema = z
     userId: z.string().uuid().optional(),
     dayDate: z.string().date(),
     slot: slotEnum,
-    title: z.string().min(1).max(200),
+    title: z.string().min(1).max(1000),
     note: z.string().max(2000).nullable().optional(),
     status: itemStatusEnum.optional(),
     /**
@@ -50,7 +50,7 @@ export const updateBoardItemSchema = z
     userId: z.string().uuid().optional(),
     dayDate: z.string().date().optional(),
     slot: slotEnum.optional(),
-    title: z.string().min(1).max(200).optional(),
+    title: z.string().min(1).max(1000).optional(),
     note: z.string().max(2000).nullable().optional(),
     status: itemStatusEnum.optional(),
     position: z.number().int().min(0).max(10_000).optional(),

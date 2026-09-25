@@ -11,13 +11,24 @@ interface Props {
   disabled?: boolean;
   /** Avatar-stack-only trigger, for tight rows like the subtask list. */
   compact?: boolean;
+  /** Custom wording when this multi-select is used for people tags or board filters. */
+  emptyLabel?: string;
+  pluralLabel?: string;
 }
 
 /**
  * Multi-select assignee dropdown. A task can carry any number of assignees
  * (task_assignees is M2M), so this replaces the old single <select>.
  */
-export function AssigneePicker({ members, selected, onChange, disabled, compact }: Props) {
+export function AssigneePicker({
+  members,
+  selected,
+  onChange,
+  disabled,
+  compact,
+  emptyLabel = 'Unassigned',
+  pluralLabel = 'assignees',
+}: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
@@ -58,10 +69,10 @@ export function AssigneePicker({ members, selected, onChange, disabled, compact 
 
   const summary =
     selected.length === 0
-      ? 'Unassigned'
+      ? emptyLabel
       : selected.length === 1
         ? (selected[0]?.name ?? '')
-        : `${selected.length} assignees`;
+        : `${selected.length} ${pluralLabel}`;
 
   return (
     <div ref={rootRef} className="relative">

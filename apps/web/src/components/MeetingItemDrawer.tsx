@@ -142,14 +142,15 @@ export function MeetingItemDrawer({
             <textarea
               value={title}
               disabled={!canEdit}
-              rows={2}
+              rows={3}
+              maxLength={1000}
               onChange={(e) => setTitle(e.target.value)}
               onBlur={() => {
                 const next = title.trim();
                 if (!next) return setTitle(item.title);
                 if (next !== item.title) void patch({ title: next });
               }}
-              className="w-full resize-none rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-lg font-semibold text-slate-800 outline-none transition hover:border-slate-200 focus:border-indigo-500 focus:bg-white disabled:hover:border-transparent dark:text-white dark:hover:border-[#2d2d2d] dark:focus:border-indigo-500 dark:focus:bg-[#1a1a1a]"
+              className="w-full resize-y rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-lg font-semibold text-slate-800 outline-none transition hover:border-slate-200 focus:border-indigo-500 focus:bg-white disabled:hover:border-transparent dark:text-white dark:hover:border-[#2d2d2d] dark:focus:border-indigo-500 dark:focus:bg-[#1a1a1a]"
             />
           </div>
 

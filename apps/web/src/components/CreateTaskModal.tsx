@@ -4,6 +4,7 @@ import { useCreateTask } from '../hooks/useTasks';
 import { ApiRequestError } from '../lib/api';
 import { statusLabel } from '../lib/format';
 import { AssigneePicker } from './AssigneePicker';
+import { TextLinkButton } from './TextLinkButton';
 import { Button, Input } from './ui';
 
 interface Props {
@@ -101,7 +102,8 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
 
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Title</label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} required autoFocus />
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={1000} required autoFocus />
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Up to 1,000 characters.</p>
           </div>
 
           <div>
@@ -113,6 +115,7 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
+            <div className="mt-2"><TextLinkButton value={description} onChange={setDescription} /></div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -147,11 +150,14 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
               </select>
             </label>
             <div className="text-sm">
-              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Assignees</span>
+              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Tag people</span>
+              <p className="mb-1.5 text-xs text-slate-400 dark:text-slate-500">Select as many people as needed.</p>
               <AssigneePicker
                 members={members}
                 selected={members.filter((m) => assigneeIds.includes(m.id))}
                 onChange={setAssigneeIds}
+                emptyLabel="No people tagged"
+                pluralLabel="people tagged"
               />
             </div>
             <label className="text-sm">

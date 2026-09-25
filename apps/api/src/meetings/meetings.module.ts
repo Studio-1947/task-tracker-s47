@@ -3,6 +3,7 @@ import { TasksModule } from '../tasks/tasks.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
 import { MeetingsController } from './meetings.controller';
 import { MeetingsService } from './meetings.service';
+import { MeetingReportsService } from './meeting-reports.service';
 
 /**
  * Cards filed under a project are mirrored as real workspace tasks, so the board
@@ -11,6 +12,6 @@ import { MeetingsService } from './meetings.service';
 @Module({
   imports: [TasksModule, WorkspacesModule],
   controllers: [MeetingsController],
-  providers: [MeetingsService],
+  providers: [MeetingsService, MeetingReportsService],
 })
 export class MeetingsModule {}

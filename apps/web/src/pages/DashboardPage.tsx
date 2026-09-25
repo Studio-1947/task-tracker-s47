@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   TASK_STATUSES,
@@ -10,7 +11,7 @@ import {
 } from '@task-tracker/shared';
 import { useAdminDashboard, useMemberDashboard } from '../hooks/useDashboard';
 import { useAuth } from '../stores/auth';
-import { ApiRequestError } from '../lib/api';
+import { apiBlob, ApiRequestError } from '../lib/api';
 import { Avatar } from '../components/Avatar';
 import { HBarList, LineChart } from '../components/charts';
 import { Badge, Card, ErrorState, Spinner } from '../components/ui';
@@ -324,6 +325,7 @@ function AdminView() {
 
   return (
     <div className="mt-6 space-y-6 animate-fade-in">
+      <MonthlyReportDownloads />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Workspaces" value={data.totalWorkspaces} />
         <Stat label="Users" value={data.totalUsers} />
@@ -343,6 +345,55 @@ function AdminView() {
       <AtRiskCard items={data.upcomingDeadlines} />
       <StatusBreakdown counts={data.tasksByStatus} />
     </div>
+  );
+}
+
+function MonthlyReportDownloads() {
+  const nowMonth = new Date().toISOString().slice(0, 7);
+  const [month, setMonth] = useState(nowMonth);
+  const [downloading, setDownloading] = useState<'pdf' | 'csv' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const download = async (format: 'pdf' | 'csv') => {
+    setDownloading(format);
+    setError(null);
+    try {
+      const blob = await apiBlob(`/admin/reports/monthly.${format}?month=${month}`);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `task-tracker-report-${month}.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Could not download the report');
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  return (
+    <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <div className="text-xs font-bold uppercase tracking-wider text-slate-455 dark:text-slate-400">Monthly reporting</div>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Download an executive analysis or the full task activity data.</p>
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+          <span className="mb-1 block">Report month</span>
+          <input type="month" value={month} max={nowMonth} onChange={(e) => setMonth(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500 dark:border-[#2d2d2d] dark:bg-[#1a1a1a] dark:text-white" />
+        </label>
+        <button type="button" disabled={!month || downloading !== null} onClick={() => void download('pdf')} className="rounded-lg bg-indigo-600 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50">
+          {downloading === 'pdf' ? 'Preparing PDF...' : 'Download PDF'}
+        </button>
+        <button type="button" disabled={!month || downloading !== null} onClick={() => void download('csv')} className="rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-[#2d2d2d] dark:bg-[#1a1a1a] dark:text-slate-200 dark:hover:bg-[#252525]">
+          {downloading === 'csv' ? 'Preparing CSV...' : 'Download CSV'}
+        </button>
+      </div>
+      {error ? <p className="text-sm text-red-600 dark:text-red-400 sm:col-span-full">{error}</p> : null}
+    </Card>
   );
 }
 

@@ -1,5 +1,6 @@
 import {
   Body,
+  BadRequestException,
   Controller,
   Delete,
   Get,
@@ -9,8 +10,10 @@ import {
   Post,
   Put,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   Role,
   createBoardItemSchema,
@@ -33,6 +36,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { MeetingsService } from './meetings.service';
+import { MeetingReportsService } from './meeting-reports.service';
 
 /**
  * Weekly meeting mood board. The whole team can read every week (that's the
@@ -41,7 +45,25 @@ import { MeetingsService } from './meetings.service';
 @Controller('meeting-boards')
 @UseGuards(RolesGuard)
 export class MeetingsController {
-  constructor(private readonly meetings: MeetingsService) {}
+  constructor(private readonly meetings: MeetingsService, private readonly reports: MeetingReportsService) {}
+
+  private reportMonth(month?: string) {
+    const value = month ?? new Date().toISOString().slice(0, 7);
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) throw new BadRequestException('month must use YYYY-MM');
+    return value;
+  }
+
+  @Get('reports/monthly.csv')
+  @Roles(Role.ADMIN)
+  async reportCsv(@Query('month') month: string | undefined, @Res() res: Response): Promise<void> {
+    const selected = this.reportMonth(month); res.type('text/csv; charset=utf-8'); res.setHeader('Content-Disposition', `attachment; filename="meeting-report-${selected}.csv"`); res.send(await this.reports.csv(selected));
+  }
+
+  @Get('reports/monthly.pdf')
+  @Roles(Role.ADMIN)
+  async reportPdf(@Query('month') month: string | undefined, @Res() res: Response): Promise<void> {
+    const selected = this.reportMonth(month); res.type('application/pdf'); res.setHeader('Content-Disposition', `attachment; filename="meeting-report-${selected}.pdf"`); res.send(await this.reports.pdf(selected));
+  }
 
   /* ── board ── */
 

@@ -33,7 +33,7 @@ export const tasks = pgTable(
     parentTaskId: uuid('parent_task_id').references((): AnyPgColumn => tasks.id, { onDelete: 'cascade' }),
     /** Per-project sequential number backing the human-readable ref (e.g. 12 in WEB-12). */
     number: integer('number').notNull(),
-    title: varchar('title', { length: 300 }).notNull(),
+    title: varchar('title', { length: 1000 }).notNull(),
     description: text('description'),
     status: taskStatusEnum('status').notNull().default('TODO'),
     priority: priorityEnum('priority').notNull().default('MEDIUM'),
