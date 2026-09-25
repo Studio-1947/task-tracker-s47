@@ -39,6 +39,37 @@ To configure the connection, the following Secrets must be present in the GitHub
 
 ---
 
+## Manual VPS release checklist
+
+Use this when deploying outside GitHub Actions. This release includes database
+migration `0015_long_task_titles.sql`, which raises task and meeting-card title
+limits to 1,000 characters. The API container applies pending Drizzle migrations
+automatically before it starts, so do not run SQL by hand.
+
+```bash
+# From your workstation
+ssh deploy@YOUR_VPS_HOST
+
+# On the VPS
+cd /var/www/task-tracker-s47
+bash deploy/backup.sh
+git fetch origin
+git checkout main
+git pull --ff-only origin main
+docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs --tail=100 api web
+curl -fsS http://127.0.0.1:8080/api/health
+```
+
+The expected health response is a successful JSON response from the API. If the
+API is not healthy, inspect its logs first; its startup command runs
+`node dist/database/migrate.js` before starting the server. Monthly task and
+meeting report downloads, deep-analysis exports, and hyperlink controls are
+application changes and do not require additional database migrations.
+
+---
+
 ## 🔒 Host Nginx Reverse Proxy & SSL Setup
 
 Since the VPS runs other live products, the host Nginx server manages port `80`/`443` traffic.
