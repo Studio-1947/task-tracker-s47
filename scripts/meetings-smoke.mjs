@@ -6,12 +6,13 @@
 // permission rules (including the week lock).
 //
 //   node scripts/meetings-smoke.mjs      (defaults to http://localhost:3000/api)
-//   API_URL=... node scripts/meetings-smoke.mjs
+//   API_URL=... MEETING_SMOKE_DATE=YYYY-MM-DD node scripts/meetings-smoke.mjs
 //
 // Requires the seeded admin (pnpm db:seed creates admin@). Creates one throwaway
 // member for the permission checks and deactivates it afterwards.
 
 const API = process.env.API_URL ?? 'http://localhost:3000/api';
+const TEST_DATE = process.env.MEETING_SMOKE_DATE;
 
 const ADMIN = {
   email: process.env.SEED_ADMIN_EMAIL ?? 'admin@example.com',
@@ -66,7 +67,7 @@ async function main() {
   const admin = await login(ADMIN.email, ADMIN.password);
 
   console.log('\n── board & week normalisation ──');
-  const first = await call(admin, 'GET', `/meeting-boards?date=${ymd(new Date())}`);
+  const first = await call(admin, 'GET', `/meeting-boards?date=${TEST_DATE ?? ymd(new Date())}`);
   assert(first.status === 200, 'board loads for the current week', JSON.stringify(first.body));
   const board = first.body;
   assert(new Date(`${board.weekStart}T00:00:00`).getDay() === 1, 'weekStart is a Monday', board.weekStart);
@@ -284,6 +285,8 @@ async function main() {
   const adminEdit = await call(admin, 'PATCH', `/meeting-boards/items/${c2.body.id}`, { status: 'DONE' });
   assert(adminEdit.body?.status === 'DONE', 'an admin can still edit a locked week');
   await call(admin, 'PATCH', `/meeting-boards/${board.id}`, { isLocked: false });
+  // Restore the unfinished state required by the carry-forward scenario below.
+  await call(admin, 'PATCH', `/meeting-boards/items/${c2.body.id}`, { status: 'IN_PROGRESS' });
 
   console.log('\n── carry-forward of unfinished work ──');
   // Monday cards that never finished should reappear on every later day up to

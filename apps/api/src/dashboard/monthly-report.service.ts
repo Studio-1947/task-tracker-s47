@@ -178,6 +178,35 @@ export class MonthlyReportService {
         for (const column of columns) doc.text(column.label, column.x, doc.y, { width: column.width });
         doc.moveDown(0.45).strokeColor('#cbd5e1').moveTo(42, doc.y).lineTo(553, doc.y).stroke().moveDown(0.35);
       };
+      const pie = (x: number, y: number, radius: number, values: { label: string; value: number; color: string }[]) => {
+        const total = values.reduce((sum, item) => sum + item.value, 0);
+        if (!total) {
+          doc.circle(x, y, radius).fill('#e2e8f0');
+          doc.fillColor('#64748b').font('Helvetica').fontSize(7).text('No activity', x - radius, y - 3, { width: radius * 2, align: 'center' });
+          return;
+        }
+        let angle = -90;
+        for (const item of values) {
+          if (!item.value) continue;
+          const next = angle + (item.value / total) * 360;
+          const points = Math.max(2, Math.ceil((next - angle) / 8));
+          doc.moveTo(x, y);
+          for (let point = 0; point <= points; point += 1) {
+            const radians = (angle + ((next - angle) * point) / points) * Math.PI / 180;
+            doc.lineTo(x + Math.cos(radians) * radius, y + Math.sin(radians) * radius);
+          }
+          doc.lineTo(x, y).fill(item.color);
+          angle = next;
+        }
+        doc.circle(x, y, radius * 0.55).fill('#ffffff');
+        doc.fillColor('#1e293b').font('Helvetica-Bold').fontSize(13).text(String(total), x - radius * 0.55, y - 9, { width: radius * 1.1, align: 'center' });
+        doc.fillColor('#64748b').font('Helvetica').fontSize(6.5).text('tasks', x - radius * 0.55, y + 6, { width: radius * 1.1, align: 'center' });
+      };
+      const legend = (x: number, y: number, values: { label: string; value: number; color: string }[]) => values.forEach((item, index) => {
+        const top = y + index * 19;
+        doc.roundedRect(x, top, 8, 8, 2).fill(item.color);
+        doc.fillColor('#475569').font('Helvetica').fontSize(7.5).text(`${item.label}  ${item.value}`, x + 13, top - 1, { width: 105 });
+      });
 
       doc.rect(0, 0, doc.page.width, 108).fill('#312e81');
       doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(22).text('Monthly Operations Report', 42, 34);
@@ -195,6 +224,33 @@ export class MonthlyReportService {
         doc.fillColor('#1e293b').font('Helvetica-Bold').fontSize(18).text(value, x + 10, 158, { width: 96 });
       });
       doc.y = 202;
+      heading('Visual analytics');
+      const statuses = [
+        { label: 'To do', value: report.statusCounts.TODO ?? 0, color: '#94a3b8' },
+        { label: 'In progress', value: report.statusCounts.IN_PROGRESS ?? 0, color: '#f59e0b' },
+        { label: 'Done', value: report.statusCounts.DONE ?? 0, color: '#10b981' },
+      ];
+      pie(105, doc.y + 55, 42, statuses);
+      legend(163, doc.y + 25, statuses);
+      const chartX = 310;
+      const chartY = doc.y + 18;
+      const completionWidth = 212;
+      doc.fillColor('#334155').font('Helvetica-Bold').fontSize(8.5).text('Completion progress', chartX, chartY);
+      doc.roundedRect(chartX, chartY + 17, completionWidth, 13, 6).fill('#e2e8f0');
+      doc.roundedRect(chartX, chartY + 17, completionWidth * Math.min(report.completionRate, 100) / 100, 13, 6).fill('#4f46e5');
+      doc.fillColor('#4f46e5').font('Helvetica-Bold').fontSize(11).text(`${report.completionRate}%`, chartX, chartY + 38);
+      doc.fillColor('#64748b').font('Helvetica').fontSize(7.5).text(`${report.completed} completed  |  ${report.openAtMonthEnd} open at month end`, chartX + 37, chartY + 41);
+      doc.fillColor('#334155').font('Helvetica-Bold').fontSize(8.5).text('Workspace throughput', chartX, chartY + 67);
+      const topWorkspaces = report.workspaceRows.slice(0, 3);
+      const maxWorkspace = Math.max(1, ...topWorkspaces.map((row) => row.created));
+      (topWorkspaces.length ? topWorkspaces : [{ name: 'No workspace activity', created: 0, completed: 0, overdue: 0, completionRate: 0 }]).forEach((row, index) => {
+        const y = chartY + 83 + index * 17;
+        doc.fillColor('#64748b').font('Helvetica').fontSize(7).text(truncate(row.name, 18), chartX, y, { width: 92 });
+        doc.roundedRect(chartX + 96, y + 1, 105, 7, 3).fill('#e2e8f0');
+        if (row.created) doc.roundedRect(chartX + 96, y + 1, 105 * row.created / maxWorkspace, 7, 3).fill('#0ea5e9');
+        doc.fillColor('#334155').font('Helvetica-Bold').fontSize(7).text(String(row.created), chartX + 205, y, { width: 18, align: 'right' });
+      });
+      doc.y = 348;
       heading('Executive analysis');
       const summary = report.created === 0
         ? `No tasks were created in ${report.label}. ${report.completed} tasks were completed from existing work.`
