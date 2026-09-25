@@ -252,10 +252,11 @@ export class MonthlyReportService {
         if (row.created) doc.roundedRect(chartX + 96, y + 1, 105 * row.created / maxWorkspace, 7, 3).fill('#0ea5e9');
         doc.fillColor('#334155').font('Helvetica-Bold').fontSize(7).text(String(row.created), chartX + 205, y, { width: 18, align: 'right' });
       });
-      // Chart primitives use absolute coordinates and move PDFKit's cursor; put
-      // normal flowing text back at the left margin below the entire visual area.
+      // Keep the narrative and variable-length tables off the chart canvas. This
+      // prevents wide analytics from ever overlapping flowing report text.
+      doc.addPage();
       doc.x = 42;
-      doc.y = 392;
+      doc.y = 42;
       heading('Executive analysis');
       const summary = report.created === 0
         ? `No tasks were created in ${report.label}. ${report.completed} tasks were completed from existing work.`
