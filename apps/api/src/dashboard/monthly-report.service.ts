@@ -171,9 +171,11 @@ export class MonthlyReportService {
       const pageBottom = () => doc.page.height - doc.page.margins.bottom;
       const heading = (title: string) => {
         if (doc.y > pageBottom() - 100) doc.addPage();
+        doc.x = 42;
         doc.moveDown(1).fontSize(13).fillColor('#1e293b').font('Helvetica-Bold').text(title).moveDown(0.45);
       };
       const tableHeader = (columns: { label: string; x: number; width: number }[]) => {
+        doc.x = 42;
         doc.fontSize(8).font('Helvetica-Bold').fillColor('#475569');
         for (const column of columns) doc.text(column.label, column.x, doc.y, { width: column.width });
         doc.moveDown(0.45).strokeColor('#cbd5e1').moveTo(42, doc.y).lineTo(553, doc.y).stroke().moveDown(0.35);
@@ -250,7 +252,10 @@ export class MonthlyReportService {
         if (row.created) doc.roundedRect(chartX + 96, y + 1, 105 * row.created / maxWorkspace, 7, 3).fill('#0ea5e9');
         doc.fillColor('#334155').font('Helvetica-Bold').fontSize(7).text(String(row.created), chartX + 205, y, { width: 18, align: 'right' });
       });
-      doc.y = 348;
+      // Chart primitives use absolute coordinates and move PDFKit's cursor; put
+      // normal flowing text back at the left margin below the entire visual area.
+      doc.x = 42;
+      doc.y = 392;
       heading('Executive analysis');
       const summary = report.created === 0
         ? `No tasks were created in ${report.label}. ${report.completed} tasks were completed from existing work.`

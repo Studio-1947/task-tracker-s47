@@ -41,6 +41,7 @@ import {
   meetingBoardNotes,
   meetingBoards,
   projects,
+  taskAssignees,
   tasks,
   users,
   workspaceMembers,
@@ -57,7 +58,7 @@ import { WorkspacesService } from '../workspaces/workspaces.service';
 type Actor = { id: string; role: string };
 
 /** The live state of a card's mirror task, read back alongside the board. */
-type MirrorTask = { id: string; ref: string; status: TaskStatus };
+type MirrorTask = { id: string; ref: string; status: TaskStatus; assigneeIds: string[] };
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const ymd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -174,11 +175,18 @@ export class MeetingsService {
       .from(tasks)
       .innerJoin(projects, eq(projects.id, tasks.projectId))
       .where(inArray(tasks.id, unique));
+    const assigneeRows = await this.db
+      .select({ taskId: taskAssignees.taskId, userId: taskAssignees.userId })
+      .from(taskAssignees)
+      .where(inArray(taskAssignees.taskId, unique));
+    const assigneeIds = new Map<string, string[]>();
+    for (const row of assigneeRows) assigneeIds.set(row.taskId, [...(assigneeIds.get(row.taskId) ?? []), row.userId]);
     for (const r of rows) {
       map.set(r.id, {
         id: r.id,
         ref: `${r.prefix}-${r.number}`,
         status: r.status as TaskStatus,
+        assigneeIds: assigneeIds.get(r.id) ?? [],
       });
     }
     return map;
@@ -196,6 +204,7 @@ export class MeetingsService {
       id: row.id,
       boardId: row.boardId,
       user: this.refOrUnknown(refs, row.userId),
+      assignees: mirror?.assigneeIds.map((id) => this.refOrUnknown(refs, id)) ?? [],
       dayDate: row.dayDate,
       slot: row.slot as MeetingSlot,
       title: row.title,
@@ -463,6 +472,7 @@ export class MeetingsService {
         ...itemRows.flatMap((i) => [i.userId, i.createdById ?? '']),
         ...noteRows.map((n) => n.authorId),
         ...moodRows.map((m) => m.userId),
+        ...[...mirrors.values()].flatMap((mirror) => mirror.assigneeIds),
       ]),
       this.projectRefs(itemRows.map((i) => i.projectId)),
     ]);
@@ -669,15 +679,17 @@ export class MeetingsService {
   private async createMirrorTask(
     actor: Actor,
     project: ProjectRow,
-    card: { title: string; note: string | null; status: BoardItemStatus; userId: string },
+    card: { title: string; note: string | null; status: BoardItemStatus; userId: string; assigneeIds?: string[] },
   ): Promise<string> {
-    const assign = await this.workspaces.isMember(project.workspaceId, card.userId);
+    const requested = [...new Set(card.assigneeIds ?? [card.userId])];
+    const allowed = await Promise.all(requested.map((id) => this.workspaces.isMember(project.workspaceId, id)));
+    if (allowed.some((member) => !member)) throw new BadRequestException('Tagged people must be members of the selected project workspace');
     const task = await this.tasks.create(project.workspaceId, actor, {
       projectId: project.id,
       title: card.title,
       ...(card.note ? { description: card.note } : {}),
       status: BOARD_STATUS_TO_TASK_STATUS[card.status],
-      ...(assign ? { assigneeIds: [card.userId] } : {}),
+      ...(requested.length ? { assigneeIds: requested } : {}),
     });
     return task.id;
   }
@@ -691,15 +703,18 @@ export class MeetingsService {
     actor: Actor,
     taskId: string,
     workspaceId: string,
-    patch: { title?: string; note?: string | null; status?: BoardItemStatus; userId?: string },
+    patch: { title?: string; note?: string | null; status?: BoardItemStatus; userId?: string; assigneeIds?: string[] },
   ): Promise<void> {
-    const assign =
-      patch.userId !== undefined && (await this.workspaces.isMember(workspaceId, patch.userId));
+    const requested = patch.assigneeIds ?? (patch.userId === undefined ? undefined : [patch.userId]);
+    if (requested) {
+      const allowed = await Promise.all([...new Set(requested)].map((id) => this.workspaces.isMember(workspaceId, id)));
+      if (allowed.some((member) => !member)) throw new BadRequestException('Tagged people must be members of the selected project workspace');
+    }
     const body = {
       ...(patch.title !== undefined ? { title: patch.title } : {}),
       ...(patch.note !== undefined ? { description: patch.note } : {}),
       ...(patch.status !== undefined ? { status: BOARD_STATUS_TO_TASK_STATUS[patch.status] } : {}),
-      ...(assign ? { assigneeIds: [patch.userId as string] } : {}),
+      ...(requested !== undefined ? { assigneeIds: [...new Set(requested)] } : {}),
     };
     if (Object.keys(body).length === 0) return;
     try {
@@ -762,6 +777,7 @@ export class MeetingsService {
           note: row.note,
           status,
           userId: ownerId,
+          assigneeIds: input.assigneeIds,
         });
         const [linked] = await this.db
           .update(meetingBoardItems)
@@ -777,10 +793,10 @@ export class MeetingsService {
       }
     }
 
-    const [refs, projectRefs, mirrors] = await Promise.all([
-      this.userRefs([row.userId, row.createdById ?? '']),
+    const mirrors = await this.mirrorTasks([row.taskId]);
+    const [refs, projectRefs] = await Promise.all([
+      this.userRefs([row.userId, row.createdById ?? '', ...[...mirrors.values()].flatMap((mirror) => mirror.assigneeIds)]),
       this.projectRefs([row.projectId]),
-      this.mirrorTasks([row.taskId]),
     ]);
     return this.toItem(row, refs, 0, projectRefs, mirrors);
   }
@@ -823,6 +839,7 @@ export class MeetingsService {
         note: input.note !== undefined ? input.note : item.note,
         status: nextStatus,
         userId: input.userId ?? item.userId,
+        assigneeIds: input.assigneeIds,
       });
     }
 
@@ -859,6 +876,7 @@ export class MeetingsService {
           ...(input.note !== undefined ? { note: input.note } : {}),
           ...(input.status !== undefined ? { status: input.status as BoardItemStatus } : {}),
           ...(input.userId !== undefined ? { userId: input.userId } : {}),
+          ...(input.assigneeIds !== undefined ? { assigneeIds: input.assigneeIds } : {}),
         });
       }
     }
@@ -867,10 +885,10 @@ export class MeetingsService {
       .select({ count: sql<number>`count(*)::int` })
       .from(meetingBoardNotes)
       .where(eq(meetingBoardNotes.itemId, itemId));
-    const [refs, projectRefs, mirrors] = await Promise.all([
-      this.userRefs([row.userId, row.createdById ?? '']),
+    const mirrors = await this.mirrorTasks([row.taskId]);
+    const [refs, projectRefs] = await Promise.all([
+      this.userRefs([row.userId, row.createdById ?? '', ...[...mirrors.values()].flatMap((mirror) => mirror.assigneeIds)]),
       this.projectRefs([row.projectId]),
-      this.mirrorTasks([row.taskId]),
     ]);
     return this.toItem(row, refs, countRow?.count ?? 0, projectRefs, mirrors);
   }

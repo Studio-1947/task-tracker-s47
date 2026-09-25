@@ -532,6 +532,8 @@ export interface BoardItem {
   id: string;
   boardId: string;
   user: UserRef;
+  /** People tagged on the mirrored workspace task. Empty until the card is filed. */
+  assignees: UserRef[];
   /** YYYY-MM-DD — always a working day inside the board's week. */
   dayDate: string;
   slot: MeetingSlot;

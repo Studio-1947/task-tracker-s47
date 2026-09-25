@@ -31,6 +31,8 @@ export const createBoardItemSchema = z
   .object({
     /** Owner of the card. Omit for yourself; only admins may set another member. */
     userId: z.string().uuid().optional(),
+    /** People tagged on the mirrored workspace task. */
+    assigneeIds: z.array(z.string().uuid()).max(50).optional(),
     dayDate: z.string().date(),
     slot: slotEnum,
     title: z.string().min(1).max(1000),
@@ -48,6 +50,8 @@ export type CreateBoardItemInput = z.infer<typeof createBoardItemSchema>;
 export const updateBoardItemSchema = z
   .object({
     userId: z.string().uuid().optional(),
+    /** Replaces the people tagged on the mirrored workspace task. */
+    assigneeIds: z.array(z.string().uuid()).max(50).optional(),
     dayDate: z.string().date().optional(),
     slot: slotEnum.optional(),
     title: z.string().min(1).max(1000).optional(),

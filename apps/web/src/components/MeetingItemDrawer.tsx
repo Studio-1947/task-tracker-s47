@@ -22,6 +22,7 @@ import {
 import { useAuth } from '../stores/auth';
 import { ApiRequestError } from '../lib/api';
 import { Avatar } from './Avatar';
+import { AssigneePicker } from './AssigneePicker';
 import { BoardProjectSelect } from './BoardProjectSelect';
 import { Button, ErrorState, Spinner } from './ui';
 
@@ -250,6 +251,25 @@ export function MeetingItemDrawer({
           </div>
 
           {/* reassign — admin only */}
+          {item.project && item.taskId ? (
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                Tag people
+              </label>
+              <AssigneePicker
+                members={members}
+                selected={members.filter((member) => item.assignees.some((assignee) => assignee.id === member.id))}
+                disabled={!canEdit}
+                emptyLabel="No people tagged"
+                pluralLabel="people tagged"
+                onChange={(assigneeIds) => void patch({ assigneeIds })}
+              />
+              <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
+                Tagged people who belong to {item.project.workspaceName} will see this task on their own board.
+              </p>
+            </div>
+          ) : null}
+
           {isAdmin ? (
             <div>
               <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
