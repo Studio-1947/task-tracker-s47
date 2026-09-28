@@ -148,6 +148,27 @@
       "when": 1790899200000,
       "tag": "0020_time_attendance_capacity_improvements",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790985600000,
+      "tag": "0021_completion_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791072000000,
+      "tag": "0022_calendar_versions_groups",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791158400000,
+      "tag": "0023_standard_policy_payroll",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,4 @@
-import { check, date, index, integer, pgTable, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
+import { check, date, index, integer, pgTable, timestamp, uniqueIndex, uuid, varchar, text } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const calendarSettings = pgTable('calendar_settings', {
@@ -24,3 +24,28 @@ export const calendarExceptions = pgTable('calendar_exceptions', {
   index('calendar_exceptions_date_idx').on(t.date),
   check('calendar_exceptions_kind_check', sql`${t.kind} IN ('HOLIDAY','HALF_DAY','WORKING_DAY')`),
 ]);
+
+export const calendarVersions = pgTable('calendar_versions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  timezone: varchar('timezone', { length: 80 }).notNull(),
+  workdays: integer('workdays').array().notNull(),
+  startMinute: integer('start_minute').notNull(),
+  endMinute: integer('end_minute').notNull(),
+  unpaidBreakMinutes: integer('unpaid_break_minutes').notNull(),
+  effectiveFrom: date('effective_from').notNull(),
+  changeReason: text('change_reason').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('calendar_versions_effective_idx').on(t.effectiveFrom)]);
+
+export const scheduleGroups = pgTable('schedule_groups', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: varchar('name', { length: 120 }).notNull(),
+  timezone: varchar('timezone', { length: 80 }).notNull().default('Asia/Kolkata'),
+  workdays: integer('workdays').array().notNull().default(sql`ARRAY[1,2,3,4,5]::integer[]`),
+  startMinute: integer('start_minute').notNull(),
+  endMinute: integer('end_minute').notNull(),
+  unpaidBreakMinutes: integer('unpaid_break_minutes').notNull().default(0),
+  effectiveFrom: date('effective_from').notNull(),
+  effectiveTo: date('effective_to'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('schedule_groups_effective_idx').on(t.effectiveFrom, t.effectiveTo)]);

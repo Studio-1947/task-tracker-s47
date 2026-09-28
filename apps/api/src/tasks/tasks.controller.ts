@@ -28,6 +28,9 @@ import {
   taskQuerySchema,
   submitTaskSchema,
   reviewTaskSchema,
+  reviseEstimateSchema,
+  reopenTaskSchema,
+  allocateTimeEntrySchema,
   updateTaskSchema,
   type CreateCommentInput,
   type CreateLinkAttachmentInput,
@@ -36,6 +39,9 @@ import {
   type TaskQuery,
   type SubmitTaskInput,
   type ReviewTaskInput,
+  type ReviseEstimateInput,
+  type ReopenTaskInput,
+  type AllocateTimeEntryInput,
   type UpdateTaskInput,
 } from '@task-tracker/shared';
 import { CurrentUser, type RequestUser } from '../common/decorators/current-user.decorator';
@@ -217,6 +223,21 @@ export class TasksController {
   @Post(':id/timer/stop')
   stopTimer(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
     return this.tasks.stopTimer(id, user);
+  }
+
+  @Post(':id/estimate-revisions')
+  reviseEstimate(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(reviseEstimateSchema)) body: ReviseEstimateInput, @CurrentUser() user: RequestUser) {
+    return this.tasks.reviseEstimate(id, user, body);
+  }
+
+  @Post(':id/reopen')
+  reopen(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(reopenTaskSchema)) body: ReopenTaskInput, @CurrentUser() user: RequestUser) {
+    return this.tasks.reopen(id, user, body);
+  }
+
+  @Post(':id/time-entries/:entryId/allocate')
+  allocateTimeEntry(@Param('id', ParseUUIDPipe) id: string, @Param('entryId', ParseUUIDPipe) entryId: string, @Body(new ZodValidationPipe(allocateTimeEntrySchema)) body: AllocateTimeEntryInput, @CurrentUser() user: RequestUser) {
+    return this.tasks.allocateTimeEntry(id, entryId, user, body);
   }
 
   @Post(':id/blockers')

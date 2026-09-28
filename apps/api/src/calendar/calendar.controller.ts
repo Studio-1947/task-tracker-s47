@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Put, UseGuards } from '@nestjs/common';
-import { Role, calendarExceptionSchema, calendarSettingsSchema, type CalendarExceptionInput, type CalendarSettingsInput } from '@task-tracker/shared';
+import { Role, calendarExceptionSchema, updateCalendarSettingsSchema, scheduleGroupSchema, type CalendarExceptionInput, type UpdateCalendarSettingsInput, type ScheduleGroupInput } from '@task-tracker/shared';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
@@ -10,7 +10,11 @@ import { CalendarService } from './calendar.service';
 export class CalendarController {
   constructor(private readonly calendar: CalendarService) {}
   @Get() get() { return this.calendar.get(); }
-  @Put() @Roles(Role.ADMIN) update(@Body(new ZodValidationPipe(calendarSettingsSchema)) body: CalendarSettingsInput) { return this.calendar.update(body); }
+  @Put() @Roles(Role.ADMIN) update(@Body(new ZodValidationPipe(updateCalendarSettingsSchema)) body: UpdateCalendarSettingsInput) { return this.calendar.update(body); }
+  @Get('history') @Roles(Role.ADMIN) history() { return this.calendar.history(); }
+  @Get('schedule-groups') getScheduleGroups() { return this.calendar.listScheduleGroups(); }
+  @Post('schedule-groups') @Roles(Role.ADMIN) createScheduleGroup(@Body(new ZodValidationPipe(scheduleGroupSchema)) body: ScheduleGroupInput) { return this.calendar.createScheduleGroup(body); }
+  @Delete('schedule-groups/:id') @Roles(Role.ADMIN) removeScheduleGroup(@Param('id', ParseUUIDPipe) id: string) { return this.calendar.removeScheduleGroup(id); }
   @Post('exceptions') @Roles(Role.ADMIN) add(@Body(new ZodValidationPipe(calendarExceptionSchema)) body: CalendarExceptionInput) { return this.calendar.addException(body); }
   @Delete('exceptions/:id') @Roles(Role.ADMIN) remove(@Param('id', ParseUUIDPipe) id: string) { return this.calendar.removeException(id); }
 }

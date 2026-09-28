@@ -21,12 +21,16 @@ import type {
   ReviewLeaveRequestInput,
   SetLeaveBalancesInput,
   UpdateLeaveTypeInput,
+  OrganisationPolicyInput,
 } from '@task-tracker/shared';
+import { calculatePayableIndicator, workingDayUnits } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
 import { CalendarService } from '../calendar/calendar.service';
 import {
   attendanceRecords,
   attendanceCorrections,
+  organisationPolicies,
+  payrollStatements,
   leaveBalances,
   leaveRequests,
   leaveTypes,
@@ -469,9 +473,14 @@ export class AttendanceService {
   }
 
   async getDailyAttendanceState(userId: string, dateStr: string): Promise<string> {
-    const d = new Date(dateStr);
+    const calendar = await this.calendar.get();
+    const exception = calendar.exceptions.find((item) => item.date === dateStr);
+    if (exception?.kind === 'HOLIDAY') return 'HOLIDAY';
+    const d = new Date(`${dateStr}T00:00:00Z`);
     const dayOfWeek = d.getUTCDay();
-    if (dayOfWeek === 0 || dayOfWeek === 6) return 'WEEKLY_OFF';
+    if (!exception || exception.kind !== 'WORKING_DAY') {
+      if (!(calendar.settings?.workdays ?? [1, 2, 3, 4, 5]).includes(dayOfWeek)) return 'WEEKLY_OFF';
+    }
 
     const [pending] = await this.db
       .select({ id: attendanceCorrections.id })
@@ -495,6 +504,78 @@ export class AttendanceService {
     if (leave) return 'PAID_LEAVE';
 
     return 'ABSENCE';
+  }
+
+  async getOrganisationPolicy() {
+    const [policy] = await this.db.select().from(organisationPolicies).where(eq(organisationPolicies.id, 1));
+    return policy;
+  }
+
+  async updateOrganisationPolicy(input: OrganisationPolicyInput) {
+    const current = await this.getOrganisationPolicy();
+    const values = { ...input, earnedLeaveMonthly: String(input.earnedLeaveMonthly), casualLeaveMonthly: String(input.casualLeaveMonthly) };
+    const [policy] = await this.db.insert(organisationPolicies).values({ id: 1, ...values, version: (current?.version ?? 0) + 1 })
+      .onConflictDoUpdate({ target: organisationPolicies.id, set: { ...values, version: (current?.version ?? 0) + 1, updatedAt: new Date() } }).returning();
+    return policy;
+  }
+
+  async createPayrollDraft(userId: string, month: string, preparedById: string) {
+    const { start, end } = monthRange(month);
+    const [policy, calendar, records, paidLeaves, pending, versions] = await Promise.all([
+      this.getOrganisationPolicy(), this.calendar.get(),
+      this.db.select().from(attendanceRecords).where(and(eq(attendanceRecords.userId, userId), gte(attendanceRecords.workDate, start), lt(attendanceRecords.workDate, end))),
+      this.db.select({ request: leaveRequests, type: leaveTypes }).from(leaveRequests).innerJoin(leaveTypes, eq(leaveTypes.id, leaveRequests.leaveTypeId))
+        .where(and(eq(leaveRequests.userId, userId), eq(leaveRequests.status, 'APPROVED'), gte(leaveRequests.startDate, start), lt(leaveRequests.startDate, end))),
+      this.db.select({ id: attendanceCorrections.id }).from(attendanceCorrections).where(and(eq(attendanceCorrections.userId, userId), eq(attendanceCorrections.status, 'PENDING'), gte(attendanceCorrections.workDate, start), lt(attendanceCorrections.workDate, end))).limit(1),
+      this.db.select({ version: payrollStatements.version }).from(payrollStatements).where(and(eq(payrollStatements.userId, userId), eq(payrollStatements.month, month))).orderBy(desc(payrollStatements.version)).limit(1),
+    ]);
+    if (!policy) throw new NotFoundException('Organisation policy is not configured');
+    if (pending.length && policy.unresolvedCorrectionTreatment === 'EXCLUDE') throw new ConflictException('Resolve pending attendance corrections before preparing payroll inputs');
+    const settings = calendar.settings;
+    if (!settings) throw new NotFoundException('Working calendar is not configured');
+    const minutesPerDay = Math.max(0, settings.endMinute - settings.startMinute - settings.unpaidBreakMinutes);
+    const monthEnd = new Date(`${end}T00:00:00Z`); monthEnd.setUTCDate(monthEnd.getUTCDate() - 1);
+    const lastDay = monthEnd.toISOString().slice(0, 10);
+    const scheduledUnits = workingDayUnits(start, lastDay, settings.workdays, calendar.exceptions);
+    const scheduledMinutes = Math.round(scheduledUnits * minutesPerDay);
+    const workedMinutes = records.reduce((sum, record) => sum + (record.checkOutAt ? Math.max(0, Math.round((record.checkOutAt.getTime() - record.checkInAt.getTime()) / 60000)) : 0), 0);
+    const paidNames = new Set(policy.paidLeaveNames);
+    const paidLeaveMinutes = Math.round(paidLeaves.filter((row) => paidNames.has(row.type.name)).reduce((sum, row) => sum + Number(row.request.days), 0) * minutesPerDay);
+    const indicator = calculatePayableIndicator(scheduledMinutes, workedMinutes, paidLeaveMinutes);
+    const [statement] = await this.db.insert(payrollStatements).values({ userId, month, version: (versions[0]?.version ?? 0) + 1, policyVersion: policy.version,
+      scheduledMinutes, workedMinutes, paidLeaveMinutes, payableMinutes: indicator.payableMinutes,
+      payablePercentage: indicator.percentage === null ? null : indicator.percentage.toFixed(2), status: 'DRAFT', preparedById }).returning();
+    return { ...statement, payablePercentage: statement!.payablePercentage === null ? null : Number(statement!.payablePercentage), label: indicator.label };
+  }
+
+  listPayrollStatements(month?: string) {
+    return this.db.select().from(payrollStatements).where(month ? eq(payrollStatements.month, month) : undefined).orderBy(desc(payrollStatements.createdAt));
+  }
+
+  async reviewPayrollStatement(id: string, actorId: string) {
+    const [current] = await this.db.select().from(payrollStatements).where(eq(payrollStatements.id, id)).limit(1);
+    if (!current) throw new NotFoundException('Payroll statement not found');
+    if (current.status !== 'DRAFT') throw new BadRequestException('Only draft statements can be reviewed');
+    if (current.preparedById === actorId) throw new ConflictException('A different administrator must review this statement');
+    const [updated] = await this.db.update(payrollStatements).set({ status: 'REVIEWED', reviewedById: actorId, reviewedAt: new Date(), updatedAt: new Date() }).where(eq(payrollStatements.id, id)).returning();
+    return updated;
+  }
+
+  async approvePayrollStatement(id: string, actorId: string) {
+    const [current] = await this.db.select().from(payrollStatements).where(eq(payrollStatements.id, id)).limit(1);
+    if (!current) throw new NotFoundException('Payroll statement not found');
+    if (current.status !== 'REVIEWED') throw new BadRequestException('Statement must be reviewed before approval');
+    if (current.preparedById === actorId) throw new ConflictException('The preparer cannot approve this statement');
+    const [updated] = await this.db.update(payrollStatements).set({ status: 'APPROVED', approvedById: actorId, approvedAt: new Date(), updatedAt: new Date() }).where(eq(payrollStatements.id, id)).returning();
+    return updated;
+  }
+
+  async reopenPayrollStatement(id: string, actorId: string, reason: string) {
+    const [current] = await this.db.select().from(payrollStatements).where(eq(payrollStatements.id, id)).limit(1);
+    if (!current) throw new NotFoundException('Payroll statement not found');
+    if (current.status !== 'APPROVED') throw new BadRequestException('Only approved statements can be reopened');
+    const [updated] = await this.db.update(payrollStatements).set({ status: 'DRAFT', preparedById: actorId, reviewedById: null, approvedById: null, reviewedAt: null, approvedAt: null, reopenedReason: reason, updatedAt: new Date() }).where(eq(payrollStatements.id, id)).returning();
+    return updated;
   }
 
 }

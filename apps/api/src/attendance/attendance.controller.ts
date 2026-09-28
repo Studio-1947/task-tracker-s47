@@ -29,6 +29,11 @@ import {
   type ReviewLeaveRequestInput,
   type SetLeaveBalancesInput,
   type UpdateLeaveTypeInput,
+  organisationPolicySchema,
+  createPayrollDraftSchema,
+  payrollDecisionSchema,
+  type OrganisationPolicyInput,
+  type CreatePayrollDraftInput,
 } from '@task-tracker/shared';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -93,6 +98,11 @@ export class AttendanceController {
   @Get('attendance/me')
   myMonth(@CurrentUser('id') userId: string, @Query('month') month?: string) {
     return this.attendance.myMonth(userId, month ?? new Date().toISOString().slice(0, 7));
+  }
+
+  @Get('attendance/state')
+  dailyState(@CurrentUser('id') userId: string, @Query('date') date?: string) {
+    return this.attendance.getDailyAttendanceState(userId, date ?? new Date().toISOString().slice(0, 10));
   }
 
   @Get('attendance/team')
@@ -185,6 +195,42 @@ export class AttendanceController {
     @Body(new ZodValidationPipe(reviewCorrectionSchema)) body: ReviewCorrectionInput,
   ) {
     return this.attendance.reviewCorrection(id, reviewerId, body);
+  }
+
+  @Get('admin/organisation-policy')
+  @Roles(Role.ADMIN)
+  getPolicy() { return this.attendance.getOrganisationPolicy(); }
+
+  @Put('admin/organisation-policy')
+  @Roles(Role.ADMIN)
+  updatePolicy(@Body(new ZodValidationPipe(organisationPolicySchema)) body: OrganisationPolicyInput) { return this.attendance.updateOrganisationPolicy(body); }
+
+  @Post('admin/payroll/statements')
+  @Roles(Role.ADMIN)
+  createPayrollDraft(@CurrentUser('id') actorId: string, @Body(new ZodValidationPipe(createPayrollDraftSchema)) body: CreatePayrollDraftInput) {
+    return this.attendance.createPayrollDraft(body.userId, body.month, actorId);
+  }
+
+  @Get('admin/payroll/statements')
+  @Roles(Role.ADMIN)
+  listPayroll(@Query('month') month?: string) { return this.attendance.listPayrollStatements(month); }
+
+  @Post('admin/payroll/statements/:id/review')
+  @Roles(Role.ADMIN)
+  reviewPayroll(@Param('id', ParseUUIDPipe) id: string, @CurrentUser('id') actorId: string, @Body(new ZodValidationPipe(payrollDecisionSchema)) _body: { note: string }) {
+    return this.attendance.reviewPayrollStatement(id, actorId);
+  }
+
+  @Post('admin/payroll/statements/:id/approve')
+  @Roles(Role.ADMIN)
+  approvePayroll(@Param('id', ParseUUIDPipe) id: string, @CurrentUser('id') actorId: string, @Body(new ZodValidationPipe(payrollDecisionSchema)) _body: { note: string }) {
+    return this.attendance.approvePayrollStatement(id, actorId);
+  }
+
+  @Post('admin/payroll/statements/:id/reopen')
+  @Roles(Role.ADMIN)
+  reopenPayroll(@Param('id', ParseUUIDPipe) id: string, @CurrentUser('id') actorId: string, @Body(new ZodValidationPipe(payrollDecisionSchema)) body: { note: string }) {
+    return this.attendance.reopenPayrollStatement(id, actorId, body.note);
   }
 }
 

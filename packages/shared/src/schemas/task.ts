@@ -9,6 +9,8 @@ export const createTaskSchema = z.object({
   projectId: z.string().uuid(),
   title: z.string().min(1).max(1000),
   description: z.string().max(20000).optional(),
+  acceptanceCriteria: z.string().trim().min(1).max(10000).optional(),
+  childScope: z.enum(['REQUIRED', 'OPTIONAL', 'CANCELLED']).optional(),
   status: statusEnum.optional(),
   priority: priorityEnum.optional(),
   /** ISO datetime string, or null for no due date. */
@@ -41,6 +43,8 @@ export const updateTaskSchema = z
   .object({
     title: z.string().min(1).max(1000).optional(),
     description: z.string().max(20000).nullable().optional(),
+    acceptanceCriteria: z.string().trim().min(1).max(10000).nullable().optional(),
+    childScope: z.enum(['REQUIRED', 'OPTIONAL', 'CANCELLED']).optional(),
     status: statusEnum.optional(),
     priority: priorityEnum.optional(),
     dueDate: z.string().datetime().nullable().optional(),
@@ -131,6 +135,23 @@ export const startTimerSchema = z.object({
   note: z.string().max(2000).optional(),
 });
 export type StartTimerInput = z.infer<typeof startTimerSchema>;
+
+export const reviseEstimateSchema = z.object({
+  revisedEstimateMinutes: z.number().int().min(0).max(1_000_000),
+  reason: z.string().trim().min(1).max(2000),
+  classification: z.enum(['SCOPE_CHANGE', 'PLANNING_CORRECTION', 'CLIENT_CHANGE', 'INTERNAL_CHANGE']),
+});
+export type ReviseEstimateInput = z.infer<typeof reviseEstimateSchema>;
+
+export const reopenTaskSchema = z.object({ reason: z.string().trim().min(1).max(2000) });
+export type ReopenTaskInput = z.infer<typeof reopenTaskSchema>;
+
+export const allocateTimeEntrySchema = z.object({
+  targetTaskId: z.string().uuid(),
+  durationMinutes: z.number().int().min(1).max(1440),
+  reason: z.string().trim().min(1).max(2000),
+});
+export type AllocateTimeEntryInput = z.infer<typeof allocateTimeEntrySchema>;
 
 export const createBlockerSchema = z.object({
   reason: z.string().trim().min(1).max(2000),

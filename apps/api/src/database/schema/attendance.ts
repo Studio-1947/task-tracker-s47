@@ -1,5 +1,6 @@
 import {
   boolean,
+  check,
   date,
   doublePrecision,
   index,
@@ -11,7 +12,9 @@ import {
   uuid,
   text,
   varchar,
+  jsonb,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { users } from './users';
 import { leaveStatusEnum } from './enums';
 
@@ -150,4 +153,48 @@ export const attendanceCorrections = pgTable(
 
 export type AttendanceCorrectionRow = typeof attendanceCorrections.$inferSelect;
 export type NewAttendanceCorrectionRow = typeof attendanceCorrections.$inferInsert;
+
+export const organisationPolicies = pgTable('organisation_policies', {
+  id: integer('id').primaryKey().default(1),
+  version: integer('version').notNull().default(1),
+  timezone: varchar('timezone', { length: 80 }).notNull().default('Asia/Kolkata'),
+  reminderChannels: jsonb('reminder_channels').$type<string[]>().notNull().default(['IN_APP', 'PUSH']),
+  reminderRecipients: jsonb('reminder_recipients').$type<string[]>().notNull().default(['OWNER', 'REVIEWER', 'MANAGER']),
+  deadlineLeadMinutes: integer('deadline_lead_minutes').notNull().default(120),
+  reviewTargetMinutes: integer('review_target_minutes').notNull().default(480),
+  updateThresholdMinutes: integer('update_threshold_minutes').notNull().default(960),
+  earnedLeaveMonthly: numeric('earned_leave_monthly', { precision: 5, scale: 2 }).notNull().default('1'),
+  casualLeaveMonthly: numeric('casual_leave_monthly', { precision: 5, scale: 2 }).notNull().default('1'),
+  paidLeaveNames: jsonb('paid_leave_names').$type<string[]>().notNull().default(['Earned Leave', 'Casual Leave', 'Sick Leave']),
+  halfDayEnabled: boolean('half_day_enabled').notNull().default(true),
+  lateGraceMinutes: integer('late_grace_minutes').notNull().default(15),
+  unresolvedCorrectionTreatment: varchar('unresolved_correction_treatment', { length: 16 }).notNull().default('EXCLUDE'),
+  effectiveFrom: date('effective_from').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [check('organisation_policies_singleton', sql`${t.id} = 1`)]);
+
+export const payrollStatements = pgTable('payroll_statements', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  month: varchar('month', { length: 7 }).notNull(),
+  version: integer('version').notNull().default(1),
+  policyVersion: integer('policy_version').notNull(),
+  scheduledMinutes: integer('scheduled_minutes').notNull(),
+  workedMinutes: integer('worked_minutes').notNull(),
+  paidLeaveMinutes: integer('paid_leave_minutes').notNull(),
+  payableMinutes: integer('payable_minutes').notNull(),
+  payablePercentage: numeric('payable_percentage', { precision: 7, scale: 2 }),
+  status: varchar('status', { length: 12 }).notNull().default('DRAFT'),
+  preparedById: uuid('prepared_by_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  reviewedById: uuid('reviewed_by_id').references(() => users.id, { onDelete: 'restrict' }),
+  approvedById: uuid('approved_by_id').references(() => users.id, { onDelete: 'restrict' }),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  reopenedReason: text('reopened_reason'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique('payroll_statements_user_month_version_uq').on(t.userId, t.month, t.version),
+  index('payroll_statements_month_status_idx').on(t.month, t.status),
+]);
 

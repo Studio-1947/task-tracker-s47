@@ -19,6 +19,9 @@ import type {
   TaskSubmission,
   ReviewTaskInput,
   UpdateTaskInput,
+  ReviseEstimateInput,
+  ReopenTaskInput,
+  AllocateTimeEntryInput,
   UserRef,
 } from '@task-tracker/shared';
 import { AttachmentKind, AuditAction, Role, workingMinutesElapsed } from '@task-tracker/shared';
@@ -34,6 +37,8 @@ import {
   taskTimeEntries,
   taskBlockers,
   taskDependencies,
+  taskEstimateRevisions,
+  taskReopenings,
   tasks,
   users,
   workspaceMembers,
@@ -232,6 +237,8 @@ export class TasksService {
       number: t.number,
       ref: this.ref(prefix, t.number),
       title: t.title,
+      acceptanceCriteria: t.acceptanceCriteria,
+      childScope: t.childScope as TaskListItem['childScope'],
       status: t.status as TaskListItem['status'],
       priority: t.priority as TaskListItem['priority'],
       dueDate: t.dueDate ? t.dueDate.toISOString() : null,
@@ -436,6 +443,8 @@ export class TasksService {
           number: seq.number,
           title: input.title,
           description: input.description ?? null,
+          acceptanceCriteria: input.acceptanceCriteria ?? null,
+          childScope: input.childScope ?? 'REQUIRED',
           status: input.status ?? 'TODO',
           priority: input.priority ?? 'MEDIUM',
           dueDate: input.dueDate ? new Date(input.dueDate) : null,
@@ -693,6 +702,14 @@ export class TasksService {
           before: current.description,
           after: input.description ?? null,
         });
+      }
+      if (input.acceptanceCriteria !== undefined && (input.acceptanceCriteria ?? null) !== current.acceptanceCriteria) {
+        patch.acceptanceCriteria = input.acceptanceCriteria ?? null;
+        audits.push({ action: AuditAction.DESCRIPTION_CHANGED, before: { acceptanceCriteria: current.acceptanceCriteria }, after: { acceptanceCriteria: input.acceptanceCriteria ?? null } });
+      }
+      if (input.childScope !== undefined && input.childScope !== current.childScope) {
+        patch.childScope = input.childScope;
+        audits.push({ action: AuditAction.DESCRIPTION_CHANGED, before: { childScope: current.childScope }, after: { childScope: input.childScope } });
       }
       if (input.status !== undefined && input.status !== current.status) {
         if (current.reviewerId && (input.status === 'IN_REVIEW' || input.status === 'DONE')) {
@@ -1466,6 +1483,67 @@ export class TasksService {
       forecastTotalMinutes,
       forecastVarianceMinutes,
     };
+  }
+
+  async reviseEstimate(taskId: string, actor: Actor, input: ReviseEstimateInput) {
+    const task = await this.loadTaskOrThrow(taskId);
+    await this.workspaces.assertCanAccess(task.workspaceId, actor);
+    const canManage = await this.workspaces.isManager(task.workspaceId, actor);
+    if (!canManage) throw new ForbiddenException('Only an admin or workspace manager can approve estimate revisions');
+    const previous = task.currentEstimateMinutes ?? task.baselineEstimateMinutes ?? 0;
+    return this.db.transaction(async (tx) => {
+      const [revision] = await tx.insert(taskEstimateRevisions).values({
+        taskId, previousEstimateMinutes: previous, revisedEstimateMinutes: input.revisedEstimateMinutes,
+        reason: input.reason, classification: input.classification, actorId: actor.id,
+      }).returning();
+      await tx.update(tasks).set({ currentEstimateMinutes: input.revisedEstimateMinutes, updatedAt: new Date() }).where(eq(tasks.id, taskId));
+      await this.audit.record({ workspaceId: task.workspaceId, taskId, userId: actor.id, action: AuditAction.ESTIMATE_CHANGED,
+        beforeValue: { currentEstimateMinutes: previous }, afterValue: { currentEstimateMinutes: input.revisedEstimateMinutes, reason: input.reason, classification: input.classification } }, tx);
+      if (task.parentTaskId) await this.recalcParentRollup(task.parentTaskId, actor.id, tx);
+      return revision;
+    });
+  }
+
+  async reopen(taskId: string, actor: Actor, input: ReopenTaskInput) {
+    const task = await this.loadTaskOrThrow(taskId);
+    await this.workspaces.assertCanAccess(task.workspaceId, actor);
+    const canManage = task.reviewerId === actor.id || await this.workspaces.isManager(task.workspaceId, actor);
+    if (!canManage) throw new ForbiddenException('Only the reviewer or a workspace manager can reopen this task');
+    if (task.status !== 'DONE') throw new BadRequestException('Only an accepted task can be reopened');
+    return this.db.transaction(async (tx) => {
+      const [event] = await tx.insert(taskReopenings).values({ taskId, reason: input.reason, actorId: actor.id }).returning();
+      await tx.update(tasks).set({ status: 'IN_PROGRESS', completedAt: null, updatedAt: new Date() }).where(eq(tasks.id, taskId));
+      await this.audit.record({ workspaceId: task.workspaceId, taskId, userId: actor.id, action: AuditAction.STATUS_CHANGED,
+        beforeValue: { status: 'DONE' }, afterValue: { status: 'IN_PROGRESS', reopeningId: event!.id, reason: input.reason } }, tx);
+      return event;
+    });
+  }
+
+  async allocateTimeEntry(taskId: string, entryId: string, actor: Actor, input: AllocateTimeEntryInput) {
+    const [source, target, entry] = await Promise.all([
+      this.loadTaskOrThrow(taskId), this.loadTaskOrThrow(input.targetTaskId),
+      this.db.select().from(taskTimeEntries).where(and(eq(taskTimeEntries.id, entryId), eq(taskTimeEntries.taskId, taskId))).limit(1).then((r) => r[0]),
+    ]);
+    await this.workspaces.assertCanAccess(source.workspaceId, actor);
+    const canManage = await this.workspaces.isManager(source.workspaceId, actor);
+    if (!canManage) throw new ForbiddenException('Only an admin or workspace manager can allocate historical time');
+    if (!entry) throw new NotFoundException('Time entry not found');
+    if (target.parentTaskId !== source.id || target.workspaceId !== source.workspaceId) throw new BadRequestException('Target must be a direct child of the source task');
+    if (entry.endedAt === null) throw new BadRequestException('Stop the timer before allocating it');
+    if (input.durationMinutes > entry.durationMinutes) throw new BadRequestException('Allocated minutes exceed the source entry');
+    return this.db.transaction(async (tx) => {
+      let moved;
+      if (input.durationMinutes === entry.durationMinutes) {
+        [moved] = await tx.update(taskTimeEntries).set({ taskId: target.id, updatedAt: new Date() }).where(eq(taskTimeEntries.id, entry.id)).returning();
+      } else {
+        await tx.update(taskTimeEntries).set({ durationMinutes: entry.durationMinutes - input.durationMinutes, updatedAt: new Date() }).where(eq(taskTimeEntries.id, entry.id));
+        [moved] = await tx.insert(taskTimeEntries).values({ taskId: target.id, userId: entry.userId, workDate: entry.workDate,
+          durationMinutes: input.durationMinutes, category: entry.category, note: entry.note, startedAt: entry.startedAt, endedAt: entry.endedAt }).returning();
+      }
+      await this.audit.record({ workspaceId: source.workspaceId, taskId: source.id, userId: actor.id, action: AuditAction.TIME_ENTRY_UPDATED,
+        beforeValue: { entryId, taskId, durationMinutes: entry.durationMinutes }, afterValue: { targetTaskId: target.id, movedEntryId: moved!.id, allocatedMinutes: input.durationMinutes, reason: input.reason } }, tx);
+      return { sourceEntryId: entry.id, movedEntryId: moved!.id, allocatedMinutes: input.durationMinutes, totalMinutesPreserved: true };
+    });
   }
 
   // ── Task Blockers & Dependencies (P01) ────────────────────────────────────

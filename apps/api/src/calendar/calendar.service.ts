@@ -3,11 +3,12 @@ import { and, asc, eq, gte, lte } from 'drizzle-orm';
 import {
   workingDayUnits,
   type CalendarExceptionInput,
-  type CalendarSettingsInput,
+  type UpdateCalendarSettingsInput,
+  type ScheduleGroupInput,
   type WorkingCalendarException,
 } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
-import { calendarExceptions, calendarSettings } from '../database/schema';
+import { calendarExceptions, calendarSettings, calendarVersions, scheduleGroups } from '../database/schema';
 
 @Injectable()
 export class CalendarService {
@@ -23,8 +24,27 @@ export class CalendarService {
     return { settings, exceptions: exceptions as WorkingCalendarException[] };
   }
 
-  async update(input: CalendarSettingsInput) {
-    const [row] = await this.db.insert(calendarSettings).values({ id: 1, ...input }).onConflictDoUpdate({ target: calendarSettings.id, set: { ...input, updatedAt: new Date() } }).returning();
+  async update(input: UpdateCalendarSettingsInput) {
+    const { changeReason, ...settings } = input;
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx.insert(calendarSettings).values({ id: 1, ...settings }).onConflictDoUpdate({ target: calendarSettings.id, set: { ...settings, updatedAt: new Date() } }).returning();
+      await tx.insert(calendarVersions).values({ ...settings, changeReason });
+      return row;
+    });
+  }
+
+  history() { return this.db.select().from(calendarVersions).orderBy(asc(calendarVersions.effectiveFrom)); }
+
+  listScheduleGroups() { return this.db.select().from(scheduleGroups).orderBy(asc(scheduleGroups.name)); }
+
+  async createScheduleGroup(input: ScheduleGroupInput) {
+    const [row] = await this.db.insert(scheduleGroups).values({ ...input, effectiveTo: input.effectiveTo ?? null }).returning();
+    return row;
+  }
+
+  async removeScheduleGroup(id: string) {
+    const [row] = await this.db.delete(scheduleGroups).where(eq(scheduleGroups.id, id)).returning({ id: scheduleGroups.id });
+    if (!row) throw new NotFoundException('Schedule group not found');
     return row;
   }
 

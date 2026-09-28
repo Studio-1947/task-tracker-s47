@@ -90,3 +90,25 @@ export const reviewCorrectionSchema = z.object({
 });
 export type ReviewCorrectionInput = z.infer<typeof reviewCorrectionSchema>;
 
+export const organisationPolicySchema = z.object({
+  timezone: z.string().min(1).max(80).default('Asia/Kolkata'),
+  reminderChannels: z.array(z.enum(['IN_APP', 'PUSH'])).min(1).default(['IN_APP', 'PUSH']),
+  reminderRecipients: z.array(z.enum(['OWNER', 'REVIEWER', 'MANAGER'])).min(1).default(['OWNER', 'REVIEWER', 'MANAGER']),
+  deadlineLeadMinutes: z.number().int().min(0).max(10080).default(120),
+  reviewTargetMinutes: z.number().int().min(1).max(10080).default(480),
+  updateThresholdMinutes: z.number().int().min(1).max(20160).default(960),
+  earnedLeaveMonthly: z.number().min(0).max(31).default(1),
+  casualLeaveMonthly: z.number().min(0).max(31).default(1),
+  paidLeaveNames: z.array(z.string().trim().min(1).max(60)).default(['Earned Leave', 'Casual Leave', 'Sick Leave']),
+  halfDayEnabled: z.boolean().default(true),
+  lateGraceMinutes: z.number().int().min(0).max(240).default(15),
+  unresolvedCorrectionTreatment: z.literal('EXCLUDE').default('EXCLUDE'),
+  effectiveFrom: z.string().date(),
+});
+export type OrganisationPolicyInput = z.infer<typeof organisationPolicySchema>;
+
+export const payrollMonthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
+export const payrollDecisionSchema = z.object({ note: z.string().trim().min(1).max(2000) });
+export const createPayrollDraftSchema = z.object({ userId: z.string().uuid(), month: payrollMonthSchema });
+export type CreatePayrollDraftInput = z.infer<typeof createPayrollDraftSchema>;
+

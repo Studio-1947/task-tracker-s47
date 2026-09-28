@@ -155,6 +155,8 @@ export interface TaskListItem {
   /** Human-readable reference, e.g. "WEB-12" (project prefix + number). */
   ref: string;
   title: string;
+  acceptanceCriteria: string | null;
+  childScope: 'REQUIRED' | 'OPTIONAL' | 'CANCELLED';
   status: TaskStatus;
   priority: Priority;
   dueDate: string | null;
@@ -194,6 +196,8 @@ export interface SubtaskRef {
   priority: Priority;
   assignees: UserRef[];
   dueDate: string | null;
+  acceptanceCriteria?: string | null;
+  childScope?: 'REQUIRED' | 'OPTIONAL' | 'CANCELLED';
 }
 
 export interface TaskDetail extends TaskListItem {

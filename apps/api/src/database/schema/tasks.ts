@@ -36,6 +36,8 @@ export const tasks = pgTable(
     number: integer('number').notNull(),
     title: varchar('title', { length: 1000 }).notNull(),
     description: text('description'),
+    acceptanceCriteria: text('acceptance_criteria'),
+    childScope: varchar('child_scope', { length: 12 }).notNull().default('REQUIRED'),
     status: taskStatusEnum('status').notNull().default('TODO'),
     priority: priorityEnum('priority').notNull().default('MEDIUM'),
     dueDate: timestamp('due_date', { withTimezone: true }),
@@ -202,6 +204,25 @@ export const taskTimeEntries = pgTable(
     check('task_time_entries_category_check', sql`${t.category} IN ('EXECUTION', 'REVIEW', 'REWORK')`),
   ],
 );
+
+export const taskEstimateRevisions = pgTable('task_estimate_revisions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  taskId: uuid('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  previousEstimateMinutes: integer('previous_estimate_minutes').notNull(),
+  revisedEstimateMinutes: integer('revised_estimate_minutes').notNull(),
+  reason: text('reason').notNull(),
+  classification: varchar('classification', { length: 24 }).notNull(),
+  actorId: uuid('actor_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('task_estimate_revisions_task_idx').on(t.taskId)]);
+
+export const taskReopenings = pgTable('task_reopenings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  taskId: uuid('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  reason: text('reason').notNull(),
+  actorId: uuid('actor_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  reopenedAt: timestamp('reopened_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('task_reopenings_task_idx').on(t.taskId)]);
 
 export type TaskTimeEntryRow = typeof taskTimeEntries.$inferSelect;
 

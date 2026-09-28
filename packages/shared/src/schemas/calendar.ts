@@ -1,14 +1,27 @@
 import { z } from 'zod';
 
-export const calendarSettingsSchema = z.object({
+const calendarSettingsBaseSchema = z.object({
   timezone: z.string().min(1).max(80).default('Asia/Kolkata'),
   workdays: z.array(z.number().int().min(0).max(6)).min(1).max(7).default([1, 2, 3, 4, 5]),
   startMinute: z.number().int().min(0).max(1439).default(600),
   endMinute: z.number().int().min(1).max(1440).default(1140),
   unpaidBreakMinutes: z.number().int().min(0).max(600).default(60),
   effectiveFrom: z.string().date(),
-}).refine((v) => v.endMinute > v.startMinute + v.unpaidBreakMinutes, { message: 'Schedule must contain positive working time' });
+});
+export const calendarSettingsSchema = calendarSettingsBaseSchema.refine((v) => v.endMinute > v.startMinute + v.unpaidBreakMinutes, { message: 'Schedule must contain positive working time' });
 export type CalendarSettingsInput = z.infer<typeof calendarSettingsSchema>;
+
+export const updateCalendarSettingsSchema = calendarSettingsBaseSchema.and(z.object({
+  changeReason: z.string().trim().min(1).max(2000),
+})).refine((v) => v.endMinute > v.startMinute + v.unpaidBreakMinutes, { message: 'Schedule must contain positive working time' });
+export type UpdateCalendarSettingsInput = z.infer<typeof updateCalendarSettingsSchema>;
+
+export const scheduleGroupSchema = calendarSettingsBaseSchema.omit({ effectiveFrom: true }).and(z.object({
+  name: z.string().trim().min(1).max(120),
+  effectiveFrom: z.string().date(),
+  effectiveTo: z.string().date().nullable().optional(),
+})).refine((v) => !v.effectiveTo || v.effectiveTo >= v.effectiveFrom, { message: 'Effective end must be on or after the start', path: ['effectiveTo'] });
+export type ScheduleGroupInput = z.infer<typeof scheduleGroupSchema>;
 
 export const calendarExceptionSchema = z.object({
   date: z.string().date(),

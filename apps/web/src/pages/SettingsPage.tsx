@@ -99,7 +99,7 @@ function CalendarSettingsCard() {
   const [exceptionName, setExceptionName] = useState('');
   const [kind, setKind] = useState<'HOLIDAY' | 'HALF_DAY' | 'WORKING_DAY'>('HOLIDAY');
   const refresh = () => qc.invalidateQueries({ queryKey: ['calendar'] });
-  const update = useMutation({ mutationFn: (settings: CalendarSettings) => http.put('/calendar', settings), onSuccess: refresh });
+  const update = useMutation({ mutationFn: (settings: CalendarSettings) => http.put('/calendar', { ...settings, changeReason: 'Organisation calendar settings updated by administrator' }), onSuccess: refresh });
   const add = useMutation({ mutationFn: () => http.post('/calendar/exceptions', { date: exceptionDate, name: exceptionName, kind }), onSuccess: () => { setExceptionDate(''); setExceptionName(''); refresh(); } });
   const remove = useMutation({ mutationFn: (id: string) => http.del(`/calendar/exceptions/${id}`), onSuccess: refresh });
   const settings = data?.settings;
