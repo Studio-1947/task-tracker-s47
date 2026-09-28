@@ -147,7 +147,7 @@ export function BoardItemCard({
             </span>
           ) : null}
           {item.project ? (
-            <BoardProjectChip project={item.project} taskRef={item.taskRef} size="xs" />
+            <BoardProjectChip project={item.project} taskRef={item.taskRef} taskId={item.taskId} size="xs" />
           ) : null}
         </div>
       )}

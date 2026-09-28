@@ -75,3 +75,15 @@ export function useUpdateWorkspaceMembers(workspaceId: string) {
     },
   });
 }
+
+export function useSetWorkspaceMemberRole(workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, role }: { userId: string; role: 'MEMBER' | 'MANAGER' }) =>
+      http.patch<{ ok: true }>(`/workspaces/${workspaceId}/members/${userId}/role`, { role }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['workspace', workspaceId, 'members'] });
+    },
+  });
+}
+

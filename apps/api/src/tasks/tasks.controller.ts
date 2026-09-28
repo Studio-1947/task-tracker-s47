@@ -26,12 +26,16 @@ import {
   createSubtaskSchema,
   createTaskSchema,
   taskQuerySchema,
+  submitTaskSchema,
+  reviewTaskSchema,
   updateTaskSchema,
   type CreateCommentInput,
   type CreateLinkAttachmentInput,
   type CreateSubtaskInput,
   type CreateTaskInput,
   type TaskQuery,
+  type SubmitTaskInput,
+  type ReviewTaskInput,
   type UpdateTaskInput,
 } from '@task-tracker/shared';
 import { CurrentUser, type RequestUser } from '../common/decorators/current-user.decorator';
@@ -112,6 +116,30 @@ export class TasksController {
     return this.tasks.listComments(id, user);
   }
 
+  @Get(':id/submissions')
+  listSubmissions(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.tasks.listSubmissions(id, user);
+  }
+
+  @Post(':id/submissions')
+  submitForReview(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(submitTaskSchema)) body: SubmitTaskInput,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.tasks.submitForReview(id, user, body);
+  }
+
+  @Post(':id/submissions/:submissionId/review')
+  reviewSubmission(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('submissionId', ParseUUIDPipe) submissionId: string,
+    @Body(new ZodValidationPipe(reviewTaskSchema)) body: ReviewTaskInput,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.tasks.reviewSubmission(id, submissionId, user, body);
+  }
+
   @Post(':id/comments')
   addComment(
     @Param('id', ParseUUIDPipe) id: string,
@@ -162,6 +190,65 @@ export class TasksController {
   ) {
     return this.tasks.removeAttachment(id, attachmentId, user);
   }
+
+  @Post(':id/time-entries')
+  logTimeEntry(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { workDate: string; durationMinutes: number; category?: string; note?: string },
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.tasks.logTimeEntry(id, user, body);
+  }
+
+  @Get(':id/time-entries')
+  getTimeSummary(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.tasks.getTimeSummary(id, user);
+  }
+
+  @Post(':id/timer/start')
+  startTimer(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { category?: string; note?: string },
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.tasks.startTimer(id, user, body);
+  }
+
+  @Post(':id/timer/stop')
+  stopTimer(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.tasks.stopTimer(id, user);
+  }
+
+  @Post(':id/blockers')
+  addBlocker(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { reason: string; unblockerUserId: string; nextFollowUpAt?: string },
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.tasks.addBlocker(id, user, body);
+  }
+
+  @Post('blockers/:blockerId/unblock')
+  unblock(@Param('blockerId', ParseUUIDPipe) blockerId: string, @CurrentUser() user: RequestUser) {
+    return this.tasks.unblock(blockerId, user);
+  }
+
+  @Post('dependencies')
+  addDependency(
+    @Body() body: { predecessorTaskId: string; successorTaskId: string; isBlocking?: boolean },
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.tasks.addDependency(user, body);
+  }
+
+  @Delete('dependencies/:dependencyId')
+  removeDependency(
+    @Param('dependencyId', ParseUUIDPipe) dependencyId: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.tasks.removeDependency(dependencyId, user);
+  }
+
 }
 
 /**

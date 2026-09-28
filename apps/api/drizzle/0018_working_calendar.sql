@@ -1,0 +1,5 @@
+CREATE TABLE "calendar_settings" ("id" integer PRIMARY KEY DEFAULT 1 NOT NULL, "timezone" varchar(80) DEFAULT 'Asia/Kolkata' NOT NULL, "workdays" integer[] DEFAULT ARRAY[1,2,3,4,5]::integer[] NOT NULL, "start_minute" integer DEFAULT 600 NOT NULL, "end_minute" integer DEFAULT 1140 NOT NULL, "unpaid_break_minutes" integer DEFAULT 60 NOT NULL, "effective_from" date DEFAULT CURRENT_DATE NOT NULL, "updated_at" timestamp with time zone DEFAULT now() NOT NULL, CONSTRAINT "calendar_settings_singleton" CHECK ("id" = 1));
+CREATE TABLE "calendar_exceptions" ("id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL, "date" date NOT NULL, "name" varchar(120) NOT NULL, "kind" varchar(12) NOT NULL, "working_minutes" integer, "created_at" timestamp with time zone DEFAULT now() NOT NULL, CONSTRAINT "calendar_exceptions_kind_check" CHECK ("kind" IN ('HOLIDAY','HALF_DAY','WORKING_DAY')));
+CREATE UNIQUE INDEX "calendar_exceptions_date_uq" ON "calendar_exceptions" ("date");
+CREATE INDEX "calendar_exceptions_date_idx" ON "calendar_exceptions" ("date");
+INSERT INTO "calendar_settings" ("id") VALUES (1) ON CONFLICT DO NOTHING;

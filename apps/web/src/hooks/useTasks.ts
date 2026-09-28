@@ -9,6 +9,9 @@ import type {
   TaskComment,
   TaskDetail,
   TaskListItem,
+  TaskSubmission,
+  SubmitTaskInput,
+  ReviewTaskInput,
   UpdateTaskInput,
   UserRef,
   WorkspaceSummary,
@@ -44,7 +47,7 @@ export function useWorkspace(id: string) {
   });
 }
 
-export type WorkspaceMember = UserRef & { role: string; isActive: boolean };
+export type WorkspaceMember = UserRef & { role: string; workspaceRole?: string; isActive: boolean };
 
 export function useWorkspaceMembers(id: string) {
   return useQuery({
@@ -82,6 +85,41 @@ export function useTaskHistory(taskId: string | null) {
     queryKey: ['task', taskId, 'history'],
     queryFn: () => http.get<AuditEntry[]>(`/tasks/${taskId}/history`),
     enabled: !!taskId,
+  });
+}
+
+export function useTaskSubmissions(taskId: string | null) {
+  return useQuery({
+    queryKey: ['task', taskId, 'submissions'],
+    queryFn: () => http.get<TaskSubmission[]>(`/tasks/${taskId}/submissions`),
+    enabled: !!taskId,
+  });
+}
+
+export function useSubmitTask(taskId: string, workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SubmitTaskInput) => http.post<TaskSubmission>(`/tasks/${taskId}/submissions`, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'submissions'] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });
+      qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
+    },
+  });
+}
+
+export function useReviewTask(taskId: string, workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ submissionId, input }: { submissionId: string; input: ReviewTaskInput }) =>
+      http.post<TaskSubmission>(`/tasks/${taskId}/submissions/${submissionId}/review`, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'submissions'] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });
+      qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
+    },
   });
 }
 
@@ -232,6 +270,124 @@ export function useAddComment(taskId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['task', taskId, 'comments'] });
       qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });
+      qc.invalidateQueries({ queryKey: ['tasks'] });
     },
   });
 }
+
+/* ── Time entries & Timers (E01) ── */
+export interface TimeSummary {
+  entries: Array<{
+    id: string;
+    workDate: string;
+    durationMinutes: number;
+    category: string;
+    note?: string;
+    startedAt?: string;
+    endedAt?: string;
+    isPaused: boolean;
+    userId: string;
+    userName: string;
+  }>;
+  actualEffortMinutes: number;
+  baselineEstimateMinutes: number | null;
+  currentEstimateMinutes: number | null;
+  remainingEstimateMinutes: number | null;
+  forecastTotalMinutes: number;
+  forecastVarianceMinutes: number;
+}
+
+export function useTimeSummary(taskId: string | null) {
+  return useQuery({
+    queryKey: ['task', taskId, 'time-entries'],
+    queryFn: () => http.get<TimeSummary>(`/tasks/${taskId}/time-entries`),
+    enabled: !!taskId,
+  });
+}
+
+export function useLogTimeEntry(taskId: string, workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { workDate: string; durationMinutes: number; category?: string; note?: string }) =>
+      http.post(`/tasks/${taskId}/time-entries`, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'time-entries'] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });
+      qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
+    },
+  });
+}
+
+export function useStartTimer(taskId: string, workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { category?: string; note?: string }) =>
+      http.post(`/tasks/${taskId}/timer/start`, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'time-entries'] });
+      qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
+    },
+  });
+}
+
+export function useStopTimer(taskId: string, workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => http.post(`/tasks/${taskId}/timer/stop`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'time-entries'] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });
+      qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
+    },
+  });
+}
+
+/* ── Blockers & Dependencies (P01) ── */
+export function useAddBlocker(taskId: string, workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { reason: string; unblockerUserId: string; nextFollowUpAt?: string }) =>
+      http.post(`/tasks/${taskId}/blockers`, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });
+      qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
+    },
+  });
+}
+
+export function useUnblockTask(taskId: string, workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (blockerId: string) => http.post(`/tasks/blockers/${blockerId}/unblock`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });
+      qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
+    },
+  });
+}
+
+export function useAddDependency(workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { predecessorTaskId: string; successorTaskId: string; isBlocking?: boolean }) =>
+      http.post('/tasks/dependencies', input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
+    },
+  });
+}
+
+export function useRemoveDependency(workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dependencyId: string) => http.del(`/tasks/dependencies/${dependencyId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
+    },
+  });
+}

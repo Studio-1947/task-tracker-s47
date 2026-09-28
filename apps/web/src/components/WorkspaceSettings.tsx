@@ -3,6 +3,7 @@ import { useUsers } from '../hooks/useUsers';
 import { useWorkspace, useWorkspaceMembers } from '../hooks/useTasks';
 import {
   useRemoveWorkspaceLogo,
+  useSetWorkspaceMemberRole,
   useUpdateWorkspace,
   useUpdateWorkspaceMembers,
   useUploadWorkspaceLogo,
@@ -34,6 +35,7 @@ export function WorkspaceSettings({ workspaceId, onClose }: Props) {
   const { data: projects } = useProjects(workspaceId);
   const updateWorkspace = useUpdateWorkspace(workspaceId);
   const updateMembers = useUpdateWorkspaceMembers(workspaceId);
+  const setMemberRole = useSetWorkspaceMemberRole(workspaceId);
   const updateProject = useUpdateProject(workspaceId);
   const uploadLogo = useUploadWorkspaceLogo(workspaceId);
   const removeLogo = useRemoveWorkspaceLogo(workspaceId);
@@ -328,7 +330,18 @@ export function WorkspaceSettings({ workspaceId, onClose }: Props) {
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                      <Badge>{m.role}</Badge>
+                      <select
+                        aria-label="Workspace Member Role"
+                        value={m.workspaceRole ?? 'MEMBER'}
+                        disabled={setMemberRole.isPending}
+                        onChange={(e) =>
+                          setMemberRole.mutate({ userId: m.id, role: e.target.value as 'MEMBER' | 'MANAGER' })
+                        }
+                        className="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#252525] px-2 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 outline-none focus:border-indigo-500 cursor-pointer"
+                      >
+                        <option value="MEMBER">MEMBER</option>
+                        <option value="MANAGER">MANAGER</option>
+                      </select>
                       <Button
                         variant="danger"
                         disabled={updateMembers.isPending}

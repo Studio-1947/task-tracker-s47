@@ -11,3 +11,4 @@ export * from './attendance';
 export * from './chat';
 export * from './meetings';
 export * from './notifications';
+export * from './calendar';

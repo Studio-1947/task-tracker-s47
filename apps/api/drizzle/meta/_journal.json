@@ -113,6 +113,41 @@
       "when": 1790332200000,
       "tag": "0015_long_task_titles",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790553600000,
+      "tag": "0016_task_planning_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790640000000,
+      "tag": "0017_task_review_workflow",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790726400000,
+      "tag": "0018_working_calendar",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790812800000,
+      "tag": "0019_chubby_tyger_tiger",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790899200000,
+      "tag": "0020_time_attendance_capacity_improvements",
+      "breakpoints": true
     }
   ]
 }

@@ -24,6 +24,9 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
   const [status, setStatus] = useState<TaskStatus>('TODO');
   const [priority, setPriority] = useState<Priority>('MEDIUM');
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
+  const [ownerId, setOwnerId] = useState('');
+  const [reviewerId, setReviewerId] = useState('');
+  const [estimateHours, setEstimateHours] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [labelIds, setLabelIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +55,9 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
         priority,
         dueDate: dueDate ? new Date(dueDate).toISOString() : null,
         assigneeIds,
+        ownerId: ownerId || null,
+        reviewerId: reviewerId || null,
+        baselineEstimateMinutes: estimateHours ? Math.round(Number(estimateHours) * 60) : null,
         labelIds,
       });
       onClose();
@@ -128,7 +134,7 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
                 onChange={(e) => setStatus(e.target.value as TaskStatus)}
               >
                 {TASK_STATUSES.map((s) => (
-                  <option key={s} value={s}>
+                  <option key={s} value={s} disabled={!!reviewerId && (s === 'IN_REVIEW' || s === 'DONE')}>
                     {statusLabel(s)}
                   </option>
                 ))}
@@ -161,6 +167,24 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
               />
             </div>
             <label className="text-sm">
+              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Accountable owner</span>
+              <select className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white" value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
+                <option value="">Not assigned</option>
+                {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </label>
+            <label className="text-sm">
+              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Reviewer</span>
+              <select className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white" value={reviewerId} onChange={(e) => { setReviewerId(e.target.value); if (e.target.value && (status === 'IN_REVIEW' || status === 'DONE')) setStatus('IN_PROGRESS'); }}>
+                <option value="">Not assigned</option>
+                {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </label>
+            <label className="text-sm">
+              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Baseline estimate (hours)</span>
+              <input type="number" min="0" step="0.25" className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white" value={estimateHours} onChange={(e) => setEstimateHours(e.target.value)} />
+            </label>
+            <label className="text-sm">
               <span className="mb-1 flex items-center gap-0.5 font-medium text-slate-600 dark:text-slate-300">
                 Due date
                 <span className="text-red-500 ml-0.5">*</span>
@@ -175,6 +199,12 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
               />
             </label>
           </div>
+
+          {Number(estimateHours) > 2 ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+              ⚠️ <strong>Task breakup recommendation:</strong> Estimated effort exceeds 120 minutes (2 hours). Consider splitting this deliverable into smaller subtasks.
+            </div>
+          ) : null}
 
           {labels.length ? (
             <div>

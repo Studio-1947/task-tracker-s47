@@ -52,4 +52,17 @@ export class DashboardController {
   me(@CurrentUser('id') userId: string) {
     return this.dashboard.member(userId);
   }
+
+  @Get('reports/wednesday')
+  wednesdayReport(@Query('workspaceId') workspaceId: string) {
+    if (!workspaceId) throw new BadRequestException('workspaceId is required');
+    return this.dashboard.generateWednesdayReport(workspaceId);
+  }
+
+  @Get('reports/friday')
+  fridayReport(@Query('workspaceId') workspaceId: string) {
+    if (!workspaceId) throw new BadRequestException('workspaceId is required');
+    return this.dashboard.generateFridayReport(workspaceId);
+  }
 }
+

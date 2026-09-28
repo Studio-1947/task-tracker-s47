@@ -4,18 +4,20 @@ import {
   TASK_STATUSES,
   type AuditEntry,
   type MyTaskItem,
+  type OverdueTaskRow,
   type StatusCounts,
   type UpcomingDeadline,
   type WorkloadEntry,
   type WorkspacePerformance,
 } from '@task-tracker/shared';
-import { useAdminDashboard, useMemberDashboard } from '../hooks/useDashboard';
+import { useAdminDashboard, useMemberDashboard, useWednesdayReport, useFridayReport } from '../hooks/useDashboard';
+import { useWorkspaces } from '../hooks/useWorkspaces';
 import { useAuth } from '../stores/auth';
 import { apiBlob, ApiRequestError } from '../lib/api';
 import { Avatar } from '../components/Avatar';
 import { HBarList, LineChart } from '../components/charts';
-import { Badge, Card, ErrorState, Spinner } from '../components/ui';
-import { describeAudit, formatDate, formatDateTime, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
+import { Badge, Button, Card, ErrorState, Spinner } from '../components/ui';
+import { describeAudit, formatDate, formatDateTime, formatWorkingDuration, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
 
 export function DashboardPage() {
   const { user } = useAuth();
@@ -188,18 +190,21 @@ function deadlineChip(days: number): string {
 
 /** G — At-Risk summary card showing overdue, due-this-week and on-track task counts. */
 function AtRiskCard({
-  items,
+  overdueCount,
+  upcoming,
   myTasks,
 }: {
-  items?: UpcomingDeadline[];
+  /** Real overdue count from the dashboard's single overdue query (PRD §10 D01) — never derived from `upcoming`, which by construction excludes overdue tasks. */
+  overdueCount?: number;
+  upcoming?: UpcomingDeadline[];
   myTasks?: MyTaskItem[];
 }) {
-  // Admin: derive from UpcomingDeadline[]; Member: derive from MyTaskItem[]
   const now = Date.now();
   const weekMs = 7 * 24 * 60 * 60 * 1000;
 
   let overdue = 0;
   let dueThisWeek = 0;
+  let onTrack = 0;
   let total = 0;
 
   if (myTasks && myTasks.length > 0) {
@@ -210,13 +215,17 @@ function AtRiskCard({
       if (due < now) overdue++;
       else if (due - now <= weekMs) dueThisWeek++;
     }
-  } else if (items && items.length > 0) {
-    total = items.length;
-    overdue = items.filter((t) => t.dueInDays < 0).length;
-    dueThisWeek = items.filter((t) => t.dueInDays >= 0 && t.dueInDays <= 7).length;
+    onTrack = Math.max(0, total - overdue - dueThisWeek);
+  } else {
+    // Admin: `upcoming` only ever holds tasks not yet due (dueInDays >= 0),
+    // so "overdue" must come from the dashboard's own overdue query, not be
+    // re-derived from it — that mismatch is the exact bug this replaces.
+    overdue = overdueCount ?? 0;
+    const items = upcoming ?? [];
+    dueThisWeek = items.filter((t) => t.dueInDays <= 7).length;
+    onTrack = items.filter((t) => t.dueInDays > 7).length;
+    total = overdue + items.length;
   }
-
-  const onTrack = Math.max(0, total - overdue - dueThisWeek);
 
   const rows = [
     {
@@ -280,6 +289,51 @@ function AtRiskCard({
   );
 }
 
+/**
+ * Drill-down for the "Overdue tasks" headline Stat — same query, same
+ * request (PRD §10/§12 D01, AT01: the card must open the exact records
+ * behind its count). `total` can exceed `items.length` when there are more
+ * overdue tasks than the drill-down page size.
+ */
+function OverdueTaskListCard({ items, total }: { items: OverdueTaskRow[]; total: number }) {
+  return (
+    <Card className="p-6 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <span className="text-xs font-bold uppercase tracking-wider text-slate-455 dark:text-slate-400">Overdue tasks</span>
+        {total > 0 ? (
+          <span className="rounded-full bg-red-100 dark:bg-red-950/30 px-2 py-0.5 text-[10px] font-bold text-red-600 dark:text-red-400">{total}</span>
+        ) : null}
+      </div>
+      {items.length === 0 ? (
+        <p className="text-sm text-slate-400 dark:text-slate-500 py-2">Nothing overdue.</p>
+      ) : (
+        <div className="space-y-3">
+          {items.map((t) => (
+            <Link
+              key={t.id}
+              to={`/workspaces/${t.workspaceId}?task=${t.id}`}
+              className="flex items-center gap-4 rounded-xl border border-slate-100 bg-white/50 dark:border-slate-800/40 dark:bg-slate-900/30 p-3.5 hover:border-red-500 dark:hover:border-red-500/50 hover:shadow-md hover:shadow-red-500/[0.02] hover:-translate-y-0.5 transition-all duration-150"
+            >
+              <span className="shrink-0 rounded-full bg-red-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-700 dark:bg-red-950/20 dark:text-red-400">
+                {t.overdueWorkingMinutes !== null ? `${formatWorkingDuration(t.overdueWorkingMinutes)} overdue` : 'Overdue'}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-slate-700 dark:text-slate-200">{t.title}</p>
+                <p className="mt-1 text-xs text-slate-450 dark:text-slate-500 font-medium">
+                  <span className="font-mono bg-slate-100 dark:bg-slate-800/80 px-1 py-0.5 rounded text-[10px] mr-1">{t.ref}</span> · {t.workspaceName} · due {formatDate(t.dueDate)}
+                </p>
+              </div>
+            </Link>
+          ))}
+          {total > items.length ? (
+            <p className="pt-1 text-xs text-slate-400 dark:text-slate-500">+{total - items.length} more overdue, not shown</p>
+          ) : null}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function UpcomingDeadlinesCard({ items }: { items: UpcomingDeadline[] }) {
   return (
     <Card className="p-6 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
@@ -325,7 +379,10 @@ function AdminView() {
 
   return (
     <div className="mt-6 space-y-6 animate-fade-in">
-      <MonthlyReportDownloads />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <MonthlyReportDownloads />
+        <OperationalDraftReportsCard />
+      </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Workspaces" value={data.totalWorkspaces} />
         <Stat label="Users" value={data.totalUsers} />
@@ -342,7 +399,8 @@ function AdminView() {
         <ActivityFeed items={data.recentActivity} />
       </div>
       {/* G — At-Risk widget */}
-      <AtRiskCard items={data.upcomingDeadlines} />
+      <AtRiskCard overdueCount={data.overdueTasks} upcoming={data.upcomingDeadlines} />
+      <OverdueTaskListCard items={data.overdueTaskList} total={data.overdueTasks} />
       <StatusBreakdown counts={data.tasksByStatus} />
     </div>
   );
@@ -393,6 +451,119 @@ function MonthlyReportDownloads() {
         </button>
       </div>
       {error ? <p className="text-sm text-red-600 dark:text-red-400 sm:col-span-full">{error}</p> : null}
+    </Card>
+  );
+}
+
+function OperationalDraftReportsCard() {
+  const { data: workspaces } = useWorkspaces();
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('');
+  const [reportType, setReportType] = useState<'wednesday' | 'friday' | null>(null);
+
+  const activeWorkspaces = (workspaces ?? []).filter((w) => !w.isArchived);
+  const targetId = selectedWorkspaceId || activeWorkspaces[0]?.id || null;
+
+  const wednesday = useWednesdayReport(reportType === 'wednesday' ? targetId : null);
+  const friday = useFridayReport(reportType === 'friday' ? targetId : null);
+
+  const currentReport = reportType === 'wednesday' ? wednesday.data : reportType === 'friday' ? friday.data : null;
+  const isLoading = reportType === 'wednesday' ? wednesday.isLoading : reportType === 'friday' ? friday.isLoading : false;
+
+  const downloadReport = (title: string, content: string) => {
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${title.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().slice(0, 10)}.md`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <Card className="p-5 flex flex-col justify-between bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
+      <div>
+        <div className="text-xs font-bold uppercase tracking-wider text-slate-455 dark:text-slate-400">Weekly Operational Reports</div>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Generate Wednesday progress drafts or Friday outcome summaries for any workspace.</p>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <select
+            aria-label="Select workspace for report"
+            className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1a1a1a] px-3 py-2 text-xs font-semibold dark:text-white flex-1"
+            value={selectedWorkspaceId || activeWorkspaces[0]?.id || ''}
+            onChange={(e) => setSelectedWorkspaceId(e.target.value)}
+          >
+            {activeWorkspaces.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </select>
+          <Button
+            variant="ghost"
+            className="py-2 px-3 text-xs font-semibold border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400"
+            onClick={() => setReportType('wednesday')}
+          >
+            📊 Wednesday Draft
+          </Button>
+          <Button
+            variant="ghost"
+            className="py-2 px-3 text-xs font-semibold border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400"
+            onClick={() => setReportType('friday')}
+          >
+            🏁 Friday Outcomes
+          </Button>
+        </div>
+      </div>
+
+      {reportType && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/60 backdrop-blur-xs animate-fade-in" onClick={() => setReportType(null)} />
+          <Card className="relative z-10 w-full max-w-2xl max-h-[85vh] p-6 animate-fade-in bg-white dark:bg-[#1f1f1f] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
+                  {reportType === 'wednesday' ? 'Wednesday Mid-Week Progress Draft' : 'Friday Outcomes Draft Report'}
+                </h3>
+                {currentReport ? (
+                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                    Workspace: {currentReport.workspaceName} · Date: {currentReport.reportDate}
+                  </p>
+                ) : null}
+              </div>
+              <Button variant="ghost" className="py-1 px-2 text-xs" onClick={() => setReportType(null)}>Close</Button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto my-4 space-y-3 font-mono text-xs bg-slate-50 dark:bg-[#181818] p-4 rounded-lg border border-slate-200 dark:border-slate-800 whitespace-pre-wrap dark:text-slate-200">
+              {isLoading ? (
+                <div className="py-8 flex justify-center"><Spinner /></div>
+              ) : currentReport ? (
+                currentReport.markdown
+              ) : (
+                <p className="text-slate-400">Failed to load report data.</p>
+              )}
+            </div>
+
+            {currentReport ? (
+              <div className="flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
+                <Button
+                  variant="ghost"
+                  className="py-1.5 px-3 text-xs"
+                  onClick={() => navigator.clipboard.writeText(currentReport.markdown)}
+                >
+                  Copy Markdown
+                </Button>
+                <Button
+                  className="py-1.5 px-3 text-xs font-semibold"
+                  onClick={() => downloadReport(`${currentReport.workspaceName}-${reportType}-report`, currentReport.markdown)}
+                >
+                  Download .MD File
+                </Button>
+              </div>
+            ) : null}
+          </Card>
+        </div>
+      )}
     </Card>
   );
 }
@@ -458,7 +629,7 @@ function MemberView() {
         <ActivityFeed items={data.recentActivity} />
       </div>
       {/* G — At-Risk widget for member (my tasks overdue/near-due) */}
-      <AtRiskCard items={[]} myTasks={data.myTasks} />
+      <AtRiskCard myTasks={data.myTasks} />
     </div>
   );
 }

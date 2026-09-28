@@ -1,4 +1,5 @@
-import { boolean, pgTable, primaryKey, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { boolean, check, pgTable, primaryKey, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { users } from './users';
 
 export const workspaces = pgTable('workspaces', {
@@ -31,9 +32,14 @@ export const workspaceMembers = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    /** Workspace-scoped role (PRD §9 "Team manager") — distinct from the global `users.role`. */
+    role: varchar('role', { length: 10 }).notNull().default('MEMBER'),
     joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.workspaceId, t.userId] })],
+  (t) => [
+    primaryKey({ columns: [t.workspaceId, t.userId] }),
+    check('workspace_members_role_check', sql`${t.role} IN ('MEMBER', 'MANAGER')`),
+  ],
 );
 
 export type WorkspaceMemberRow = typeof workspaceMembers.$inferSelect;

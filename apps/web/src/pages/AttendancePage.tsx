@@ -23,6 +23,11 @@ import {
   useTeamLog,
   useUpdateLeaveType,
   useUserBalances,
+  useMyCorrections,
+  useListCorrections,
+  useRequestCorrection,
+  useReviewCorrection,
+  type AttendanceCorrectionItem,
 } from '../hooks/useAttendance';
 
 /* ── helpers ── */
@@ -53,10 +58,11 @@ const statusTone: Record<string, 'slate' | 'green' | 'amber'> = {
   PENDING: 'amber',
   APPROVED: 'green',
   DECLINED: 'slate',
+  REJECTED: 'slate',
   CANCELLED: 'slate',
 };
 
-type Tab = 'me' | 'approvals' | 'types' | 'allotments' | 'team';
+type Tab = 'me' | 'approvals' | 'corrections' | 'types' | 'allotments' | 'team';
 
 export function AttendancePage() {
   const { user } = useAuth();
@@ -67,7 +73,8 @@ export function AttendancePage() {
     { key: 'me', label: 'My Attendance' },
     ...(isAdmin
       ? ([
-          { key: 'approvals', label: 'Approvals' },
+          { key: 'approvals', label: 'Leave Approvals' },
+          { key: 'corrections', label: 'Attendance Corrections' },
           { key: 'types', label: 'Leave Types' },
           { key: 'allotments', label: 'Allotments' },
           { key: 'team', label: 'Team Log' },
@@ -99,6 +106,7 @@ export function AttendancePage() {
       <div className="mt-6">
         {tab === 'me' ? <MyAttendanceTab /> : null}
         {tab === 'approvals' ? <ApprovalsTab /> : null}
+        {tab === 'corrections' ? <CorrectionsReviewTab /> : null}
         {tab === 'types' ? <LeaveTypesTab /> : null}
         {tab === 'allotments' ? <AllotmentsTab /> : null}
         {tab === 'team' ? <TeamLogTab /> : null}
@@ -110,11 +118,13 @@ export function AttendancePage() {
 /* ── My Attendance ── */
 function MyAttendanceTab() {
   const [showRequest, setShowRequest] = useState(false);
+  const [showCorrection, setShowCorrection] = useState(false);
   return (
     <div className="space-y-6">
-      <CheckInCard />
+      <CheckInCard onOpenCorrection={() => setShowCorrection(true)} />
       <BalancesRow />
       <MonthCalendar />
+      <MyCorrectionsSection onOpenCorrection={() => setShowCorrection(true)} />
       <section>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">My leave requests</h2>
@@ -125,11 +135,12 @@ function MyAttendanceTab() {
         <MyLeavesList />
       </section>
       {showRequest ? <RequestLeaveModal onClose={() => setShowRequest(false)} /> : null}
+      {showCorrection ? <RequestCorrectionModal onClose={() => setShowCorrection(false)} /> : null}
     </div>
   );
 }
 
-function CheckInCard() {
+function CheckInCard({ onOpenCorrection }: { onOpenCorrection?: () => void }) {
   const { data, isLoading } = useAttendanceToday();
   const checkIn = useCheckIn();
   const checkOut = useCheckOut();
@@ -176,6 +187,11 @@ function CheckInCard() {
             ) : (
               <Badge tone="green">Done for today ✓</Badge>
             )}
+            {onOpenCorrection ? (
+              <Button variant="ghost" onClick={onOpenCorrection} className="py-2.5 px-3.5 text-xs font-semibold">
+                Fix punch / Request correction
+              </Button>
+            ) : null}
           </div>
         </div>
       )}
@@ -832,3 +848,256 @@ function TeamPunch({ label, time, loc }: { label: string; time: string; loc: { l
     </div>
   );
 }
+
+/* ── My Corrections List ── */
+function MyCorrectionsSection({ onOpenCorrection }: { onOpenCorrection: () => void }) {
+  const { data: corrections, isLoading } = useMyCorrections();
+
+  return (
+    <section>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          My attendance correction requests
+        </h2>
+        <Button variant="ghost" className="py-1.5 px-3 text-xs" onClick={onOpenCorrection}>
+          + Request correction
+        </Button>
+      </div>
+      {isLoading ? (
+        <Spinner />
+      ) : !corrections || corrections.length === 0 ? (
+        <Card className="p-4 text-center text-xs text-slate-400 dark:text-slate-500">
+          No attendance corrections submitted.
+        </Card>
+      ) : (
+        <div className="space-y-2.5">
+          {corrections.map((c) => (
+            <Card key={c.id} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-slate-800 dark:text-slate-100">{fmtDate(c.workDate)}</span>
+                  <Badge tone={statusTone[c.status]}>{c.status}</Badge>
+                </div>
+                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Proposed punch: {fmtTime(c.proposedCheckInAt)} → {fmtTime(c.proposedCheckOutAt)}
+                </div>
+                <p className="mt-1 text-xs italic text-slate-400 dark:text-slate-500">“{c.reason}”</p>
+              </div>
+              {c.reviewer ? (
+                <div className="text-xs text-slate-400 dark:text-slate-500 text-right">
+                  Reviewed by {c.reviewer.name}
+                  {c.reviewNote ? <div className="italic">{c.reviewNote}</div> : null}
+                </div>
+              ) : null}
+            </Card>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ── Request Correction Modal ── */
+function RequestCorrectionModal({ onClose }: { onClose: () => void }) {
+  const requestCorrection = useRequestCorrection();
+  const [workDate, setWorkDate] = useState(() => ymd(new Date()));
+  const [inTime, setInTime] = useState('09:30');
+  const [outTime, setOutTime] = useState('18:30');
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reason.trim()) return setError('Please provide a reason for the correction');
+    setError(null);
+
+    const proposedCheckInAt = new Date(`${workDate}T${inTime}:00`).toISOString();
+    const proposedCheckOutAt = new Date(`${workDate}T${outTime}:00`).toISOString();
+
+    try {
+      await requestCorrection.mutateAsync({
+        workDate,
+        proposedCheckInAt,
+        proposedCheckOutAt,
+        reason: reason.trim(),
+      });
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Failed to request correction');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/60 backdrop-blur-xs animate-fade-in" onClick={onClose} />
+      <Card className="relative z-10 w-full max-w-md p-6 animate-fade-in bg-white dark:bg-[#1f1f1f]">
+        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Request attendance correction</h2>
+        <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+          Submit missing or corrected punch times for manager/admin approval.
+        </p>
+
+        <form className="mt-4 space-y-3.5" onSubmit={submit}>
+          <div>
+            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Work Date</label>
+            <Input type="date" required value={workDate} onChange={(e) => setWorkDate(e.target.value)} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Corrected Check-In</label>
+              <Input type="time" required value={inTime} onChange={(e) => setInTime(e.target.value)} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Corrected Check-Out</label>
+              <Input type="time" required value={outTime} onChange={(e) => setOutTime(e.target.value)} />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Reason</label>
+            <textarea
+              required
+              rows={2}
+              className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-[#252525] dark:text-white"
+              placeholder="e.g. Forgot to check out / system downtime..."
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+          </div>
+
+          {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={requestCorrection.isPending}>
+              {requestCorrection.isPending ? 'Submitting…' : 'Submit Correction'}
+            </Button>
+          </div>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
+/* ── Admin / Manager: Corrections Approval Tab ── */
+function CorrectionsReviewTab() {
+  const [statusFilter, setStatusFilter] = useState('PENDING');
+  const { data: corrections, isLoading, error } = useListCorrections(statusFilter || undefined);
+  const review = useReviewCorrection();
+  const [reviewNote, setReviewNote] = useState('');
+  const [selectedItem, setSelectedItem] = useState<AttendanceCorrectionItem | null>(null);
+
+  const handleReview = (id: string, status: 'APPROVED' | 'REJECTED') => {
+    review.mutate(
+      { id, input: { status, note: reviewNote || undefined } },
+      {
+        onSuccess: () => {
+          setSelectedItem(null);
+          setReviewNote('');
+        },
+      },
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Status filter</label>
+        <select
+          aria-label="Filter status"
+          className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 px-3 py-2 text-xs dark:text-white"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+        >
+          <option value="PENDING">Pending</option>
+          <option value="APPROVED">Approved</option>
+          <option value="REJECTED">Rejected</option>
+          <option value="">All</option>
+        </select>
+      </div>
+
+      {isLoading ? (
+        <Spinner />
+      ) : error ? (
+        <ErrorState message="Failed to load attendance corrections" />
+      ) : !corrections || corrections.length === 0 ? (
+        <EmptyState title="No correction requests" hint="No attendance correction requests match this status filter." />
+      ) : (
+        <div className="space-y-3">
+          {corrections.map((c) => (
+            <Card key={c.id} className="p-4 space-y-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <Avatar user={c.user} size="sm" />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-800 dark:text-slate-100">{c.user.name}</span>
+                      <span className="text-xs text-slate-400">({c.user.email})</span>
+                      <Badge tone={statusTone[c.status]}>{c.status}</Badge>
+                    </div>
+                    <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
+                      Date: <span className="font-semibold">{fmtDate(c.workDate)}</span> · Proposed punch: {fmtTime(c.proposedCheckInAt)} → {fmtTime(c.proposedCheckOutAt)}
+                    </div>
+                  </div>
+                </div>
+
+                {c.status === 'PENDING' ? (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      className="py-1.5 px-3 text-xs font-semibold"
+                      disabled={review.isPending}
+                      onClick={() => handleReview(c.id, 'APPROVED')}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      variant="danger"
+                      className="py-1.5 px-3 text-xs font-semibold"
+                      disabled={review.isPending}
+                      onClick={() => setSelectedItem(c)}
+                    >
+                      Reject
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-400 dark:text-slate-500">
+                    Reviewed {c.reviewedAt ? fmtDate(c.reviewedAt.slice(0, 10)) : ''} {c.reviewer ? `by ${c.reviewer.name}` : ''}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-lg bg-slate-50 dark:bg-[#222] p-2.5 text-xs text-slate-600 dark:text-slate-300">
+                <span className="font-semibold text-slate-400 uppercase tracking-wider block text-[10px] mb-0.5">Reason</span>
+                “{c.reason}”
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {selectedItem ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/60 backdrop-blur-xs animate-fade-in" onClick={() => setSelectedItem(null)} />
+          <Card className="relative z-10 w-full max-w-md p-6 animate-fade-in bg-white dark:bg-[#1f1f1f]">
+            <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">Reject correction request</h3>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Rejecting attendance correction for <span className="font-semibold">{selectedItem.user.name}</span> for date {fmtDate(selectedItem.workDate)}.
+            </p>
+            <textarea
+              className="mt-3 w-full rounded-md border border-slate-300 dark:border-slate-700 p-2.5 text-xs bg-white dark:bg-[#252525] dark:text-white"
+              rows={2}
+              placeholder="Reason for rejection (optional)..."
+              value={reviewNote}
+              onChange={(e) => setReviewNote(e.target.value)}
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="ghost" className="py-1.5 px-3 text-xs" onClick={() => setSelectedItem(null)}>Cancel</Button>
+              <Button variant="danger" className="py-1.5 px-3 text-xs" onClick={() => handleReview(selectedItem.id, 'REJECTED')}>Reject</Button>
+            </div>
+          </Card>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+

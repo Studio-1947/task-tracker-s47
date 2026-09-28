@@ -14,6 +14,11 @@ export const createTaskSchema = z.object({
   /** ISO datetime string, or null for no due date. */
   dueDate: z.string().datetime().nullable().optional(),
   assigneeIds: z.array(z.string().uuid()).optional(),
+  ownerId: z.string().uuid().nullable().optional(),
+  reviewerId: z.string().uuid().nullable().optional(),
+  baselineEstimateMinutes: z.number().int().min(0).max(1_000_000).nullable().optional(),
+  currentEstimateMinutes: z.number().int().min(0).max(1_000_000).nullable().optional(),
+  remainingEstimateMinutes: z.number().int().min(0).max(1_000_000).nullable().optional(),
   labelIds: z.array(z.string().uuid()).optional(),
   /** Set to create this task as a subtask of another (must be a top-level task in the same project). */
   parentTaskId: z.string().uuid().optional(),
@@ -40,11 +45,29 @@ export const updateTaskSchema = z
     priority: priorityEnum.optional(),
     dueDate: z.string().datetime().nullable().optional(),
     assigneeIds: z.array(z.string().uuid()).optional(),
+    ownerId: z.string().uuid().nullable().optional(),
+    reviewerId: z.string().uuid().nullable().optional(),
+    currentEstimateMinutes: z.number().int().min(0).max(1_000_000).nullable().optional(),
+    remainingEstimateMinutes: z.number().int().min(0).max(1_000_000).nullable().optional(),
     labelIds: z.array(z.string().uuid()).optional(),
   })
   .strict()
   .refine((v) => Object.keys(v).length > 0, { message: 'No fields to update' });
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
+
+export const submitTaskSchema = z.object({
+  evidenceAttachmentId: z.string().uuid(),
+  note: z.string().trim().min(1).max(4000),
+});
+export type SubmitTaskInput = z.infer<typeof submitTaskSchema>;
+
+export const reviewTaskSchema = z
+  .object({
+    decision: z.enum(['ACCEPTED', 'RETURNED']),
+    note: z.string().trim().max(4000).optional(),
+  })
+  .refine((v) => v.decision !== 'RETURNED' || !!v.note, { message: 'A return reason is required', path: ['note'] });
+export type ReviewTaskInput = z.infer<typeof reviewTaskSchema>;
 
 export const createCommentSchema = z.object({
   body: z.string().min(1).max(10000),
@@ -94,3 +117,32 @@ export const taskQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(15),
 });
 export type TaskQuery = z.infer<typeof taskQuerySchema>;
+
+export const logTimeEntrySchema = z.object({
+  workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  durationMinutes: z.number().int().min(1).max(1440),
+  category: z.enum(['EXECUTION', 'REVIEW', 'REWORK']).default('EXECUTION'),
+  note: z.string().max(2000).optional(),
+});
+export type LogTimeEntryInput = z.infer<typeof logTimeEntrySchema>;
+
+export const startTimerSchema = z.object({
+  category: z.enum(['EXECUTION', 'REVIEW', 'REWORK']).default('EXECUTION'),
+  note: z.string().max(2000).optional(),
+});
+export type StartTimerInput = z.infer<typeof startTimerSchema>;
+
+export const createBlockerSchema = z.object({
+  reason: z.string().trim().min(1).max(2000),
+  unblockerUserId: z.string().uuid(),
+  nextFollowUpAt: z.string().datetime().optional(),
+});
+export type CreateBlockerInput = z.infer<typeof createBlockerSchema>;
+
+export const createDependencySchema = z.object({
+  predecessorTaskId: z.string().uuid(),
+  successorTaskId: z.string().uuid(),
+  isBlocking: z.boolean().default(true),
+});
+export type CreateDependencyInput = z.infer<typeof createDependencySchema>;
+

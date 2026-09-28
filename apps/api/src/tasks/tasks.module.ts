@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
+import { CalendarModule } from '../calendar/calendar.module';
 import { FilesModule } from '../files/files.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -7,7 +8,7 @@ import { AttachmentFilesController, TasksController, WorkspaceTasksController } 
 import { TasksService } from './tasks.service';
 
 @Module({
-  imports: [WorkspacesModule, AuditModule, FilesModule, NotificationsModule],
+  imports: [WorkspacesModule, AuditModule, FilesModule, NotificationsModule, CalendarModule],
   controllers: [WorkspaceTasksController, TasksController, AttachmentFilesController],
   providers: [TasksService],
   exports: [TasksService],

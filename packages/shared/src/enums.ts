@@ -10,6 +10,19 @@ export const Role = {
 export type Role = (typeof Role)[keyof typeof Role];
 export const ROLES = Object.values(Role);
 
+/**
+ * Per-workspace role (PRD §9 "Team manager"): scoped to the workspaces the
+ * person is actually assigned to, unlike the global `Role` above. A MANAGER
+ * gets elevated review authority within that workspace only — no automatic
+ * cross-workspace admin or payroll access.
+ */
+export const WorkspaceRole = {
+  MEMBER: 'MEMBER',
+  MANAGER: 'MANAGER',
+} as const;
+export type WorkspaceRole = (typeof WorkspaceRole)[keyof typeof WorkspaceRole];
+export const WORKSPACE_ROLES = Object.values(WorkspaceRole);
+
 /** Default (fixed for MVP) task pipeline — see PRD §3.3 / §8. */
 export const TaskStatus = {
   TODO: 'TODO',
@@ -73,14 +86,44 @@ export const AuditAction = {
   DUE_DATE_CHANGED: 'DUE_DATE_CHANGED',
   TITLE_CHANGED: 'TITLE_CHANGED',
   DESCRIPTION_CHANGED: 'DESCRIPTION_CHANGED',
+  OWNER_CHANGED: 'OWNER_CHANGED',
+  REVIEWER_CHANGED: 'REVIEWER_CHANGED',
+  ESTIMATE_CHANGED: 'ESTIMATE_CHANGED',
+  SUBMITTED: 'SUBMITTED',
+  REVIEWED: 'REVIEWED',
   COMMENTED: 'COMMENTED',
   ATTACHMENT_ADDED: 'ATTACHMENT_ADDED',
   ATTACHMENT_REMOVED: 'ATTACHMENT_REMOVED',
   ARCHIVED: 'ARCHIVED',
   DELETED: 'DELETED',
+  WORKSPACE_ROLE_CHANGED: 'WORKSPACE_ROLE_CHANGED',
+  TIME_ENTRY_CREATED: 'TIME_ENTRY_CREATED',
+  TIME_ENTRY_UPDATED: 'TIME_ENTRY_UPDATED',
+  ATTENDANCE_CORRECTION_REQUESTED: 'ATTENDANCE_CORRECTION_REQUESTED',
+  ATTENDANCE_CORRECTION_DECIDED: 'ATTENDANCE_CORRECTION_DECIDED',
+  TASK_BLOCKED: 'TASK_BLOCKED',
+  TASK_UNBLOCKED: 'TASK_UNBLOCKED',
+  DEPENDENCY_ADDED: 'DEPENDENCY_ADDED',
+  DEPENDENCY_REMOVED: 'DEPENDENCY_REMOVED',
 } as const;
 export type AuditAction = (typeof AuditAction)[keyof typeof AuditAction];
 export const AUDIT_ACTIONS = Object.values(AuditAction);
+
+export const TimeCategory = {
+  EXECUTION: 'EXECUTION',
+  REVIEW: 'REVIEW',
+  REWORK: 'REWORK',
+} as const;
+export type TimeCategory = (typeof TimeCategory)[keyof typeof TimeCategory];
+export const TIME_CATEGORIES = Object.values(TimeCategory);
+
+export const CorrectionStatus = {
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+} as const;
+export type CorrectionStatus = (typeof CorrectionStatus)[keyof typeof CorrectionStatus];
+export const CORRECTION_STATUSES = Object.values(CorrectionStatus);
 
 /* ── Weekly meeting mood board ── */
 

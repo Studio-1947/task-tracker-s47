@@ -20,11 +20,20 @@ import {
   useTask,
   useTaskComments,
   useTaskHistory,
+  useTaskSubmissions,
+  useTaskAttachments,
+  useSubmitTask,
+  useReviewTask,
   useUpdateTask,
+  useTimeSummary,
+  useLogTimeEntry,
+  useStartTimer,
+  useStopTimer,
+  useAddBlocker,
 } from '../hooks/useTasks';
 import { useCreateLabel } from '../hooks/useLabels';
 import { useAuth } from '../stores/auth';
-import { describeAudit, formatDate, formatDateTime, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
+import { describeAudit, formatDate, formatDateTime, formatWorkingDuration, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
 import { ApiRequestError } from '../lib/api';
 import { linkify } from '../lib/linkify';
 import { AssigneePicker } from './AssigneePicker';
@@ -174,7 +183,7 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                   onChange={(e) => patch({ status: e.target.value as TaskStatus })}
                 >
                   {TASK_STATUSES.map((s) => (
-                    <option key={s} value={s}>
+                    <option key={s} value={s} disabled={!!task.reviewer && (s === 'IN_REVIEW' || s === 'DONE')}>
                       {statusLabel(s)}
                     </option>
                   ))}
@@ -206,6 +215,11 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                     patch({ dueDate: e.target.value ? new Date(e.target.value).toISOString() : null })
                   }
                 />
+                {task.overdueWorkingMinutes !== null ? (
+                  <p className="mt-1.5 text-[11px] font-semibold normal-case tracking-normal text-red-600 dark:text-red-400">
+                    {formatWorkingDuration(task.overdueWorkingMinutes)} overdue (scheduled working time)
+                  </p>
+                ) : null}
               </label>
               {/* A task can have any number of assignees (task_assignees is M2M). */}
               <div className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
@@ -218,7 +232,27 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                   pluralLabel="people tagged"
                 />
               </div>
+              <PersonSelect label="Accountable owner" value={task.owner?.id ?? ''} members={members} onChange={(ownerId) => patch({ ownerId: ownerId || null })} />
+              <PersonSelect label="Reviewer" value={task.reviewer?.id ?? ''} members={members} onChange={(reviewerId) => patch({ reviewerId: reviewerId || null })} />
             </div>
+
+            <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">Effort forecast</h3>
+                <span className="text-xs text-slate-400">Stored in minutes</span>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <MinuteField label="Baseline" value={task.baselineEstimateMinutes} disabled />
+                <MinuteField label="Current" value={task.currentEstimateMinutes} onChange={(currentEstimateMinutes) => patch({ currentEstimateMinutes })} />
+                <MinuteField label="Remaining" value={task.remainingEstimateMinutes} onChange={(remainingEstimateMinutes) => patch({ remainingEstimateMinutes })} />
+              </div>
+              {task.originalDueDate && task.dueDate !== task.originalDueDate ? (
+                <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">Original commitment: {formatDate(task.originalDueDate)}</p>
+              ) : null}
+            </section>
+
+            <TimeTrackingSection taskId={taskId} workspaceId={workspaceId} />
+            <BlockerSection taskId={taskId} workspaceId={workspaceId} members={members} />
 
             <div>
               <div className="mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">Description</div>
@@ -272,6 +306,7 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
             ) : null}
 
             <Attachments taskId={taskId} workspaceId={workspaceId} />
+            <ReviewWorkflow taskId={taskId} workspaceId={workspaceId} reviewerId={task.reviewer?.id ?? null} status={task.status} />
 
             <section>
               <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">Comments</h3>
@@ -339,6 +374,93 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
         )}
       </div>
     </div>
+  );
+}
+
+function ReviewWorkflow({ taskId, workspaceId, reviewerId, status }: { taskId: string; workspaceId: string; reviewerId: string | null; status: TaskStatus }) {
+  const { user } = useAuth();
+  const { data: attachments } = useTaskAttachments(taskId);
+  const { data: submissions } = useTaskSubmissions(taskId);
+  const submit = useSubmitTask(taskId, workspaceId);
+  const review = useReviewTask(taskId, workspaceId);
+  const [note, setNote] = useState('');
+  const [evidenceAttachmentId, setEvidenceAttachmentId] = useState('');
+  const [reviewNote, setReviewNote] = useState('');
+  const pending = submissions?.find((s) => s.status === 'PENDING');
+  const canReview = user?.role === 'ADMIN' || user?.id === reviewerId;
+  const error = submit.error ?? review.error;
+  return (
+    <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">Submission and review</h3>
+      {!reviewerId ? <p className="mt-2 text-sm text-amber-600 dark:text-amber-400">Assign a reviewer before submitting.</p> : null}
+      {!pending && status !== 'DONE' ? (
+        <form className="mt-3 space-y-2" onSubmit={(e) => {
+          e.preventDefault();
+          if (!note.trim() || !evidenceAttachmentId) return;
+          submit.mutate({ note: note.trim(), evidenceAttachmentId }, { onSuccess: () => { setNote(''); setEvidenceAttachmentId(''); } });
+        }}>
+          <select aria-label="Submission evidence" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800 dark:bg-[#252525] dark:text-white" value={evidenceAttachmentId} onChange={(e) => setEvidenceAttachmentId(e.target.value)} required>
+            <option value="">Select attached evidence</option>
+            {(attachments ?? []).map((a) => <option key={a.id} value={a.id}>{a.fileName}</option>)}
+          </select>
+          <textarea aria-label="Delivery note" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800 dark:bg-[#252525] dark:text-white" rows={2} placeholder="Delivery note and acceptance details" value={note} onChange={(e) => setNote(e.target.value)} required />
+          <Button type="submit" disabled={!reviewerId || submit.isPending || !(attachments?.length)}>Submit for review</Button>
+        </form>
+      ) : null}
+      {pending ? (
+        <div className="mt-3 rounded-lg bg-indigo-50 p-3 text-sm dark:bg-indigo-950/20">
+          <p className="font-semibold text-slate-700 dark:text-slate-200">Awaiting review from {pending.submitter.name}</p>
+          <p className="mt-1 whitespace-pre-wrap text-slate-600 dark:text-slate-300">{pending.note}</p>
+          {canReview ? <div className="mt-3 space-y-2">
+            <textarea aria-label="Review note" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800 dark:bg-[#252525] dark:text-white" rows={2} placeholder="Review note (required when returning)" value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} />
+            <div className="flex gap-2">
+              <Button onClick={() => review.mutate({ submissionId: pending.id, input: { decision: 'ACCEPTED', note: reviewNote || undefined } })}>Accept</Button>
+              <Button variant="danger" disabled={!reviewNote.trim()} onClick={() => review.mutate({ submissionId: pending.id, input: { decision: 'RETURNED', note: reviewNote.trim() } })}>Return</Button>
+            </div>
+          </div> : null}
+        </div>
+      ) : null}
+      {submissions?.filter((s) => s.status !== 'PENDING').map((s) => (
+        <div key={s.id} className="mt-2 border-t border-slate-100 pt-2 text-xs dark:border-slate-800">
+          <span className={s.status === 'ACCEPTED' ? 'font-bold text-emerald-600' : 'font-bold text-amber-600'}>{s.status}</span>
+          <span className="ml-2 text-slate-500">{formatDateTime(s.decidedAt ?? s.submittedAt)}{s.reviewer ? ` by ${s.reviewer.name}` : ''}</span>
+          {s.reviewNote ? <p className="mt-1 text-slate-600 dark:text-slate-300">{s.reviewNote}</p> : null}
+        </div>
+      ))}
+      {error ? <p className="mt-2 text-sm text-red-600">{error instanceof ApiRequestError ? error.message : 'Review action failed'}</p> : null}
+    </section>
+  );
+}
+
+function PersonSelect({ label, value, members, onChange }: { label: string; value: string; members: UserRef[]; onChange: (id: string) => void }) {
+  return (
+    <label className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
+      <span className="mb-1.5 block">{label}</span>
+      <select className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold outline-none dark:border-slate-800 dark:bg-[#252525] dark:text-white" value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">Not assigned</option>
+        {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function MinuteField({ label, value, disabled, onChange }: { label: string; value: number | null; disabled?: boolean; onChange?: (value: number | null) => void }) {
+  const [draft, setDraft] = useState(value === null ? '' : String(value));
+  useEffect(() => setDraft(value === null ? '' : String(value)), [value]);
+  return (
+    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+      <span className="mb-1 block">{label}</span>
+      <input
+        aria-label={`${label} estimate in minutes`}
+        type="number"
+        min="0"
+        disabled={disabled}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => onChange?.(draft === '' ? null : Math.max(0, Math.round(Number(draft))))}
+        className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm outline-none disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-800 dark:bg-[#252525] dark:text-white dark:disabled:bg-[#202020]"
+      />
+    </label>
   );
 }
 
@@ -978,3 +1100,256 @@ function DescriptionEditor({ value, onSave }: { value: string; onSave: (v: strin
     </div>
   );
 }
+
+function TimeTrackingSection({ taskId, workspaceId }: { taskId: string; workspaceId: string }) {
+  const { data: summary } = useTimeSummary(taskId);
+  const logTime = useLogTimeEntry(taskId, workspaceId);
+  const startTimer = useStartTimer(taskId, workspaceId);
+  const stopTimer = useStopTimer(taskId, workspaceId);
+
+  const [showLogForm, setShowLogForm] = useState(false);
+  const [workDate, setWorkDate] = useState(new Date().toISOString().slice(0, 10));
+  const [durationMinutes, setDurationMinutes] = useState('30');
+  const [category, setCategory] = useState<'EXECUTION' | 'REVIEW' | 'REWORK'>('EXECUTION');
+  const [note, setNote] = useState('');
+
+  const activeTimer = summary?.entries.find((e) => !e.endedAt);
+
+  const handleLogSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const mins = Math.max(1, Math.round(Number(durationMinutes)));
+    logTime.mutate(
+      { workDate, durationMinutes: mins, category, note: note.trim() || undefined },
+      {
+        onSuccess: () => {
+          setShowLogForm(false);
+          setNote('');
+        },
+      },
+    );
+  };
+
+  const variance = summary?.forecastVarianceMinutes ?? 0;
+  const isOverrun = variance > 0;
+
+  return (
+    <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800 bg-white dark:bg-[#1a1a1a]">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400 flex items-center gap-1.5">
+          <span>⏱️ Time Log & Timer</span>
+        </h3>
+        <div className="flex gap-2">
+          {activeTimer ? (
+            <Button
+              variant="danger"
+              className="py-1 px-2.5 text-xs font-semibold animate-pulse"
+              disabled={stopTimer.isPending}
+              onClick={() => stopTimer.mutate()}
+            >
+              ⏹ Stop Live Timer
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              className="py-1 px-2.5 text-xs font-semibold border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+              disabled={startTimer.isPending}
+              onClick={() => startTimer.mutate({ category: 'EXECUTION' })}
+            >
+              ▶ Start Live Timer
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            className="py-1 px-2.5 text-xs font-semibold"
+            onClick={() => setShowLogForm(!showLogForm)}
+          >
+            {showLogForm ? 'Cancel' : '+ Log Time'}
+          </Button>
+        </div>
+      </div>
+
+      {activeTimer ? (
+        <div className="mb-3 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 p-2.5 text-xs border border-indigo-200 dark:border-indigo-900/40 flex items-center justify-between">
+          <span className="font-semibold text-indigo-700 dark:text-indigo-300">
+            Live Timer active ({activeTimer.category}) started by {activeTimer.userName}
+          </span>
+          <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">In progress…</span>
+        </div>
+      ) : null}
+
+      {showLogForm ? (
+        <form onSubmit={handleLogSubmit} className="mb-3 space-y-2 rounded-lg bg-slate-50 dark:bg-[#222] p-3 border border-slate-200 dark:border-slate-800">
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <label>
+              <span className="mb-1 block font-semibold text-slate-600 dark:text-slate-400">Date</span>
+              <input
+                type="date"
+                required
+                className="w-full rounded border border-slate-200 dark:border-slate-700 p-1.5 dark:bg-[#2c2c2c] dark:text-white"
+                value={workDate}
+                onChange={(e) => setWorkDate(e.target.value)}
+              />
+            </label>
+            <label>
+              <span className="mb-1 block font-semibold text-slate-600 dark:text-slate-400">Duration (minutes)</span>
+              <input
+                type="number"
+                min="1"
+                required
+                className="w-full rounded border border-slate-200 dark:border-slate-700 p-1.5 dark:bg-[#2c2c2c] dark:text-white"
+                value={durationMinutes}
+                onChange={(e) => setDurationMinutes(e.target.value)}
+              />
+            </label>
+          </div>
+          <div className="text-xs">
+            <label className="mb-1 block font-semibold text-slate-600 dark:text-slate-400">Category</label>
+            <select
+              className="w-full rounded border border-slate-200 dark:border-slate-700 p-1.5 dark:bg-[#2c2c2c] dark:text-white"
+              value={category}
+              onChange={(e) => setCategory(e.target.value as 'EXECUTION' | 'REVIEW' | 'REWORK')}
+            >
+              <option value="EXECUTION">Execution</option>
+              <option value="REVIEW">Review</option>
+              <option value="REWORK">Rework</option>
+            </select>
+          </div>
+          <div className="text-xs">
+            <input
+              type="text"
+              placeholder="Work note (optional)"
+              className="w-full rounded border border-slate-200 dark:border-slate-700 p-1.5 text-xs dark:bg-[#2c2c2c] dark:text-white"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </div>
+          <Button type="submit" className="w-full py-1.5 text-xs" disabled={logTime.isPending}>
+            Save Time Entry
+          </Button>
+        </form>
+      ) : null}
+
+      <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+        <div className="rounded-lg bg-slate-50 dark:bg-[#222] p-2.5 border border-slate-100 dark:border-slate-800">
+          <span className="text-slate-400 dark:text-slate-500 font-semibold block mb-0.5">Recorded Actual Effort</span>
+          <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{summary?.actualEffortMinutes ?? 0} mins</span>
+        </div>
+        <div className="rounded-lg bg-slate-50 dark:bg-[#222] p-2.5 border border-slate-100 dark:border-slate-800">
+          <span className="text-slate-400 dark:text-slate-500 font-semibold block mb-0.5">Forecast Total</span>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{summary?.forecastTotalMinutes ?? 0} mins</span>
+            {summary?.baselineEstimateMinutes ? (
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isOverrun ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'}`}>
+                {isOverrun ? `+${variance}m overrun` : `${variance}m`}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      {summary?.entries?.length ? (
+        <div className="space-y-1.5 max-h-36 overflow-y-auto">
+          {summary.entries.map((e) => (
+            <div key={e.id} className="flex items-center justify-between text-xs py-1 px-2 rounded bg-slate-50/70 dark:bg-[#222]/70 border border-slate-100 dark:border-slate-800/50">
+              <div className="min-w-0 flex-1 truncate pr-2">
+                <span className="font-semibold text-slate-700 dark:text-slate-300">{e.userName}</span>
+                <span className="ml-1.5 text-[10px] font-bold uppercase px-1 py-0.2 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">{e.category}</span>
+                {e.note ? <span className="ml-1.5 text-slate-500 dark:text-slate-400 truncate">({e.note})</span> : null}
+              </div>
+              <span className="font-mono font-bold text-slate-700 dark:text-slate-300 shrink-0">{e.durationMinutes}m</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-slate-400 dark:text-slate-500 py-1">No time entries recorded yet.</p>
+      )}
+    </section>
+  );
+}
+
+function BlockerSection({ taskId, workspaceId, members }: { taskId: string; workspaceId: string; members: UserRef[] }) {
+  const addBlocker = useAddBlocker(taskId, workspaceId);
+  const { data: history } = useTaskHistory(taskId);
+
+  const [showForm, setShowForm] = useState(false);
+  const [reason, setReason] = useState('');
+  const [unblockerUserId, setUnblockerUserId] = useState(members[0]?.id ?? '');
+
+  const activeBlockerAudit = history?.find((h) => h.action === 'TASK_BLOCKED');
+
+  const handleBlockSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reason.trim()) return;
+    addBlocker.mutate(
+      { reason: reason.trim(), unblockerUserId },
+      {
+        onSuccess: () => {
+          setShowForm(false);
+          setReason('');
+        },
+      },
+    );
+  };
+
+  return (
+    <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800 bg-white dark:bg-[#1a1a1a]">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400 flex items-center gap-1.5">
+          <span>🚫 Task Blockers</span>
+        </h3>
+        <Button
+          variant="ghost"
+          className="py-1 px-2.5 text-xs font-semibold text-amber-600 dark:text-amber-400"
+          onClick={() => setShowForm(!showForm)}
+        >
+          {showForm ? 'Cancel' : '+ Mark as Blocked'}
+        </Button>
+      </div>
+
+      {showForm ? (
+        <form onSubmit={handleBlockSubmit} className="mb-3 space-y-2 rounded-lg bg-amber-50/60 dark:bg-amber-950/20 p-3 border border-amber-200 dark:border-amber-900/30 text-xs">
+          <div>
+            <label className="mb-1 block font-semibold text-amber-800 dark:text-amber-300">Blocker Reason</label>
+            <textarea
+              required
+              rows={2}
+              placeholder="State what is blocking this task..."
+              className="w-full rounded border border-amber-300 dark:border-amber-800 p-1.5 text-xs bg-white dark:bg-[#222] dark:text-white"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block font-semibold text-amber-800 dark:text-amber-300">Responsible Unblocker</label>
+            <select
+              className="w-full rounded border border-amber-300 dark:border-amber-800 p-1.5 text-xs bg-white dark:bg-[#222] dark:text-white"
+              value={unblockerUserId}
+              onChange={(e) => setUnblockerUserId(e.target.value)}
+            >
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Button type="submit" variant="danger" className="w-full py-1.5 text-xs" disabled={addBlocker.isPending}>
+            Log Task Blocker
+          </Button>
+        </form>
+      ) : null}
+
+      {activeBlockerAudit ? (
+        <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 p-2.5 text-xs border border-amber-200 dark:border-amber-900/40 flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <span className="font-bold text-amber-800 dark:text-amber-300 block mb-0.5">Task is Blocked</span>
+            <p className="text-amber-700 dark:text-amber-400 break-words">{describeAudit(activeBlockerAudit)}</p>
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-slate-400 dark:text-slate-500 py-1">No active blockers for this task.</p>
+      )}
+    </section>
+  );
+}
+

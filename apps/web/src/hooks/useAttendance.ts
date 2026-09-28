@@ -155,6 +155,58 @@ export function useSetUserBalances(userId: string) {
   });
 }
 
+/* ── attendance corrections (H01) ── */
+export interface AttendanceCorrectionItem {
+  id: string;
+  attendanceRecordId?: string;
+  workDate: string;
+  proposedCheckInAt: string;
+  proposedCheckOutAt: string;
+  reason: string;
+  status: string;
+  user: { id: string; name: string; email: string; avatarKey?: string | null };
+  reviewer?: { id: string; name: string; email: string; avatarKey?: string | null } | null;
+  reviewNote?: string | null;
+  reviewedAt?: string | null;
+  createdAt: string;
+}
+
+export function useMyCorrections() {
+  return useQuery({
+    queryKey: ['attendance', 'corrections', 'me'],
+    queryFn: () => http.get<AttendanceCorrectionItem[]>('/attendance/corrections/me'),
+  });
+}
+
+export function useListCorrections(status?: string) {
+  return useQuery({
+    queryKey: ['attendance', 'corrections', 'all', status ?? 'ALL'],
+    queryFn: () => http.get<AttendanceCorrectionItem[]>(`/attendance/corrections${status ? `?status=${status}` : ''}`),
+  });
+}
+
+export function useRequestCorrection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { workDate: string; proposedCheckInAt: string; proposedCheckOutAt: string; reason: string }) =>
+      http.post<AttendanceCorrectionItem>('/attendance/corrections', input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['attendance'] });
+    },
+  });
+}
+
+export function useReviewCorrection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: { status: 'APPROVED' | 'REJECTED'; note?: string } }) =>
+      http.post<AttendanceCorrectionItem[]>(`/attendance/corrections/${id}/review`, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['attendance'] });
+    },
+  });
+}
+
 function invalidateLeave(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['leaves'] });
   qc.invalidateQueries({ queryKey: ['leave-types'] });

@@ -46,6 +46,20 @@ export function isOverdue(iso: string | null): boolean {
   return !!iso && new Date(iso).getTime() < Date.now();
 }
 
+/**
+ * "3h 20m" style label for a working-minutes-overdue figure (PRD §2: show the
+ * due date alongside working-time ageing so a newly overdue task can read as
+ * less than one working day overdue, without implying the deadline moved).
+ */
+export function formatWorkingDuration(minutes: number): string {
+  if (minutes < 1) return 'under a minute';
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
 /** Human sentence for an audit entry (for the history timeline). */
 export function describeAudit(e: AuditEntry): string {
   const who = e.user.name;

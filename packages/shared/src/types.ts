@@ -158,6 +158,20 @@ export interface TaskListItem {
   status: TaskStatus;
   priority: Priority;
   dueDate: string | null;
+  /** First committed due date; retained when the current due date is revised. */
+  originalDueDate: string | null;
+  /**
+   * Scheduled working minutes elapsed since `dueDate`, honouring the office
+   * calendar (PRD §2) — never moves the due date itself, just ages it against
+   * working hours. `null` when there's no due date, it hasn't passed, or the
+   * task is already accepted (DONE).
+   */
+  overdueWorkingMinutes: number | null;
+  owner: UserRef | null;
+  reviewer: UserRef | null;
+  baselineEstimateMinutes: number | null;
+  currentEstimateMinutes: number | null;
+  remainingEstimateMinutes: number | null;
   assignees: UserRef[];
   labels: LabelRef[];
   commentCount: number;
@@ -194,6 +208,19 @@ export interface TaskComment {
   body: string;
   user: UserRef;
   createdAt: string;
+}
+
+export interface TaskSubmission {
+  id: string;
+  taskId: string;
+  note: string;
+  status: 'PENDING' | 'ACCEPTED' | 'RETURNED';
+  evidenceAttachmentId: string;
+  submitter: UserRef;
+  reviewer: UserRef | null;
+  reviewNote: string | null;
+  submittedAt: string;
+  decidedAt: string | null;
 }
 
 interface AttachmentBase {
@@ -279,11 +306,33 @@ export interface UpcomingDeadline {
   dueInDays: number;
 }
 
+/** Row behind the "Overdue tasks" headline count (PRD §10/§12: cards must open the exact records behind their number). */
+export interface OverdueTaskRow {
+  id: string;
+  ref: string;
+  title: string;
+  status: TaskStatus;
+  priority: Priority;
+  dueDate: string;
+  workspaceId: string;
+  workspaceName: string;
+  /** Working minutes overdue (PRD §2), alongside the raw due date. */
+  overdueWorkingMinutes: number | null;
+}
+
 export interface AdminDashboard {
   totalWorkspaces: number;
   totalUsers: number;
   tasksByStatus: StatusCounts;
+  /**
+   * Both this count and `overdueTaskList` come from one query (a window
+   * `count(*) over()` alongside the page of rows) so they can never disagree
+   * — the exact "13 overdue in headline and 0 in at-risk panel" class of bug
+   * the source spec flagged is structurally impossible here.
+   */
   overdueTasks: number;
+  /** First page of the records behind `overdueTasks`, oldest deadline first. */
+  overdueTaskList: OverdueTaskRow[];
   mostActiveWorkspace: { id: string; name: string; activityCount: number } | null;
   recentActivity: AuditEntry[];
   weeklyCompletion: WeeklyCompletionPoint[];

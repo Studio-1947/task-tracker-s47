@@ -1,14 +1,16 @@
 import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, count, eq, inArray } from 'drizzle-orm';
 import {
+  AuditAction,
   Role,
+  WorkspaceRole,
   type CreateWorkspaceInput,
   type UpdateWorkspaceInput,
   type UpdateWorkspaceMembersInput,
   type WorkspaceSummary,
 } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
-import { projects, users, workspaceMembers, workspaces, type WorkspaceRow } from '../database/schema';
+import { auditLogs, projects, users, workspaceMembers, workspaces, type WorkspaceRow } from '../database/schema';
 import { UsersService } from '../users/users.service';
 import { FilesService } from '../files/files.service';
 
@@ -57,6 +59,52 @@ export class WorkspacesService {
       .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, userId)))
       .limit(1);
     return !!row;
+  }
+
+  /**
+   * True for a global admin or a person given the workspace-scoped MANAGER
+   * role for this specific workspace (PRD §9 "Team manager" — assigned teams
+   * and spaces only, not automatic cross-workspace admin access).
+   */
+  async isManager(workspaceId: string, actor: { id: string; role: string }): Promise<boolean> {
+    if (actor.role === Role.ADMIN) return true;
+    const [row] = await this.db
+      .select({ role: workspaceMembers.role })
+      .from(workspaceMembers)
+      .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, actor.id)))
+      .limit(1);
+    return row?.role === WorkspaceRole.MANAGER;
+  }
+
+  /** Admin-only: promote/demote a member's workspace-scoped role. Audited with old/new values. */
+  async setMemberRole(
+    workspaceId: string,
+    userId: string,
+    role: WorkspaceRole,
+    actor: { id: string },
+  ): Promise<{ userId: string; role: WorkspaceRole }> {
+    const [current] = await this.db
+      .select({ role: workspaceMembers.role })
+      .from(workspaceMembers)
+      .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, userId)))
+      .limit(1);
+    if (!current) throw new NotFoundException('This person is not a member of the workspace');
+    if (current.role === role) return { userId, role };
+
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(workspaceMembers)
+        .set({ role })
+        .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, userId)));
+      await tx.insert(auditLogs).values({
+        workspaceId,
+        userId: actor.id,
+        action: AuditAction.WORKSPACE_ROLE_CHANGED,
+        beforeValue: { userId, role: current.role },
+        afterValue: { userId, role },
+      });
+    });
+    return { userId, role };
   }
 
   /** Throws unless the actor is ADMIN or a member of the workspace. */
@@ -199,6 +247,8 @@ export class WorkspacesService {
         name: users.name,
         email: users.email,
         role: users.role,
+        /** Workspace-scoped role (PRD §9), distinct from the global `role` above. */
+        workspaceRole: workspaceMembers.role,
         avatarKey: users.avatarKey,
         isActive: users.isActive,
         joinedAt: workspaceMembers.joinedAt,

@@ -9,6 +9,7 @@ import {
   timestamp,
   unique,
   uuid,
+  text,
   varchar,
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
@@ -121,3 +122,32 @@ export const attendanceRecords = pgTable(
 
 export type AttendanceRow = typeof attendanceRecords.$inferSelect;
 export type NewAttendanceRow = typeof attendanceRecords.$inferInsert;
+
+export const attendanceCorrections = pgTable(
+  'attendance_corrections',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    attendanceRecordId: uuid('attendance_record_id').references(() => attendanceRecords.id, { onDelete: 'set null' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    workDate: date('work_date').notNull(),
+    proposedCheckInAt: timestamp('proposed_check_in_at', { withTimezone: true }).notNull(),
+    proposedCheckOutAt: timestamp('proposed_check_out_at', { withTimezone: true }).notNull(),
+    reason: text('reason').notNull(),
+    status: varchar('status', { length: 12 }).notNull().default('PENDING'),
+    reviewerId: uuid('reviewer_id').references(() => users.id, { onDelete: 'set null' }),
+    reviewNote: text('review_note'),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('attendance_corrections_user_idx').on(t.userId),
+    index('attendance_corrections_status_idx').on(t.status),
+  ],
+);
+
+export type AttendanceCorrectionRow = typeof attendanceCorrections.$inferSelect;
+export type NewAttendanceCorrectionRow = typeof attendanceCorrections.$inferInsert;
+

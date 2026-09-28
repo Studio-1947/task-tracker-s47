@@ -70,3 +70,23 @@ const geoPunchSchema = z.object({
 });
 export const attendancePunchSchema = geoPunchSchema.strict();
 export type AttendancePunchInput = z.infer<typeof attendancePunchSchema>;
+
+export const createCorrectionSchema = z
+  .object({
+    workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    proposedCheckInAt: z.string().datetime(),
+    proposedCheckOutAt: z.string().datetime(),
+    reason: z.string().trim().min(1).max(2000),
+  })
+  .refine((v) => v.proposedCheckOutAt > v.proposedCheckInAt, {
+    message: 'Check-out time must be after check-in time',
+    path: ['proposedCheckOutAt'],
+  });
+export type CreateCorrectionInput = z.infer<typeof createCorrectionSchema>;
+
+export const reviewCorrectionSchema = z.object({
+  status: z.enum(['APPROVED', 'REJECTED']),
+  note: z.string().max(2000).optional(),
+});
+export type ReviewCorrectionInput = z.infer<typeof reviewCorrectionSchema>;
+

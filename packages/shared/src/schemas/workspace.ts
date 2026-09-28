@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { WORKSPACE_ROLES, type WorkspaceRole } from '../enums';
 
 export const createWorkspaceSchema = z.object({
   name: z.string().min(1).max(120),
@@ -42,3 +43,8 @@ export const updateWorkspaceMembersSchema = z
   })
   .strict();
 export type UpdateWorkspaceMembersInput = z.infer<typeof updateWorkspaceMembersSchema>;
+
+export const setWorkspaceMemberRoleSchema = z.object({
+  role: z.enum(WORKSPACE_ROLES as [WorkspaceRole, ...WorkspaceRole[]]),
+});
+export type SetWorkspaceMemberRoleInput = z.infer<typeof setWorkspaceMemberRoleSchema>;

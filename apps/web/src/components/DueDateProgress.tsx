@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { TaskListItem } from '@task-tracker/shared';
 import { useUpdateTask } from '../hooks/useTasks';
+import { formatWorkingDuration } from '../lib/format';
 
 /** Urgency threshold per priority for when amber warning triggers (feature B). */
 const URGENCY_THRESHOLD: Record<string, number> = {
@@ -88,10 +89,16 @@ export function DueDateProgress({
   const daysLeft = Math.ceil((due - now) / (1000 * 60 * 60 * 24));
   const daysOverdue = Math.ceil((now - due) / (1000 * 60 * 60 * 24));
 
+  // A raw calendar-day count silently ages a Friday deadline as if it slipped to
+  // Monday; the working-time figure from the calendar-aware backend (PRD §2) is
+  // shown instead whenever it's available, so a task can read as under one
+  // working day overdue without implying the deadline itself moved.
   const label = isDone
     ? 'Completed'
     : isExpired
-    ? daysOverdue === 1
+    ? t.overdueWorkingMinutes !== null
+      ? `${formatWorkingDuration(t.overdueWorkingMinutes)} overdue`
+      : daysOverdue === 1
       ? '1 day overdue'
       : `${daysOverdue} days overdue`
     : daysLeft === 0
@@ -132,8 +139,11 @@ export function DueDateProgress({
     `📅 Due: ${new Date(t.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`,
     `⏱ Created: ${new Date(t.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`,
     isDone ? '✅ Task completed' : isExpired ? `🔴 ${label}` : `⏳ ${label}`,
+    isExpired && t.overdueWorkingMinutes !== null
+      ? `🗓 ${daysOverdue === 1 ? '1 calendar day' : `${daysOverdue} calendar days`} since deadline`
+      : null,
     `📊 ${Math.round(rawTimePct)}% of time elapsed`,
-  ].join('\n');
+  ].filter((line): line is string => line !== null).join('\n');
 
   return (
     <div className="w-full mt-1.5 group/progress relative">

@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   boolean,
+  date,
   check,
   index,
   integer,
@@ -38,6 +39,12 @@ export const tasks = pgTable(
     status: taskStatusEnum('status').notNull().default('TODO'),
     priority: priorityEnum('priority').notNull().default('MEDIUM'),
     dueDate: timestamp('due_date', { withTimezone: true }),
+    originalDueDate: timestamp('original_due_date', { withTimezone: true }),
+    ownerId: uuid('owner_id').references(() => users.id, { onDelete: 'set null' }),
+    reviewerId: uuid('reviewer_id').references(() => users.id, { onDelete: 'set null' }),
+    baselineEstimateMinutes: integer('baseline_estimate_minutes'),
+    currentEstimateMinutes: integer('current_estimate_minutes'),
+    remainingEstimateMinutes: integer('remaining_estimate_minutes'),
     /** Set when status transitions to DONE, cleared when it leaves DONE (weekly completion analytics). */
     completedAt: timestamp('completed_at', { withTimezone: true }),
     createdById: uuid('created_by_id')
@@ -51,6 +58,11 @@ export const tasks = pgTable(
     uniqueIndex('tasks_project_number_uq').on(t.projectId, t.number),
     index('tasks_completed_at_idx').on(t.completedAt),
     index('tasks_parent_task_idx').on(t.parentTaskId),
+    index('tasks_owner_idx').on(t.ownerId),
+    index('tasks_reviewer_idx').on(t.reviewerId),
+    check('tasks_baseline_estimate_nonnegative', sql`${t.baselineEstimateMinutes} IS NULL OR ${t.baselineEstimateMinutes} >= 0`),
+    check('tasks_current_estimate_nonnegative', sql`${t.currentEstimateMinutes} IS NULL OR ${t.currentEstimateMinutes} >= 0`),
+    check('tasks_remaining_estimate_nonnegative', sql`${t.remainingEstimateMinutes} IS NULL OR ${t.remainingEstimateMinutes} >= 0`),
   ],
 );
 
@@ -130,6 +142,27 @@ export const taskAttachments = pgTable(
 
 export type TaskAttachmentRow = typeof taskAttachments.$inferSelect;
 
+export const taskSubmissions = pgTable(
+  'task_submissions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    taskId: uuid('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+    submitterId: uuid('submitter_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+    evidenceAttachmentId: uuid('evidence_attachment_id').notNull().references(() => taskAttachments.id, { onDelete: 'restrict' }),
+    note: text('note').notNull(),
+    status: varchar('status', { length: 12 }).notNull().default('PENDING'),
+    reviewerId: uuid('reviewer_id').references(() => users.id, { onDelete: 'set null' }),
+    reviewNote: text('review_note'),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('task_submissions_task_idx').on(t.taskId),
+    uniqueIndex('task_submissions_one_pending_uq').on(t.taskId).where(sql`${t.status} = 'PENDING'`),
+    check('task_submissions_status_check', sql`${t.status} IN ('PENDING', 'ACCEPTED', 'RETURNED')`),
+  ],
+);
+
 export const taskComments = pgTable('task_comments', {
   id: uuid('id').primaryKey().defaultRandom(),
   taskId: uuid('task_id')
@@ -141,3 +174,75 @@ export const taskComments = pgTable('task_comments', {
   body: text('body').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const taskTimeEntries = pgTable(
+  'task_time_entries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    workDate: date('work_date').notNull(),
+    durationMinutes: integer('duration_minutes').notNull(),
+    category: varchar('category', { length: 20 }).notNull().default('EXECUTION'),
+    note: text('note'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    isPaused: boolean('is_paused').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('task_time_entries_task_idx').on(t.taskId),
+    index('task_time_entries_user_idx').on(t.userId),
+    uniqueIndex('task_time_entries_one_running_timer_uq').on(t.userId).where(sql`${t.endedAt} IS NULL`),
+    check('task_time_entries_category_check', sql`${t.category} IN ('EXECUTION', 'REVIEW', 'REWORK')`),
+  ],
+);
+
+export type TaskTimeEntryRow = typeof taskTimeEntries.$inferSelect;
+
+export const taskBlockers = pgTable(
+  'task_blockers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    reason: text('reason').notNull(),
+    unblockerUserId: uuid('unblocker_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    blockedAt: timestamp('blocked_at', { withTimezone: true }).notNull().defaultNow(),
+    unblockedAt: timestamp('unblocked_at', { withTimezone: true }),
+    nextFollowUpAt: timestamp('next_follow_up_at', { withTimezone: true }),
+  },
+  (t) => [index('task_blockers_task_idx').on(t.taskId)],
+);
+
+export type TaskBlockerRow = typeof taskBlockers.$inferSelect;
+
+export const taskDependencies = pgTable(
+  'task_dependencies',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    predecessorTaskId: uuid('predecessor_task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    successorTaskId: uuid('successor_task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    isBlocking: boolean('is_blocking').notNull().default(true),
+  },
+  (t) => [
+    uniqueIndex('task_dependencies_pair_uq').on(t.predecessorTaskId, t.successorTaskId),
+    check('task_dependencies_no_self_ref', sql`${t.predecessorTaskId} <> ${t.successorTaskId}`),
+  ],
+);
+
+export type TaskDependencyRow = typeof taskDependencies.$inferSelect;
+
+

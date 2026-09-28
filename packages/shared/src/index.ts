@@ -10,5 +10,6 @@ export * from './schemas/attendance';
 export * from './schemas/chat';
 export * from './schemas/meetings';
 export * from './schemas/notification';
+export * from './schemas/calendar';
 export * from './types';
 

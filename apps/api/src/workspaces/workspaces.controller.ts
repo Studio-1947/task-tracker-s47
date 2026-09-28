@@ -17,9 +17,11 @@ import { memoryStorage } from 'multer';
 import {
   Role,
   createWorkspaceSchema,
+  setWorkspaceMemberRoleSchema,
   updateWorkspaceMembersSchema,
   updateWorkspaceSchema,
   type CreateWorkspaceInput,
+  type SetWorkspaceMemberRoleInput,
   type UpdateWorkspaceInput,
   type UpdateWorkspaceMembersInput,
 } from '@task-tracker/shared';
@@ -76,6 +78,18 @@ export class WorkspacesController {
     @Body(new ZodValidationPipe(updateWorkspaceMembersSchema)) body: UpdateWorkspaceMembersInput,
   ) {
     return this.workspaces.updateMembers(id, body);
+  }
+
+  /** Promote/demote a member's workspace-scoped role (PRD §9 "Team manager") — admin-only to avoid self-escalation. */
+  @Patch(':id/members/:userId/role')
+  @Roles(Role.ADMIN)
+  setMemberRole(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body(new ZodValidationPipe(setWorkspaceMemberRoleSchema)) body: SetWorkspaceMemberRoleInput,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.workspaces.setMemberRole(id, userId, body.role, user);
   }
 
   // Workspace logo — admin only. Validated (image-only allowlist) in FilesService.save.

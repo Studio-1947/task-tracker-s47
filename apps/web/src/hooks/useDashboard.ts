@@ -17,3 +17,28 @@ export function useMemberDashboard(enabled: boolean) {
     enabled,
   });
 }
+
+export interface OperationalDraftReport {
+  reportDate: string;
+  workspaceId: string;
+  workspaceName: string;
+  markdown: string;
+  summary: Record<string, unknown>;
+}
+
+export function useWednesdayReport(workspaceId: string | null) {
+  return useQuery({
+    queryKey: ['reports', 'wednesday', workspaceId],
+    queryFn: () => http.get<OperationalDraftReport>(`/reports/wednesday?workspaceId=${workspaceId}`),
+    enabled: !!workspaceId,
+  });
+}
+
+export function useFridayReport(workspaceId: string | null) {
+  return useQuery({
+    queryKey: ['reports', 'friday', workspaceId],
+    queryFn: () => http.get<OperationalDraftReport>(`/reports/friday?workspaceId=${workspaceId}`),
+    enabled: !!workspaceId,
+  });
+}
+

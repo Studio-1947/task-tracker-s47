@@ -23,8 +23,10 @@ import type {
   UpdateLeaveTypeInput,
 } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
+import { CalendarService } from '../calendar/calendar.service';
 import {
   attendanceRecords,
+  attendanceCorrections,
   leaveBalances,
   leaveRequests,
   leaveTypes,
@@ -41,17 +43,9 @@ function localDateStr(d = new Date()): string {
   return `${y}-${m}-${day}`;
 }
 
-/** Inclusive calendar-day count (0.5 for a half-day). */
-function computeDays(start: string, end: string, halfDay: boolean): number {
-  if (halfDay) return 0.5;
-  const s = Date.parse(`${start}T00:00:00Z`);
-  const e = Date.parse(`${end}T00:00:00Z`);
-  return Math.round((e - s) / 86_400_000) + 1;
-}
-
 @Injectable()
 export class AttendanceService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(@Inject(DRIZZLE) private readonly db: Database, private readonly calendar: CalendarService) {}
 
   /* ── mappers ── */
   private toLeaveType(t: LeaveTypeRow): LeaveType {
@@ -265,7 +259,8 @@ export class AttendanceService {
       );
     }
 
-    const days = computeDays(input.startDate, input.endDate, input.halfDay);
+    const days = await this.calendar.leaveUnits(input.startDate, input.endDate, input.halfDay);
+    if (days === 0) throw new BadRequestException('The selected range contains no scheduled working days');
     const [created] = await this.db
       .insert(leaveRequests)
       .values({
@@ -373,6 +368,135 @@ export class AttendanceService {
     }
     return this.balancesFor(userId);
   }
+
+  /* ── Attendance Corrections & Day States (H01) ── */
+
+  async requestCorrection(
+    userId: string,
+    input: { workDate: string; proposedCheckInAt: string; proposedCheckOutAt: string; reason: string },
+  ) {
+    const [existingRec] = await this.db
+      .select({ id: attendanceRecords.id })
+      .from(attendanceRecords)
+      .where(and(eq(attendanceRecords.userId, userId), eq(attendanceRecords.workDate, input.workDate)))
+      .limit(1);
+
+    const [correction] = await this.db
+      .insert(attendanceCorrections)
+      .values({
+        attendanceRecordId: existingRec?.id ?? null,
+        userId,
+        workDate: input.workDate,
+        proposedCheckInAt: new Date(input.proposedCheckInAt),
+        proposedCheckOutAt: new Date(input.proposedCheckOutAt),
+        reason: input.reason,
+        status: 'PENDING',
+      })
+      .returning();
+
+    return correction;
+  }
+
+  async listCorrections(userId?: string, status?: string) {
+    const reviewer = alias(users, 'reviewer');
+    const conds = [];
+    if (userId) conds.push(eq(attendanceCorrections.userId, userId));
+    if (status) conds.push(eq(attendanceCorrections.status, status));
+
+    const rows = await this.db
+      .select({ c: attendanceCorrections, u: users, rev: reviewer })
+      .from(attendanceCorrections)
+      .innerJoin(users, eq(users.id, attendanceCorrections.userId))
+      .leftJoin(reviewer, eq(reviewer.id, attendanceCorrections.reviewerId))
+      .where(conds.length ? and(...conds) : undefined)
+      .orderBy(desc(attendanceCorrections.createdAt));
+
+    return rows.map(({ c, u, rev }) => ({
+      id: c.id,
+      attendanceRecordId: c.attendanceRecordId,
+      workDate: c.workDate,
+      proposedCheckInAt: c.proposedCheckInAt.toISOString(),
+      proposedCheckOutAt: c.proposedCheckOutAt.toISOString(),
+      reason: c.reason,
+      status: c.status,
+      user: { id: u.id, name: u.name, email: u.email, avatarKey: u.avatarKey },
+      reviewer: rev ? { id: rev.id, name: rev.name, email: rev.email, avatarKey: rev.avatarKey } : null,
+      reviewNote: c.reviewNote,
+      reviewedAt: c.reviewedAt ? c.reviewedAt.toISOString() : null,
+      createdAt: c.createdAt.toISOString(),
+    }));
+  }
+
+  async reviewCorrection(id: string, reviewerId: string, input: { status: 'APPROVED' | 'REJECTED'; note?: string }) {
+    const [corr] = await this.db.select().from(attendanceCorrections).where(eq(attendanceCorrections.id, id)).limit(1);
+    if (!corr) throw new NotFoundException('Correction request not found');
+    if (corr.status !== 'PENDING') throw new BadRequestException('Correction request already reviewed');
+
+    const now = new Date();
+    await this.db
+      .update(attendanceCorrections)
+      .set({
+        status: input.status,
+        reviewerId,
+        reviewNote: input.note ?? null,
+        reviewedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(attendanceCorrections.id, id));
+
+    if (input.status === 'APPROVED') {
+      if (corr.attendanceRecordId) {
+        await this.db
+          .update(attendanceRecords)
+          .set({
+            checkInAt: corr.proposedCheckInAt,
+            checkOutAt: corr.proposedCheckOutAt,
+            updatedAt: now,
+          })
+          .where(eq(attendanceRecords.id, corr.attendanceRecordId));
+      } else {
+        await this.db.insert(attendanceRecords).values({
+          userId: corr.userId,
+          workDate: corr.workDate,
+          checkInAt: corr.proposedCheckInAt,
+          checkOutAt: corr.proposedCheckOutAt,
+        });
+      }
+    }
+
+    const [updated] = await this.listCorrections(undefined, undefined);
+    return updated;
+  }
+
+  async getDailyAttendanceState(userId: string, dateStr: string): Promise<string> {
+    const d = new Date(dateStr);
+    const dayOfWeek = d.getUTCDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) return 'WEEKLY_OFF';
+
+    const [pending] = await this.db
+      .select({ id: attendanceCorrections.id })
+      .from(attendanceCorrections)
+      .where(and(eq(attendanceCorrections.userId, userId), eq(attendanceCorrections.workDate, dateStr), eq(attendanceCorrections.status, 'PENDING')))
+      .limit(1);
+    if (pending) return 'PENDING_CORRECTION';
+
+    const [rec] = await this.db
+      .select({ id: attendanceRecords.id })
+      .from(attendanceRecords)
+      .where(and(eq(attendanceRecords.userId, userId), eq(attendanceRecords.workDate, dateStr)))
+      .limit(1);
+    if (rec) return 'WORKED';
+
+    const [leave] = await this.db
+      .select({ id: leaveRequests.id })
+      .from(leaveRequests)
+      .where(and(eq(leaveRequests.userId, userId), eq(leaveRequests.status, 'APPROVED'), lte(leaveRequests.startDate, dateStr), gte(leaveRequests.endDate, dateStr)))
+      .limit(1);
+    if (leave) return 'PAID_LEAVE';
+
+    return 'ABSENCE';
+  }
+
 }
 
 /** [start, end) covering a calendar month "YYYY-MM". */

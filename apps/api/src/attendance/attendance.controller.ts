@@ -14,12 +14,16 @@ import {
 import {
   Role,
   attendancePunchSchema,
+  createCorrectionSchema,
+  reviewCorrectionSchema,
   createLeaveRequestSchema,
   createLeaveTypeSchema,
   reviewLeaveRequestSchema,
   setLeaveBalancesSchema,
   updateLeaveTypeSchema,
   type AttendancePunchInput,
+  type CreateCorrectionInput,
+  type ReviewCorrectionInput,
   type CreateLeaveRequestInput,
   type CreateLeaveTypeInput,
   type ReviewLeaveRequestInput,
@@ -152,4 +156,35 @@ export class AttendanceController {
   ) {
     return this.attendance.setBalances(userId, body);
   }
+
+  /* ── attendance corrections (H01) ── */
+  @Post('attendance/corrections')
+  requestCorrection(
+    @CurrentUser('id') userId: string,
+    @Body(new ZodValidationPipe(createCorrectionSchema)) body: CreateCorrectionInput,
+  ) {
+    return this.attendance.requestCorrection(userId, body);
+  }
+
+  @Get('attendance/corrections/me')
+  myCorrections(@CurrentUser('id') userId: string) {
+    return this.attendance.listCorrections(userId);
+  }
+
+  @Get('attendance/corrections')
+  @Roles(Role.ADMIN)
+  listCorrections(@Query('status') status?: string) {
+    return this.attendance.listCorrections(undefined, status);
+  }
+
+  @Post('attendance/corrections/:id/review')
+  @Roles(Role.ADMIN)
+  reviewCorrection(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') reviewerId: string,
+    @Body(new ZodValidationPipe(reviewCorrectionSchema)) body: ReviewCorrectionInput,
+  ) {
+    return this.attendance.reviewCorrection(id, reviewerId, body);
+  }
 }
+

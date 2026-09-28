@@ -9,16 +9,19 @@ import type {
   Paginated,
   Priority,
   SubtaskRef,
+  SubmitTaskInput,
   TaskAttachment,
   TaskComment,
   TaskDetail,
   TaskListItem,
   TaskQuery,
   TaskStatus,
+  TaskSubmission,
+  ReviewTaskInput,
   UpdateTaskInput,
   UserRef,
 } from '@task-tracker/shared';
-import { AttachmentKind, AuditAction, Role } from '@task-tracker/shared';
+import { AttachmentKind, AuditAction, Role, workingMinutesElapsed } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
 import {
   labels,
@@ -27,6 +30,10 @@ import {
   taskAttachments,
   taskComments,
   taskLabels,
+  taskSubmissions,
+  taskTimeEntries,
+  taskBlockers,
+  taskDependencies,
   tasks,
   users,
   workspaceMembers,
@@ -34,9 +41,13 @@ import {
   type TaskRow,
 } from '../database/schema';
 import { AuditService } from '../audit/audit.service';
+import { CalendarService } from '../calendar/calendar.service';
 import { FilesService } from '../files/files.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { NotificationsService } from '../notifications/notifications.service';
+
+/** Calendar snapshot loaded once per request and reused across every task row it touches. */
+type CalendarSnapshot = Awaited<ReturnType<CalendarService['get']>>;
 
 type Actor = { id: string; role: string };
 
@@ -51,6 +62,7 @@ export class TasksService {
     private readonly audit: AuditService,
     private readonly files: FilesService,
     private readonly notifications: NotificationsService,
+    private readonly calendar: CalendarService,
   ) {}
 
 
@@ -177,6 +189,25 @@ export class TasksService {
     return { assignees: assigneeMap, labels: labelMap, commentCounts, attachmentCounts, subtaskCounts, subtaskDoneCounts };
   }
 
+  /**
+   * Working-time ageing since `dueDate` (PRD §2 "Preserve commitments while
+   * measuring working time") — `null` unless the task is actually overdue:
+   * has a due date, it has passed, and the task hasn't reached DONE. Mirrors
+   * the dashboard's overdue scope (`isNotNull(dueDate) && dueDate < now &&
+   * status != DONE`) so the two never disagree.
+   */
+  private overdueWorkingMinutesFor(
+    dueDate: Date | null,
+    status: string,
+    calendar: CalendarSnapshot | undefined,
+    now: Date,
+  ): number | null {
+    if (!dueDate || status === 'DONE' || dueDate.getTime() >= now.getTime()) return null;
+    const settings = calendar?.settings;
+    if (!settings) return null;
+    return workingMinutesElapsed(dueDate.toISOString(), now.toISOString(), settings, calendar!.exceptions);
+  }
+
   private toListItem(
     t: TaskRow,
     prefix: string,
@@ -189,6 +220,9 @@ export class TasksService {
       subtaskCounts: Map<string, number>;
       subtaskDoneCounts: Map<string, number>;
     },
+    people: Map<string, UserRef> = new Map(),
+    calendar?: CalendarSnapshot,
+    now: Date = new Date(),
   ): TaskListItem {
     return {
       id: t.id,
@@ -201,6 +235,13 @@ export class TasksService {
       status: t.status as TaskListItem['status'],
       priority: t.priority as TaskListItem['priority'],
       dueDate: t.dueDate ? t.dueDate.toISOString() : null,
+      originalDueDate: t.originalDueDate ? t.originalDueDate.toISOString() : null,
+      overdueWorkingMinutes: this.overdueWorkingMinutesFor(t.dueDate, t.status, calendar, now),
+      owner: t.ownerId ? (people.get(t.ownerId) ?? null) : null,
+      reviewer: t.reviewerId ? (people.get(t.reviewerId) ?? null) : null,
+      baselineEstimateMinutes: t.baselineEstimateMinutes,
+      currentEstimateMinutes: t.currentEstimateMinutes,
+      remainingEstimateMinutes: t.remainingEstimateMinutes,
       assignees: rel.assignees.get(t.id) ?? [],
       labels: rel.labels.get(t.id) ?? [],
       commentCount: rel.commentCounts.get(t.id) ?? 0,
@@ -221,6 +262,16 @@ export class TasksService {
       .where(eq(users.id, userId))
       .limit(1);
     return u ?? { id: userId, name: 'Unknown', email: '', avatarKey: null };
+  }
+
+  private async userRefs(userIds: (string | null)[]): Promise<Map<string, UserRef>> {
+    const ids = [...new Set(userIds.filter((id): id is string => !!id))];
+    if (!ids.length) return new Map();
+    const rows = await this.db
+      .select({ id: users.id, name: users.name, email: users.email, avatarKey: users.avatarKey })
+      .from(users)
+      .where(inArray(users.id, ids));
+    return new Map(rows.map((u) => [u.id, u]));
   }
 
   /** Validates a would-be parent: same workspace/project, and not itself a subtask (single-level nesting only). */
@@ -286,13 +337,80 @@ export class TasksService {
     return map;
   }
 
+  /**
+   * Once a parent has effort-bearing children, its baseline/current/remaining
+   * estimate is the sum of its (non-archived) children's — counted exactly once,
+   * never combined with any value entered directly on the parent (PRD §3 "Parent
+   * rollup", AT06). No-op when the parent has no children yet, so a task keeps
+   * direct estimates until it is actually broken up.
+   */
+  private async recalcParentRollup(
+    parentTaskId: string,
+    actorId: string,
+    tx: Parameters<Parameters<Database['transaction']>[0]>[0],
+  ): Promise<void> {
+    const children = await tx
+      .select({
+        baseline: tasks.baselineEstimateMinutes,
+        current: tasks.currentEstimateMinutes,
+        remaining: tasks.remainingEstimateMinutes,
+      })
+      .from(tasks)
+      .where(and(eq(tasks.parentTaskId, parentTaskId), eq(tasks.isArchived, false)));
+    if (children.length === 0) return;
+
+    const sum = (values: (number | null)[]): number | null => {
+      const present = values.filter((v): v is number => v !== null);
+      return present.length ? present.reduce((a, b) => a + b, 0) : null;
+    };
+    const rollup = {
+      baselineEstimateMinutes: sum(children.map((c) => c.baseline)),
+      currentEstimateMinutes: sum(children.map((c) => c.current)),
+      remainingEstimateMinutes: sum(children.map((c) => c.remaining)),
+    };
+
+    const [parent] = await tx.select().from(tasks).where(eq(tasks.id, parentTaskId)).limit(1);
+    if (!parent) return;
+    const changed =
+      parent.baselineEstimateMinutes !== rollup.baselineEstimateMinutes ||
+      parent.currentEstimateMinutes !== rollup.currentEstimateMinutes ||
+      parent.remainingEstimateMinutes !== rollup.remainingEstimateMinutes;
+    if (!changed) return;
+
+    await tx.update(tasks).set({ ...rollup, updatedAt: new Date() }).where(eq(tasks.id, parentTaskId));
+    await this.audit.record(
+      {
+        workspaceId: parent.workspaceId,
+        taskId: parentTaskId,
+        userId: actorId,
+        action: AuditAction.ESTIMATE_CHANGED,
+        beforeValue: {
+          rollup: true,
+          baselineEstimateMinutes: parent.baselineEstimateMinutes,
+          currentEstimateMinutes: parent.currentEstimateMinutes,
+          remainingEstimateMinutes: parent.remainingEstimateMinutes,
+        },
+        afterValue: { rollup: true, ...rollup },
+      },
+      tx,
+    );
+  }
+
   // ── commands ──────────────────────────────────────────────────────────────
 
   async create(workspaceId: string, actor: Actor, input: CreateTaskInput): Promise<TaskDetail> {
     await this.workspaces.assertCanAccess(workspaceId, actor);
     const assigneeIds = input.assigneeIds ?? [];
+    const planningPeople = [input.ownerId, input.reviewerId].filter((id): id is string => !!id);
     const labelIds = input.labelIds ?? [];
     await this.assertAssigneesAreMembers(workspaceId, assigneeIds);
+    await this.assertAssigneesAreMembers(workspaceId, planningPeople);
+    if (input.ownerId && input.reviewerId && input.ownerId === input.reviewerId) {
+      throw new BadRequestException('Owner and reviewer must be different people');
+    }
+    if (input.reviewerId && (input.status === 'IN_REVIEW' || input.status === 'DONE')) {
+      throw new BadRequestException('Create reviewer-controlled tasks as To Do or In Progress');
+    }
     await this.assertLabelsInWorkspace(workspaceId, labelIds);
     if (input.parentTaskId) {
       await this.assertParentEligible(workspaceId, input.projectId, input.parentTaskId);
@@ -321,6 +439,12 @@ export class TasksService {
           status: input.status ?? 'TODO',
           priority: input.priority ?? 'MEDIUM',
           dueDate: input.dueDate ? new Date(input.dueDate) : null,
+          originalDueDate: input.dueDate ? new Date(input.dueDate) : null,
+          ownerId: input.ownerId ?? null,
+          reviewerId: input.reviewerId ?? null,
+          baselineEstimateMinutes: input.baselineEstimateMinutes ?? null,
+          currentEstimateMinutes: input.currentEstimateMinutes ?? input.baselineEstimateMinutes ?? null,
+          remainingEstimateMinutes: input.remainingEstimateMinutes ?? input.currentEstimateMinutes ?? input.baselineEstimateMinutes ?? null,
           completedAt: input.status === 'DONE' ? new Date() : null,
           createdById: actor.id,
         })
@@ -346,10 +470,17 @@ export class TasksService {
             priority: task.priority,
             dueDate: task.dueDate?.toISOString() ?? null,
             assigneeIds,
+            ownerId: input.ownerId ?? null,
+            reviewerId: input.reviewerId ?? null,
+            baselineEstimateMinutes: input.baselineEstimateMinutes ?? null,
           },
         },
         tx,
       );
+
+      if (input.parentTaskId) {
+        await this.recalcParentRollup(input.parentTaskId, actor.id, tx);
+      }
 
       return { task, prefix: seq.prefix };
     });
@@ -450,9 +581,14 @@ export class TasksService {
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
 
-    const rel = await this.loadRelations(rows.map((r) => r.task.id));
+    const [rel, people, calendar] = await Promise.all([
+      this.loadRelations(rows.map((r) => r.task.id)),
+      this.userRefs(rows.flatMap((r) => [r.task.ownerId, r.task.reviewerId])),
+      this.calendar.get(),
+    ]);
+    const now = new Date();
     return {
-      items: rows.map((r) => this.toListItem(r.task, r.prefix, r.projectName, rel)),
+      items: rows.map((r) => this.toListItem(r.task, r.prefix, r.projectName, rel, people, calendar, now)),
       total: Number(total),
       page: query.page,
       pageSize: query.pageSize,
@@ -462,8 +598,12 @@ export class TasksService {
   async getOne(taskId: string, actor: Actor): Promise<TaskDetail> {
     const task = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(task.workspaceId, actor);
-    const rel = await this.loadRelations([taskId]);
-    const base = this.toListItem(task, task.taskPrefix, task.projectName, rel);
+    const [rel, people, calendar] = await Promise.all([
+      this.loadRelations([taskId]),
+      this.userRefs([task.ownerId, task.reviewerId]),
+      this.calendar.get(),
+    ]);
+    const base = this.toListItem(task, task.taskPrefix, task.projectName, rel, people, calendar, new Date());
     const createdBy = await this.userRef(task.createdById);
 
     const subtaskRows = await this.db
@@ -495,7 +635,39 @@ export class TasksService {
       .sort();
 
     if (input.assigneeIds) await this.assertAssigneesAreMembers(current.workspaceId, input.assigneeIds);
+    const planningPeople = [input.ownerId, input.reviewerId].filter((id): id is string => !!id);
+    if (planningPeople.length) await this.assertAssigneesAreMembers(current.workspaceId, planningPeople);
+    const nextOwner = input.ownerId === undefined ? current.ownerId : input.ownerId;
+    const nextReviewer = input.reviewerId === undefined ? current.reviewerId : input.reviewerId;
+    if (nextOwner && nextReviewer && nextOwner === nextReviewer) {
+      throw new BadRequestException('Owner and reviewer must be different people');
+    }
+    if ((input.status !== undefined || input.reviewerId !== undefined) &&
+        (input.status !== current.status || input.reviewerId !== current.reviewerId)) {
+      const [pendingReview] = await this.db.select({ id: taskSubmissions.id }).from(taskSubmissions)
+        .where(and(eq(taskSubmissions.taskId, taskId), eq(taskSubmissions.status, 'PENDING'))).limit(1);
+      if (pendingReview) throw new BadRequestException('Decide the pending submission before changing its status or reviewer');
+    }
     if (input.labelIds) await this.assertLabelsInWorkspace(current.workspaceId, input.labelIds);
+
+    if (input.currentEstimateMinutes !== undefined || input.remainingEstimateMinutes !== undefined) {
+      const childEstimates = await this.db
+        .select({
+          baseline: tasks.baselineEstimateMinutes,
+          current: tasks.currentEstimateMinutes,
+          remaining: tasks.remainingEstimateMinutes,
+        })
+        .from(tasks)
+        .where(and(eq(tasks.parentTaskId, taskId), eq(tasks.isArchived, false)));
+      const hasEffortBearingChildren = childEstimates.some(
+        (c) => c.baseline !== null || c.current !== null || c.remaining !== null,
+      );
+      if (hasEffortBearingChildren) {
+        throw new BadRequestException(
+          "This task's effort rolls up from its subtasks; edit estimates on the subtasks instead.",
+        );
+      }
+    }
 
     const currentLabels = (
       await this.db
@@ -523,6 +695,9 @@ export class TasksService {
         });
       }
       if (input.status !== undefined && input.status !== current.status) {
+        if (current.reviewerId && (input.status === 'IN_REVIEW' || input.status === 'DONE')) {
+          throw new BadRequestException('Use the evidence submission and review workflow for this status');
+        }
         patch.status = input.status;
         // Track completion time for analytics; a re-opened task no longer counts as completed.
         patch.completedAt = input.status === 'DONE' ? new Date() : null;
@@ -538,7 +713,24 @@ export class TasksService {
         const nextIso = nextDue ? nextDue.toISOString() : null;
         if (currentIso !== nextIso) {
           patch.dueDate = nextDue;
+          // The first non-null commitment becomes the immutable baseline for
+          // deadline-revision reporting, including legacy undated tasks.
+          if (!current.originalDueDate && nextDue) patch.originalDueDate = nextDue;
           audits.push({ action: AuditAction.DUE_DATE_CHANGED, before: currentIso, after: nextIso });
+        }
+      }
+      if (input.ownerId !== undefined && input.ownerId !== current.ownerId) {
+        patch.ownerId = input.ownerId;
+        audits.push({ action: AuditAction.OWNER_CHANGED, before: current.ownerId, after: input.ownerId });
+      }
+      if (input.reviewerId !== undefined && input.reviewerId !== current.reviewerId) {
+        patch.reviewerId = input.reviewerId;
+        audits.push({ action: AuditAction.REVIEWER_CHANGED, before: current.reviewerId, after: input.reviewerId });
+      }
+      for (const field of ['currentEstimateMinutes', 'remainingEstimateMinutes'] as const) {
+        if (input[field] !== undefined && input[field] !== current[field]) {
+          patch[field] = input[field];
+          audits.push({ action: AuditAction.ESTIMATE_CHANGED, before: { field, value: current[field] }, after: { field, value: input[field] } });
         }
       }
 
@@ -594,6 +786,10 @@ export class TasksService {
           tx,
         );
       }
+
+      if (current.parentTaskId && (patch.currentEstimateMinutes !== undefined || patch.remainingEstimateMinutes !== undefined)) {
+        await this.recalcParentRollup(current.parentTaskId, actor.id, tx);
+      }
     });
 
     const detail = await this.getOne(taskId, actor);
@@ -635,6 +831,77 @@ export class TasksService {
     return detail;
   }
 
+  async listSubmissions(taskId: string, actor: Actor): Promise<TaskSubmission[]> {
+    const task = await this.loadTaskOrThrow(taskId);
+    await this.workspaces.assertCanAccess(task.workspaceId, actor);
+    const rows = await this.db.select().from(taskSubmissions).where(eq(taskSubmissions.taskId, taskId)).orderBy(desc(taskSubmissions.submittedAt));
+    const people = await this.userRefs(rows.flatMap((r) => [r.submitterId, r.reviewerId]));
+    return rows.map((r) => ({
+      id: r.id,
+      taskId: r.taskId,
+      note: r.note,
+      status: r.status as TaskSubmission['status'],
+      evidenceAttachmentId: r.evidenceAttachmentId,
+      submitter: people.get(r.submitterId)!,
+      reviewer: r.reviewerId ? (people.get(r.reviewerId) ?? null) : null,
+      reviewNote: r.reviewNote,
+      submittedAt: r.submittedAt.toISOString(),
+      decidedAt: r.decidedAt?.toISOString() ?? null,
+    }));
+  }
+
+  async submitForReview(taskId: string, actor: Actor, input: SubmitTaskInput): Promise<TaskSubmission> {
+    const task = await this.loadTaskOrThrow(taskId);
+    await this.workspaces.assertCanAccess(task.workspaceId, actor);
+    if (task.isArchived || task.status === 'DONE') throw new BadRequestException('This task cannot be submitted');
+    if (!task.reviewerId) throw new BadRequestException('Assign a reviewer before submitting');
+    const [assignee] = await this.db.select({ userId: taskAssignees.userId }).from(taskAssignees)
+      .where(and(eq(taskAssignees.taskId, taskId), eq(taskAssignees.userId, actor.id))).limit(1);
+    if (actor.role !== Role.ADMIN && task.ownerId !== actor.id && !assignee) {
+      throw new ForbiddenException('Only the accountable owner or a tagged contributor can submit this task');
+    }
+    const [evidence] = await this.db.select({ id: taskAttachments.id }).from(taskAttachments)
+      .where(and(eq(taskAttachments.id, input.evidenceAttachmentId), eq(taskAttachments.taskId, taskId))).limit(1);
+    if (!evidence) throw new BadRequestException('Select evidence attached to this task');
+    const [pending] = await this.db.select({ id: taskSubmissions.id }).from(taskSubmissions)
+      .where(and(eq(taskSubmissions.taskId, taskId), eq(taskSubmissions.status, 'PENDING'))).limit(1);
+    if (pending) throw new BadRequestException('This task already has a pending review');
+
+    const row = await this.db.transaction(async (tx) => {
+      const [created] = await tx.insert(taskSubmissions).values({ taskId, submitterId: actor.id, evidenceAttachmentId: evidence.id, note: input.note }).returning();
+      await tx.update(tasks).set({ status: 'IN_REVIEW', completedAt: null, updatedAt: new Date() }).where(eq(tasks.id, taskId));
+      await this.audit.record({ workspaceId: task.workspaceId, taskId, userId: actor.id, action: AuditAction.SUBMITTED, afterValue: { submissionId: created!.id, evidenceAttachmentId: evidence.id, note: input.note } }, tx);
+      return created!;
+    });
+    return (await this.listSubmissions(taskId, actor)).find((s) => s.id === row.id)!;
+  }
+
+  async reviewSubmission(taskId: string, submissionId: string, actor: Actor, input: ReviewTaskInput): Promise<TaskSubmission> {
+    const task = await this.loadTaskOrThrow(taskId);
+    await this.workspaces.assertCanAccess(task.workspaceId, actor);
+    // A workspace MANAGER can decide any submission in their assigned workspace
+    // (PRD §9 "Team manager": reviews), not only tasks where they're the literal
+    // assigned reviewer — a global admin retains that authority everywhere too.
+    if (
+      actor.role !== Role.ADMIN &&
+      task.reviewerId !== actor.id &&
+      !(await this.workspaces.isManager(task.workspaceId, actor))
+    ) {
+      throw new ForbiddenException('Only the assigned reviewer or a workspace manager can decide this submission');
+    }
+    const [submission] = await this.db.select().from(taskSubmissions)
+      .where(and(eq(taskSubmissions.id, submissionId), eq(taskSubmissions.taskId, taskId))).limit(1);
+    if (!submission) throw new NotFoundException('Submission not found');
+    if (submission.status !== 'PENDING') throw new BadRequestException('This submission has already been decided');
+    const now = new Date();
+    await this.db.transaction(async (tx) => {
+      await tx.update(taskSubmissions).set({ status: input.decision, reviewerId: actor.id, reviewNote: input.note ?? null, decidedAt: now }).where(eq(taskSubmissions.id, submissionId));
+      await tx.update(tasks).set({ status: input.decision === 'ACCEPTED' ? 'DONE' : 'IN_PROGRESS', completedAt: input.decision === 'ACCEPTED' ? now : null, updatedAt: now }).where(eq(tasks.id, taskId));
+      await this.audit.record({ workspaceId: task.workspaceId, taskId, userId: actor.id, action: AuditAction.REVIEWED, beforeValue: { submissionId, status: 'PENDING' }, afterValue: { decision: input.decision, note: input.note ?? null } }, tx);
+    });
+    return (await this.listSubmissions(taskId, actor)).find((s) => s.id === submissionId)!;
+  }
+
 
   async archive(taskId: string, actor: Actor): Promise<{ id: string; isArchived: boolean }> {
     const current = await this.loadTaskOrThrow(taskId);
@@ -647,6 +914,7 @@ export class TasksService {
         { workspaceId: current.workspaceId, taskId, userId: actor.id, action: AuditAction.ARCHIVED },
         tx,
       );
+      if (current.parentTaskId) await this.recalcParentRollup(current.parentTaskId, actor.id, tx);
     });
     return { id: taskId, isArchived: true };
   }
@@ -656,7 +924,10 @@ export class TasksService {
     const current = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(current.workspaceId, actor);
     if (!current.isArchived) return { id: taskId, isArchived: false };
-    await this.db.update(tasks).set({ isArchived: false, updatedAt: new Date() }).where(eq(tasks.id, taskId));
+    await this.db.transaction(async (tx) => {
+      await tx.update(tasks).set({ isArchived: false, updatedAt: new Date() }).where(eq(tasks.id, taskId));
+      if (current.parentTaskId) await this.recalcParentRollup(current.parentTaskId, actor.id, tx);
+    });
     return { id: taskId, isArchived: false };
   }
 
@@ -700,6 +971,7 @@ export class TasksService {
         tx,
       );
       await tx.delete(tasks).where(eq(tasks.id, taskId));
+      if (current.parentTaskId) await this.recalcParentRollup(current.parentTaskId, actor.id, tx);
     });
 
     // After commit; missing files are tolerated (mirrors removeAttachment).
@@ -971,6 +1243,9 @@ export class TasksService {
     if (attachment.uploaderId !== actor.id && actor.role !== Role.ADMIN) {
       throw new ForbiddenException('Only the uploader or an admin can delete an attachment');
     }
+    const [usedAsEvidence] = await this.db.select({ id: taskSubmissions.id }).from(taskSubmissions)
+      .where(eq(taskSubmissions.evidenceAttachmentId, attachmentId)).limit(1);
+    if (usedAsEvidence) throw new BadRequestException('Evidence used in a submission cannot be deleted');
 
     await this.db.transaction(async (tx) => {
       await tx.delete(taskAttachments).where(eq(taskAttachments.id, attachmentId));
@@ -1020,4 +1295,280 @@ export class TasksService {
     await this.workspaces.assertCanAccess(row.workspaceId, actor);
     return { fileName: row.fileName, mimeType: row.mimeType };
   }
+
+  // ── Time Entries & Forecast calculations (E01) ──────────────────────────────
+
+  async logTimeEntry(
+    taskId: string,
+    actor: Actor,
+    input: { workDate: string; durationMinutes: number; category?: string; note?: string },
+  ) {
+    const task = await this.loadTaskOrThrow(taskId);
+    await this.workspaces.assertCanAccess(task.workspaceId, actor);
+
+    return await this.db.transaction(async (tx) => {
+      const [entry] = await tx
+        .insert(taskTimeEntries)
+        .values({
+          taskId,
+          userId: actor.id,
+          workDate: input.workDate,
+          durationMinutes: input.durationMinutes,
+          category: input.category ?? 'EXECUTION',
+          note: input.note ?? null,
+          startedAt: new Date(),
+          endedAt: new Date(),
+        })
+        .returning();
+
+      // Deduct from remaining estimate if set
+      if (task.remainingEstimateMinutes !== null) {
+        const nextRemaining = Math.max(0, task.remainingEstimateMinutes - input.durationMinutes);
+        await tx.update(tasks).set({ remainingEstimateMinutes: nextRemaining, updatedAt: new Date() }).where(eq(tasks.id, taskId));
+        if (task.parentTaskId) {
+          await this.recalcParentRollup(task.parentTaskId, actor.id, tx);
+        }
+      }
+
+      await this.audit.record(
+        {
+          workspaceId: task.workspaceId,
+          taskId,
+          userId: actor.id,
+          action: AuditAction.TIME_ENTRY_CREATED,
+          afterValue: { entryId: entry.id, durationMinutes: input.durationMinutes, category: input.category ?? 'EXECUTION' },
+        },
+        tx,
+      );
+
+      return entry;
+    });
+  }
+
+  async startTimer(taskId: string, actor: Actor, input: { category?: string; note?: string }) {
+    const task = await this.loadTaskOrThrow(taskId);
+    await this.workspaces.assertCanAccess(task.workspaceId, actor);
+
+    // Check for existing running timer for user
+    const [running] = await this.db
+      .select({ id: taskTimeEntries.id })
+      .from(taskTimeEntries)
+      .where(and(eq(taskTimeEntries.userId, actor.id), isNull(taskTimeEntries.endedAt)))
+      .limit(1);
+    if (running) {
+      throw new BadRequestException('You already have an active timer running. Stop it before starting a new one.');
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const [entry] = await this.db
+      .insert(taskTimeEntries)
+      .values({
+        taskId,
+        userId: actor.id,
+        workDate: todayStr,
+        durationMinutes: 0,
+        category: input.category ?? 'EXECUTION',
+        note: input.note ?? null,
+        startedAt: new Date(),
+        endedAt: null,
+        isPaused: false,
+      })
+      .returning();
+
+    return entry;
+  }
+
+  async stopTimer(taskId: string, actor: Actor) {
+    const task = await this.loadTaskOrThrow(taskId);
+    await this.workspaces.assertCanAccess(task.workspaceId, actor);
+
+    const [running] = await this.db
+      .select()
+      .from(taskTimeEntries)
+      .where(and(eq(taskTimeEntries.taskId, taskId), eq(taskTimeEntries.userId, actor.id), isNull(taskTimeEntries.endedAt)))
+      .limit(1);
+    if (!running || !running.startedAt) {
+      throw new NotFoundException('No active timer running for this task');
+    }
+
+    const now = new Date();
+    const elapsedMinutes = Math.max(1, Math.round((now.getTime() - running.startedAt.getTime()) / 60000));
+
+    return await this.db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(taskTimeEntries)
+        .set({
+          durationMinutes: elapsedMinutes,
+          endedAt: now,
+          isPaused: false,
+          updatedAt: now,
+        })
+        .where(eq(taskTimeEntries.id, running.id))
+        .returning();
+
+      if (task.remainingEstimateMinutes !== null) {
+        const nextRemaining = Math.max(0, task.remainingEstimateMinutes - elapsedMinutes);
+        await tx.update(tasks).set({ remainingEstimateMinutes: nextRemaining, updatedAt: now }).where(eq(tasks.id, taskId));
+        if (task.parentTaskId) {
+          await this.recalcParentRollup(task.parentTaskId, actor.id, tx);
+        }
+      }
+
+      await this.audit.record(
+        {
+          workspaceId: task.workspaceId,
+          taskId,
+          userId: actor.id,
+          action: AuditAction.TIME_ENTRY_CREATED,
+          afterValue: { entryId: running.id, durationMinutes: elapsedMinutes },
+        },
+        tx,
+      );
+
+      return updated;
+    });
+  }
+
+  async getTimeSummary(taskId: string, actor: Actor) {
+    const task = await this.loadTaskOrThrow(taskId);
+    await this.workspaces.assertCanAccess(task.workspaceId, actor);
+
+    const entries = await this.db
+      .select({
+        id: taskTimeEntries.id,
+        workDate: taskTimeEntries.workDate,
+        durationMinutes: taskTimeEntries.durationMinutes,
+        category: taskTimeEntries.category,
+        note: taskTimeEntries.note,
+        startedAt: taskTimeEntries.startedAt,
+        endedAt: taskTimeEntries.endedAt,
+        isPaused: taskTimeEntries.isPaused,
+        userId: taskTimeEntries.userId,
+        userName: users.name,
+      })
+      .from(taskTimeEntries)
+      .innerJoin(users, eq(users.id, taskTimeEntries.userId))
+      .where(eq(taskTimeEntries.taskId, taskId))
+      .orderBy(desc(taskTimeEntries.createdAt));
+
+    const actualEffortMinutes = entries.reduce((acc, curr) => acc + (curr.durationMinutes || 0), 0);
+    const baseline = task.baselineEstimateMinutes ?? 0;
+    const remaining = task.remainingEstimateMinutes ?? 0;
+    const forecastTotalMinutes = actualEffortMinutes + remaining;
+    const forecastVarianceMinutes = forecastTotalMinutes - baseline;
+
+    return {
+      entries,
+      actualEffortMinutes,
+      baselineEstimateMinutes: task.baselineEstimateMinutes,
+      currentEstimateMinutes: task.currentEstimateMinutes,
+      remainingEstimateMinutes: task.remainingEstimateMinutes,
+      forecastTotalMinutes,
+      forecastVarianceMinutes,
+    };
+  }
+
+  // ── Task Blockers & Dependencies (P01) ────────────────────────────────────
+
+  async addBlocker(taskId: string, actor: Actor, input: { reason: string; unblockerUserId: string; nextFollowUpAt?: string }) {
+    const task = await this.loadTaskOrThrow(taskId);
+    await this.workspaces.assertCanAccess(task.workspaceId, actor);
+
+    return await this.db.transaction(async (tx) => {
+      const [blocker] = await tx
+        .insert(taskBlockers)
+        .values({
+          taskId,
+          reason: input.reason,
+          unblockerUserId: input.unblockerUserId,
+          nextFollowUpAt: input.nextFollowUpAt ? new Date(input.nextFollowUpAt) : null,
+        })
+        .returning();
+
+      await this.audit.record(
+        {
+          workspaceId: task.workspaceId,
+          taskId,
+          userId: actor.id,
+          action: AuditAction.TASK_BLOCKED,
+          afterValue: { blockerId: blocker.id, reason: input.reason, unblockerUserId: input.unblockerUserId },
+        },
+        tx,
+      );
+
+      return blocker;
+    });
+  }
+
+  async unblock(blockerId: string, actor: Actor) {
+    const [blocker] = await this.db.select().from(taskBlockers).where(eq(taskBlockers.id, blockerId)).limit(1);
+    if (!blocker) throw new NotFoundException('Blocker record not found');
+    const task = await this.loadTaskOrThrow(blocker.taskId);
+    await this.workspaces.assertCanAccess(task.workspaceId, actor);
+
+    const now = new Date();
+    const [updated] = await this.db
+      .update(taskBlockers)
+      .set({ unblockedAt: now })
+      .where(eq(taskBlockers.id, blockerId))
+      .returning();
+
+    await this.audit.record({
+      workspaceId: task.workspaceId,
+      taskId: task.id,
+      userId: actor.id,
+      action: AuditAction.TASK_UNBLOCKED,
+      afterValue: { blockerId, unblockedAt: now.toISOString() },
+    });
+
+    return updated;
+  }
+
+  async addDependency(actor: Actor, input: { predecessorTaskId: string; successorTaskId: string; isBlocking?: boolean }) {
+    const pred = await this.loadTaskOrThrow(input.predecessorTaskId);
+    const succ = await this.loadTaskOrThrow(input.successorTaskId);
+    await this.workspaces.assertCanAccess(pred.workspaceId, actor);
+    if (pred.workspaceId !== succ.workspaceId) {
+      throw new BadRequestException('Tasks must belong to the same workspace');
+    }
+
+    const [dep] = await this.db
+      .insert(taskDependencies)
+      .values({
+        predecessorTaskId: input.predecessorTaskId,
+        successorTaskId: input.successorTaskId,
+        isBlocking: input.isBlocking ?? true,
+      })
+      .returning();
+
+    await this.audit.record({
+      workspaceId: pred.workspaceId,
+      taskId: succ.id,
+      userId: actor.id,
+      action: AuditAction.DEPENDENCY_ADDED,
+      afterValue: { predecessorTaskId: input.predecessorTaskId, successorTaskId: input.successorTaskId },
+    });
+
+    return dep;
+  }
+
+  async removeDependency(dependencyId: string, actor: Actor) {
+    const [dep] = await this.db.select().from(taskDependencies).where(eq(taskDependencies.id, dependencyId)).limit(1);
+    if (!dep) throw new NotFoundException('Dependency record not found');
+    const succ = await this.loadTaskOrThrow(dep.successorTaskId);
+    await this.workspaces.assertCanAccess(succ.workspaceId, actor);
+
+    await this.db.delete(taskDependencies).where(eq(taskDependencies.id, dependencyId));
+
+    await this.audit.record({
+      workspaceId: succ.workspaceId,
+      taskId: succ.id,
+      userId: actor.id,
+      action: AuditAction.DEPENDENCY_REMOVED,
+      beforeValue: { predecessorTaskId: dep.predecessorTaskId, successorTaskId: dep.successorTaskId },
+    });
+
+    return { id: dependencyId };
+  }
 }
+

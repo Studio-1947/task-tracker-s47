@@ -20,6 +20,7 @@ import { ChatModule } from './chat/chat.module';
 import { MeetingsModule } from './meetings/meetings.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { HealthController } from './health/health.controller';
+import { CalendarModule } from './calendar/calendar.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { HealthController } from './health/health.controller';
     ChatModule,
     MeetingsModule,
     NotificationsModule,
+    CalendarModule,
   ],
 
   controllers: [HealthController],

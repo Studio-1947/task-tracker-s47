@@ -2,9 +2,11 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, lt, ne, sql } from 'drizzle-orm';
 import {
   TASK_STATUSES,
+  workingMinutesElapsed,
   type AdminDashboard,
   type MemberDashboard,
   type MyTaskItem,
+  type OverdueTaskRow,
   type StatusCounts,
   type TaskStatus,
   type UpcomingDeadline,
@@ -15,7 +17,11 @@ import {
 import { DRIZZLE, type Database } from '../database/database.module';
 import { auditLogs, projects, taskAssignees, tasks, users, workspaces } from '../database/schema';
 import { AuditService } from '../audit/audit.service';
+import { CalendarService } from '../calendar/calendar.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
+
+/** Overdue-tasks scope shared by the headline count, the drill-down list and (eventually) exports — PRD §10/§12 D01. */
+const OVERDUE_LIST_LIMIT = 20;
 
 @Injectable()
 export class DashboardService {
@@ -23,6 +29,7 @@ export class DashboardService {
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly audit: AuditService,
     private readonly workspaces: WorkspacesService,
+    private readonly calendar: CalendarService,
   ) {}
 
   private emptyStatusCounts(): StatusCounts {
@@ -46,19 +53,61 @@ export class DashboardService {
     return result;
   }
 
-  private async overdueCount(workspaceIds?: string[]): Promise<number> {
+  /**
+   * The one query behind both the "Overdue tasks" headline count and its
+   * drill-down list (PRD §10/§12 D01): a window `count(*) over()` alongside
+   * the page of rows, from a single execution, so the two numbers can never
+   * disagree the way the source spec's "13 overdue in headline and 0 in
+   * at-risk panel" finding described.
+   */
+  private async overdueSummary(workspaceIds?: string[]): Promise<{ total: number; items: OverdueTaskRow[] }> {
+    if (workspaceIds && workspaceIds.length === 0) return { total: 0, items: [] };
     const conds = [
       eq(tasks.isArchived, false),
       isNotNull(tasks.dueDate),
       lt(tasks.dueDate, new Date()),
       ne(tasks.status, 'DONE'),
     ];
-    if (workspaceIds) {
-      if (workspaceIds.length === 0) return 0;
-      conds.push(inArray(tasks.workspaceId, workspaceIds));
-    }
-    const [{ c } = { c: 0 }] = await this.db.select({ c: count() }).from(tasks).where(and(...conds));
-    return Number(c);
+    if (workspaceIds) conds.push(inArray(tasks.workspaceId, workspaceIds));
+
+    const [rows, calendar] = await Promise.all([
+      this.db
+        .select({
+          id: tasks.id,
+          number: tasks.number,
+          title: tasks.title,
+          status: tasks.status,
+          priority: tasks.priority,
+          dueDate: tasks.dueDate,
+          workspaceId: tasks.workspaceId,
+          workspaceName: workspaces.name,
+          prefix: projects.taskPrefix,
+          total: sql<number>`count(*) over()`,
+        })
+        .from(tasks)
+        .innerJoin(workspaces, eq(workspaces.id, tasks.workspaceId))
+        .innerJoin(projects, eq(projects.id, tasks.projectId))
+        .where(and(...conds))
+        .orderBy(asc(tasks.dueDate))
+        .limit(OVERDUE_LIST_LIMIT),
+      this.calendar.get(),
+    ]);
+
+    const now = new Date();
+    const items: OverdueTaskRow[] = rows.map((r) => ({
+      id: r.id,
+      ref: `${r.prefix}-${r.number}`,
+      title: r.title,
+      status: r.status as TaskStatus,
+      priority: r.priority as OverdueTaskRow['priority'],
+      dueDate: r.dueDate!.toISOString(),
+      workspaceId: r.workspaceId,
+      workspaceName: r.workspaceName,
+      overdueWorkingMinutes: calendar.settings
+        ? workingMinutesElapsed(r.dueDate!.toISOString(), now.toISOString(), calendar.settings, calendar.exceptions)
+        : null,
+    }));
+    return { total: rows.length ? Number(rows[0]!.total) : 0, items };
   }
 
   /** Tasks completed per day for the current Mon–Sun week (UTC), zero-filled. */
@@ -196,7 +245,7 @@ export class DashboardService {
 
     const [
       tasksByStatus,
-      overdueTasks,
+      overdueSummary,
       recentActivity,
       activeRows,
       weeklyCompletion,
@@ -205,7 +254,7 @@ export class DashboardService {
       upcomingDeadlines,
     ] = await Promise.all([
       this.statusCounts(),
-      this.overdueCount(),
+      this.overdueSummary(),
       this.audit.globalActivity(1, 10),
       this.db
         .select({ workspaceId: auditLogs.workspaceId, c: count() })
@@ -233,7 +282,8 @@ export class DashboardService {
       totalWorkspaces: Number(totalWorkspaces),
       totalUsers: Number(totalUsers),
       tasksByStatus,
-      overdueTasks,
+      overdueTasks: overdueSummary.total,
+      overdueTaskList: overdueSummary.items,
       mostActiveWorkspace,
       recentActivity,
       weeklyCompletion,
@@ -312,4 +362,57 @@ export class DashboardService {
       recentActivity,
     };
   }
+
+  // ── Wednesday & Friday Report Drafts (X01) ──
+
+  async generateWednesdayReport(workspaceId: string) {
+    const [accepted, blocked, upcoming] = await Promise.all([
+      this.db
+        .select({ id: tasks.id, title: tasks.title, status: tasks.status })
+        .from(tasks)
+        .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.status, 'DONE'), eq(tasks.isArchived, false)))
+        .limit(20),
+      this.db
+        .select({ id: tasks.id, title: tasks.title })
+        .from(tasks)
+        .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.status, 'IN_PROGRESS'), eq(tasks.isArchived, false)))
+        .limit(20),
+      this.upcomingDeadlines(),
+    ]);
+
+    return {
+      reportType: 'WEDNESDAY_PROGRESS',
+      generatedAt: new Date().toISOString(),
+      workspaceId,
+      acceptedDeliverables: accepted,
+      commitmentsProgressed: blocked,
+      upcomingDeadlines: upcoming,
+      summaryNotes: 'Wednesday routine: commitments progressed, accepted deliverables, blocked work, decisions needed, next deadlines.',
+    };
+  }
+
+  async generateFridayReport(workspaceId: string) {
+    const [accepted, carryover] = await Promise.all([
+      this.db
+        .select({ id: tasks.id, title: tasks.title, completedAt: tasks.completedAt })
+        .from(tasks)
+        .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.status, 'DONE'), eq(tasks.isArchived, false)))
+        .limit(20),
+      this.db
+        .select({ id: tasks.id, title: tasks.title, status: tasks.status, dueDate: tasks.dueDate })
+        .from(tasks)
+        .where(and(eq(tasks.workspaceId, workspaceId), ne(tasks.status, 'DONE'), eq(tasks.isArchived, false)))
+        .limit(20),
+    ]);
+
+    return {
+      reportType: 'FRIDAY_OUTCOMES',
+      generatedAt: new Date().toISOString(),
+      workspaceId,
+      acceptedOutcomes: accepted,
+      carryoverTasks: carryover,
+      summaryNotes: 'Friday routine: accepted outcomes, carryover with reasons, review backlog, next week capacity & priorities.',
+    };
+  }
 }
+
