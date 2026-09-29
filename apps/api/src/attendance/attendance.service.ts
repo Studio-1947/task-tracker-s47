@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, desc, eq, gte, inArray, lt, lte, sum, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lt, lte, ne, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type {
   AttendancePunchInput,
@@ -20,10 +20,11 @@ import type {
   LeaveType,
   ReviewLeaveRequestInput,
   SetLeaveBalancesInput,
+  StaffingWarning,
   UpdateLeaveTypeInput,
   OrganisationPolicyInput,
 } from '@task-tracker/shared';
-import { calculatePayableIndicator, workingDayUnits } from '@task-tracker/shared';
+import { calculatePayableIndicator, computeLeaveBalance, staffingBreaches, workingDayUnits } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
 import { CalendarService } from '../calendar/calendar.service';
 import {
@@ -35,6 +36,8 @@ import {
   leaveRequests,
   leaveTypes,
   users,
+  workspaceMembers,
+  workspaces,
   type AttendanceRow,
   type LeaveTypeRow,
 } from '../database/schema';
@@ -58,6 +61,9 @@ export class AttendanceService {
       name: t.name,
       color: t.color,
       defaultBalance: t.defaultBalance,
+      accrualPerMonth: Number(t.accrualPerMonth),
+      carryForwardMax: Number(t.carryForwardMax),
+      carryForwardExpiryMonths: t.carryForwardExpiryMonths,
       isActive: t.isActive,
     };
   }
@@ -91,7 +97,14 @@ export class AttendanceService {
   async createLeaveType(input: CreateLeaveTypeInput): Promise<LeaveType> {
     const [t] = await this.db
       .insert(leaveTypes)
-      .values({ name: input.name, color: input.color ?? null, defaultBalance: input.defaultBalance })
+      .values({
+        name: input.name,
+        color: input.color ?? null,
+        defaultBalance: input.defaultBalance,
+        accrualPerMonth: String(input.accrualPerMonth),
+        carryForwardMax: String(input.carryForwardMax),
+        carryForwardExpiryMonths: input.carryForwardExpiryMonths,
+      })
       .returning();
     return this.toLeaveType(t!);
   }
@@ -99,7 +112,12 @@ export class AttendanceService {
   async updateLeaveType(id: string, input: UpdateLeaveTypeInput): Promise<LeaveType> {
     const [t] = await this.db
       .update(leaveTypes)
-      .set({ ...input, updatedAt: new Date() })
+      .set({
+        ...input,
+        accrualPerMonth: input.accrualPerMonth === undefined ? undefined : String(input.accrualPerMonth),
+        carryForwardMax: input.carryForwardMax === undefined ? undefined : String(input.carryForwardMax),
+        updatedAt: new Date(),
+      })
       .where(eq(leaveTypes.id, id))
       .returning();
     if (!t) throw new NotFoundException('Leave type not found');
@@ -278,25 +296,44 @@ export class AttendanceService {
       })
       .returning({ id: leaveRequests.id });
     const [item] = await this.leaveQuery(eq(leaveRequests.id, created!.id));
-    return item!;
+    return (await this.withStaffingWarnings([item!]))[0]!;
   }
 
-  myLeaves(userId: string): Promise<LeaveRequestItem[]> {
-    return this.leaveQuery(eq(leaveRequests.userId, userId));
+  async myLeaves(userId: string): Promise<LeaveRequestItem[]> {
+    return this.withStaffingWarnings(await this.leaveQuery(eq(leaveRequests.userId, userId)));
   }
 
-  listLeaves(status?: string): Promise<LeaveRequestItem[]> {
-    return this.leaveQuery(status ? eq(leaveRequests.status, status) : undefined);
+  async listLeaves(status?: string): Promise<LeaveRequestItem[]> {
+    return this.withStaffingWarnings(await this.leaveQuery(status ? eq(leaveRequests.status, status) : undefined));
   }
 
   async reviewLeave(id: string, reviewerId: string, input: ReviewLeaveRequestInput): Promise<LeaveRequestItem> {
-    const [current] = await this.db
-      .select({ status: leaveRequests.status })
-      .from(leaveRequests)
-      .where(eq(leaveRequests.id, id))
-      .limit(1);
+    const [current] = await this.db.select().from(leaveRequests).where(eq(leaveRequests.id, id)).limit(1);
     if (!current) throw new NotFoundException('Leave request not found');
     if (current.status !== 'PENDING') throw new BadRequestException('This request has already been reviewed');
+
+    if (input.status === 'APPROVED') {
+      // Controls (PRD leave rules): never approve beyond the balance, and don't
+      // strip a team below the staffing limit without an explained override.
+      const [type] = await this.db.select().from(leaveTypes).where(eq(leaveTypes.id, current.leaveTypeId)).limit(1);
+      if (type && (type.defaultBalance > 0 || Number(type.accrualPerMonth) > 0)) {
+        const balance = (await this.balancesFor(current.userId, current.startDate)).find((b) => b.leaveTypeId === type.id);
+        if (balance && Number(current.days) > balance.remaining) {
+          throw new BadRequestException(
+            `Insufficient ${type.name} balance: ${balance.remaining} day(s) available, ${Number(current.days)} requested`,
+          );
+        }
+      }
+      const warnings = await this.staffingWarningsFor(current.userId, current.startDate, current.endDate);
+      if (warnings.length) {
+        if (!input.overrideStaffingClash) {
+          throw new ConflictException(
+            `Approving this would leave too few people on ${warnings[0]!.date} in ${warnings[0]!.workspaceName} (${warnings[0]!.percentAway}% away). Approve with an override and a note to proceed.`,
+          );
+        }
+        if (!input.note?.trim()) throw new BadRequestException('A note is required to override a staffing clash');
+      }
+    }
 
     await this.db
       .update(leaveRequests)
@@ -331,30 +368,100 @@ export class AttendanceService {
   }
 
   /* ── balances ── */
-  async balancesFor(userId: string): Promise<LeaveBalance[]> {
-    const [types, overrides, used] = await Promise.all([
+  async balancesFor(userId: string, asOf: string = localDateStr()): Promise<LeaveBalance[]> {
+    const [types, overrides, taken, [person]] = await Promise.all([
       this.db.select().from(leaveTypes).where(eq(leaveTypes.isActive, true)).orderBy(leaveTypes.name),
       this.db.select().from(leaveBalances).where(eq(leaveBalances.userId, userId)),
       this.db
-        .select({ leaveTypeId: leaveRequests.leaveTypeId, used: sum(leaveRequests.days) })
+        .select({ leaveTypeId: leaveRequests.leaveTypeId, startDate: leaveRequests.startDate, days: leaveRequests.days })
         .from(leaveRequests)
-        .where(and(eq(leaveRequests.userId, userId), eq(leaveRequests.status, 'APPROVED')))
-        .groupBy(leaveRequests.leaveTypeId),
+        .where(and(eq(leaveRequests.userId, userId), eq(leaveRequests.status, 'APPROVED'))),
+      this.db.select({ createdAt: users.createdAt }).from(users).where(eq(users.id, userId)).limit(1),
     ]);
     const overrideBy = new Map(overrides.map((o) => [o.leaveTypeId, o.allotted]));
-    const usedBy = new Map(used.map((u) => [u.leaveTypeId, Number(u.used ?? 0)]));
+    const joinedOn = localDateStr(person?.createdAt ?? new Date());
     return types.map((t) => {
-      const allotted = overrideBy.get(t.id) ?? t.defaultBalance;
-      const usedDays = usedBy.get(t.id) ?? 0;
+      const r = computeLeaveBalance(
+        {
+          annualAllotment: overrideBy.get(t.id) ?? t.defaultBalance,
+          accrualPerMonth: Number(t.accrualPerMonth),
+          carryForwardMax: Number(t.carryForwardMax),
+          carryForwardExpiryMonths: t.carryForwardExpiryMonths,
+        },
+        joinedOn,
+        asOf,
+        taken.filter((x) => x.leaveTypeId === t.id).map((x) => ({ startDate: x.startDate, days: Number(x.days) })),
+      );
       return {
         leaveTypeId: t.id,
         typeName: t.name,
         color: t.color,
-        allotted,
-        used: usedDays,
-        remaining: allotted - usedDays,
+        allotted: r.accrued,
+        carriedForward: r.carriedForward,
+        expired: r.expired,
+        used: r.used,
+        remaining: r.remaining,
+        nextAccrualOn: r.nextAccrualOn,
+        carryForwardExpiresOn: r.carryForwardExpiresOn,
       };
     });
+  }
+
+  /* ── staffing clashes ── */
+
+  /**
+   * For each workspace the person belongs to, the days in the range on which
+   * approving them would put more of the team away than the policy allows.
+   * Only scheduled working days count; a half-day of leave counts as half a person.
+   */
+  private async staffingWarningsFor(userId: string, start: string, end: string): Promise<StaffingWarning[]> {
+    const policy = await this.getOrganisationPolicy();
+    const maxPercent = policy?.maxConcurrentLeavePercent ?? 100;
+    if (maxPercent >= 100) return [];
+    const memberships = await this.db
+      .select({ workspaceId: workspaceMembers.workspaceId, workspaceName: workspaces.name })
+      .from(workspaceMembers)
+      .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
+      .where(and(eq(workspaceMembers.userId, userId), eq(workspaces.isArchived, false)));
+    if (!memberships.length) return [];
+    const calendar = await this.calendar.get();
+    const workdays = calendar.settings?.workdays ?? [1, 2, 3, 4, 5];
+    const holidays = new Set(calendar.exceptions.filter((e) => e.kind === 'HOLIDAY').map((e) => e.date));
+
+    const days: string[] = [];
+    for (let d = new Date(`${start}T00:00:00.000Z`), i = 0; d <= new Date(`${end}T00:00:00.000Z`) && i < 92; d.setUTCDate(d.getUTCDate() + 1), i += 1) {
+      const key = d.toISOString().slice(0, 10);
+      if (workdays.includes(d.getUTCDay()) && !holidays.has(key)) days.push(key);
+    }
+    const warnings: StaffingWarning[] = [];
+    for (const m of memberships) {
+      const people = await this.db
+        .select({ id: workspaceMembers.userId })
+        .from(workspaceMembers)
+        .innerJoin(users, eq(users.id, workspaceMembers.userId))
+        .where(and(eq(workspaceMembers.workspaceId, m.workspaceId), eq(users.isActive, true)));
+      const others = people.map((p) => p.id).filter((id) => id !== userId);
+      if (!others.length) continue;
+      const away = await this.db
+        .select({ userId: leaveRequests.userId, startDate: leaveRequests.startDate, endDate: leaveRequests.endDate, halfDay: leaveRequests.halfDay })
+        .from(leaveRequests)
+        .where(and(inArray(leaveRequests.userId, others), eq(leaveRequests.status, 'APPROVED'), lte(leaveRequests.startDate, end), gte(leaveRequests.endDate, start), ne(leaveRequests.userId, userId)));
+      const loads = days.map((date) => ({
+        date,
+        onLeave: away.filter((a) => a.startDate <= date && a.endDate >= date).reduce((sum, a) => sum + (a.halfDay ? 0.5 : 1), 0),
+        members: people.length,
+      }));
+      for (const b of staffingBreaches(loads, maxPercent)) {
+        warnings.push({ workspaceId: m.workspaceId, workspaceName: m.workspaceName, date: b.date, onLeave: b.onLeave, members: b.members, percentAway: b.percentAway });
+      }
+    }
+    return warnings.sort((a, b) => b.percentAway - a.percentAway);
+  }
+
+  private async withStaffingWarnings(items: LeaveRequestItem[]): Promise<LeaveRequestItem[]> {
+    return Promise.all(
+      items.map(async (i) => (i.status === 'PENDING' ? { ...i, staffingWarnings: await this.staffingWarningsFor(i.user.id, i.startDate, i.endDate) } : i)),
+    );
   }
 
   /** Admin: set per-user allotment overrides (upsert). */

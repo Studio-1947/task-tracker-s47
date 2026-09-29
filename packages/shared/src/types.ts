@@ -425,6 +425,9 @@ export interface LeaveType {
   name: string;
   color: string | null;
   defaultBalance: number;
+  accrualPerMonth: number;
+  carryForwardMax: number;
+  carryForwardExpiryMonths: number | null;
   isActive: boolean;
 }
 
@@ -433,12 +436,29 @@ export interface LeaveBalance {
   leaveTypeId: string;
   typeName: string;
   color: string | null;
+  /** Days granted this leave year so far (monthly accrual to date, or the fixed grant). */
   allotted: number;
+  carriedForward: number;
+  expired: number;
   used: number;
   remaining: number;
+  nextAccrualOn: string | null;
+  carryForwardExpiresOn: string | null;
+}
+
+/** A day on which approving this leave would put too much of a workspace team away. */
+export interface StaffingWarning {
+  workspaceId: string;
+  workspaceName: string;
+  date: string;
+  onLeave: number;
+  members: number;
+  percentAway: number;
 }
 
 export interface LeaveRequestItem {
+  /** Only populated for pending requests. */
+  staffingWarnings?: StaffingWarning[];
   id: string;
   user: UserRef;
   leaveTypeId: string;

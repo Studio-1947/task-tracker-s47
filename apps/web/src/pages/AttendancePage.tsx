@@ -4,6 +4,7 @@ import { useAuth } from '../stores/auth';
 import { ApiRequestError } from '../lib/api';
 import { useUsers } from '../hooks/useUsers';
 import { Avatar } from '../components/Avatar';
+import { PolicyTab } from '../components/PolicyTab';
 import { Badge, Button, Card, EmptyState, ErrorState, Input, Spinner } from '../components/ui';
 import {
   useAttendanceToday,
@@ -62,7 +63,7 @@ const statusTone: Record<string, 'slate' | 'green' | 'amber'> = {
   CANCELLED: 'slate',
 };
 
-type Tab = 'me' | 'approvals' | 'corrections' | 'types' | 'allotments' | 'team';
+type Tab = 'me' | 'approvals' | 'corrections' | 'types' | 'allotments' | 'team' | 'policy';
 
 export function AttendancePage() {
   const { user } = useAuth();
@@ -78,6 +79,7 @@ export function AttendancePage() {
           { key: 'types', label: 'Leave Types' },
           { key: 'allotments', label: 'Allotments' },
           { key: 'team', label: 'Team Log' },
+          { key: 'policy', label: 'Policy' },
         ] as { key: Tab; label: string }[])
       : []),
   ];
@@ -110,6 +112,7 @@ export function AttendancePage() {
         {tab === 'types' ? <LeaveTypesTab /> : null}
         {tab === 'allotments' ? <AllotmentsTab /> : null}
         {tab === 'team' ? <TeamLogTab /> : null}
+        {tab === 'policy' ? <PolicyTab /> : null}
       </div>
     </div>
   );
@@ -256,8 +259,15 @@ function BalanceCard({ b }: { b: LeaveBalance }) {
       </div>
       <div className="mt-2 text-2xl font-extrabold tabular-nums text-slate-800 dark:text-slate-100">{b.remaining}</div>
       <div className="mt-0.5 text-xs font-medium text-slate-400 dark:text-slate-500">
-        of {b.allotted} left · {b.used} used
+        of {b.allotted + b.carriedForward - b.expired} left · {b.used} used
       </div>
+      {b.carriedForward > 0 ? (
+        <div className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+          Includes {b.carriedForward} carried forward{b.carryForwardExpiresOn ? ` (use by ${fmtDate(b.carryForwardExpiresOn)})` : ''}
+        </div>
+      ) : null}
+      {b.expired > 0 ? <div className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">{b.expired} carried-forward day(s) expired</div> : null}
+      {b.nextAccrualOn ? <div className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">Next accrual {fmtDate(b.nextAccrualOn)}</div> : null}
     </Card>
   );
 }
@@ -502,9 +512,27 @@ function ApprovalsTab() {
   const { data, isLoading, error } = useLeaves(status || undefined);
   const review = useReviewLeave();
   const [declining, setDeclining] = useState<LeaveRequestItem | null>(null);
+  const [overriding, setOverriding] = useState<LeaveRequestItem | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+
+  const approve = (l: LeaveRequestItem, extra?: { overrideStaffingClash: true; note: string }) => {
+    setReviewError(null);
+    review.mutate(
+      { id: l.id, review: { status: 'APPROVED', ...extra } },
+      {
+        onSuccess: () => setOverriding(null),
+        onError: (err) => {
+          // A staffing clash can be approved anyway, but only with an explained override.
+          if (err instanceof ApiRequestError && err.status === 409) setOverriding(l);
+          else setReviewError(err instanceof ApiRequestError ? err.message : 'Could not approve');
+        },
+      },
+    );
+  };
 
   return (
     <div className="space-y-4">
+      {reviewError ? <p className="text-sm text-red-600 dark:text-red-400">{reviewError}</p> : null}
       <div className="flex items-center gap-2">
         <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Filter</label>
         <select
@@ -543,6 +571,12 @@ function ApprovalsTab() {
                     {' · '}{l.halfDay ? 'Half day' : `${l.days} day${l.days === 1 ? '' : 's'}`}
                   </div>
                   {l.reason ? <div className="mt-0.5 text-sm italic text-slate-400 dark:text-slate-500">“{l.reason}”</div> : null}
+                  {l.staffingWarnings?.length ? (
+                    <div className="mt-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                      Staffing clash: {l.staffingWarnings[0]!.percentAway}% of {l.staffingWarnings[0]!.workspaceName} would be away on {fmtDate(l.staffingWarnings[0]!.date)}
+                      {l.staffingWarnings.length > 1 ? ` (+${l.staffingWarnings.length - 1} more)` : ''}
+                    </div>
+                  ) : null}
                 </div>
               </div>
               {l.status === 'PENDING' ? (
@@ -550,7 +584,7 @@ function ApprovalsTab() {
                   <Button
                     className="py-1.5 px-3 text-xs"
                     disabled={review.isPending}
-                    onClick={() => review.mutate({ id: l.id, review: { status: 'APPROVED' } })}
+                    onClick={() => approve(l)}
                   >
                     Approve
                   </Button>
@@ -572,6 +606,14 @@ function ApprovalsTab() {
           ))}
         </div>
       )}
+      {overriding ? (
+        <OverrideStaffingModal
+          request={overriding}
+          pending={review.isPending}
+          onCancel={() => setOverriding(null)}
+          onConfirm={(note) => approve(overriding, { overrideStaffingClash: true, note })}
+        />
+      ) : null}
       {declining ? (
         <DeclineLeaveModal
           request={declining}
@@ -585,6 +627,48 @@ function ApprovalsTab() {
           }
         />
       ) : null}
+    </div>
+  );
+}
+
+function OverrideStaffingModal({
+  request,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  request: LeaveRequestItem;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: (note: string) => void;
+}) {
+  const [note, setNote] = useState('');
+  const w = request.staffingWarnings?.[0];
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/60 backdrop-blur-xs animate-fade-in" onClick={onCancel} />
+      <Card className="relative z-10 w-full max-w-md p-6 animate-fade-in">
+        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Approve despite staffing clash?</h2>
+        <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
+          Approving <span className="font-semibold text-slate-700 dark:text-slate-200">{request.user.name}</span>’s leave would leave too few people
+          {w ? ` in ${w.workspaceName} on ${fmtDate(w.date)} (${w.percentAway}% away)` : ''}. Explain why this is acceptable; it is kept on the request.
+        </p>
+        <label className="mt-4 mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Reason (required)</label>
+        <textarea
+          autoFocus
+          rows={3}
+          className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-[#252525] dark:text-white"
+          placeholder="e.g. Cover arranged with a contractor"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" onClick={onCancel} disabled={pending}>Cancel</Button>
+          <Button onClick={() => onConfirm(note.trim())} disabled={pending || !note.trim()}>
+            {pending ? 'Approving…' : 'Approve anyway'}
+          </Button>
+        </div>
+      </Card>
     </div>
   );
 }
@@ -639,13 +723,16 @@ function LeaveTypesTab() {
   const [name, setName] = useState('');
   const [color, setColor] = useState('#6366f1');
   const [defaultBalance, setDefaultBalance] = useState(12);
+  const [accrualPerMonth, setAccrualPerMonth] = useState(0);
+  const [carryForwardMax, setCarryForwardMax] = useState(0);
+  const [expiryMonths, setExpiryMonths] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     try {
-      await create.mutateAsync({ name, color, defaultBalance });
+      await create.mutateAsync({ name, color, defaultBalance, accrualPerMonth, carryForwardMax, carryForwardExpiryMonths: expiryMonths ? Number(expiryMonths) : null });
       setName('');
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Failed to create type');
@@ -667,6 +754,18 @@ function LeaveTypesTab() {
           <div className="w-28">
             <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Default days</label>
             <Input type="number" min={0} max={365} value={defaultBalance} onChange={(e) => setDefaultBalance(Number(e.target.value))} />
+          </div>
+          <div className="w-28">
+            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400" title="Days credited each month. 0 = fixed yearly days.">Accrual / mo</label>
+            <Input type="number" min={0} max={31} step="0.25" value={accrualPerMonth} onChange={(e) => setAccrualPerMonth(Number(e.target.value))} />
+          </div>
+          <div className="w-28">
+            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400" title="Most unused days carried into next year.">Carry max</label>
+            <Input type="number" min={0} max={365} step="0.5" value={carryForwardMax} onChange={(e) => setCarryForwardMax(Number(e.target.value))} />
+          </div>
+          <div className="w-28">
+            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400" title="Carried days lapse this many months into the year. Blank = never.">Expire (mo)</label>
+            <Input type="number" min={1} max={24} placeholder="never" value={expiryMonths} onChange={(e) => setExpiryMonths(e.target.value)} />
           </div>
           <Button type="submit" disabled={create.isPending || !name} className="py-3 px-5">Add</Button>
         </form>
@@ -700,6 +799,53 @@ function LeaveTypesTab() {
                     }}
                   />
                   days
+                </label>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400" title="Days credited each month (0 = fixed yearly days)">
+                  Accrues
+                  <input
+                    type="number"
+                    min={0}
+                    max={31}
+                    step="0.25"
+                    defaultValue={t.accrualPerMonth}
+                    className="w-16 rounded-md border border-slate-300 dark:border-slate-700 px-2 py-1 text-sm bg-white dark:bg-[#252525] dark:text-white"
+                    onBlur={(e) => {
+                      const v = Number(e.target.value);
+                      if (v !== t.accrualPerMonth) update.mutate({ id: t.id, patch: { accrualPerMonth: v } });
+                    }}
+                  />
+                  /mo
+                </label>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400" title="Most unused days carried into next year">
+                  Carry
+                  <input
+                    type="number"
+                    min={0}
+                    max={365}
+                    step="0.5"
+                    defaultValue={t.carryForwardMax}
+                    className="w-16 rounded-md border border-slate-300 dark:border-slate-700 px-2 py-1 text-sm bg-white dark:bg-[#252525] dark:text-white"
+                    onBlur={(e) => {
+                      const v = Number(e.target.value);
+                      if (v !== t.carryForwardMax) update.mutate({ id: t.id, patch: { carryForwardMax: v } });
+                    }}
+                  />
+                </label>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400" title="Carried days lapse this many months into the year; blank = never">
+                  Expires
+                  <input
+                    type="number"
+                    min={1}
+                    max={24}
+                    placeholder="never"
+                    defaultValue={t.carryForwardExpiryMonths ?? ''}
+                    className="w-16 rounded-md border border-slate-300 dark:border-slate-700 px-2 py-1 text-sm bg-white dark:bg-[#252525] dark:text-white"
+                    onBlur={(e) => {
+                      const v = e.target.value === '' ? null : Number(e.target.value);
+                      if (v !== t.carryForwardExpiryMonths) update.mutate({ id: t.id, patch: { carryForwardExpiryMonths: v } });
+                    }}
+                  />
+                  mo
                 </label>
                 <Button variant="danger" className="py-1.5 px-3 text-xs" disabled={del.isPending} onClick={() => del.mutate(t.id)}>
                   Remove

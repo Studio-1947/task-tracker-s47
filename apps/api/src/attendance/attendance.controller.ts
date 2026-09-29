@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -148,14 +149,21 @@ export class AttendanceController {
 
   /* ── balances ── */
   @Get('leaves/balances/me')
-  myBalances(@CurrentUser('id') userId: string) {
-    return this.attendance.balancesFor(userId);
+  myBalances(@CurrentUser('id') userId: string, @Query('asOf') asOf?: string) {
+    return this.attendance.balancesFor(userId, this.parseAsOf(asOf));
   }
 
   @Get('leaves/balances/user/:userId')
   @Roles(Role.ADMIN)
-  userBalances(@Param('userId', ParseUUIDPipe) userId: string) {
-    return this.attendance.balancesFor(userId);
+  userBalances(@Param('userId', ParseUUIDPipe) userId: string, @Query('asOf') asOf?: string) {
+    return this.attendance.balancesFor(userId, this.parseAsOf(asOf));
+  }
+
+  /** Optional YYYY-MM-DD "as of" date for balance queries (defaults to today). */
+  private parseAsOf(asOf?: string): string | undefined {
+    if (asOf === undefined || asOf === '') return undefined;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) throw new BadRequestException('asOf must be a YYYY-MM-DD date');
+    return asOf;
   }
 
   @Put('leaves/balances/user/:userId')

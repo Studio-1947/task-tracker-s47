@@ -30,6 +30,12 @@ export const leaveTypes = pgTable('leave_types', {
   color: varchar('color', { length: 7 }),
   /** Company-wide default number of days for this type. */
   defaultBalance: integer('default_balance').notNull().default(0),
+  /** Days credited on the 1st of each month; 0 = the type uses the fixed yearly `defaultBalance`. */
+  accrualPerMonth: numeric('accrual_per_month', { precision: 5, scale: 2 }).notNull().default('0'),
+  /** Most unused days that may roll into the next leave year. */
+  carryForwardMax: numeric('carry_forward_max', { precision: 5, scale: 2 }).notNull().default('0'),
+  /** Carried-forward days lapse this many months into the year; null = never. */
+  carryForwardExpiryMonths: integer('carry_forward_expiry_months'),
   isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -168,6 +174,8 @@ export const organisationPolicies = pgTable('organisation_policies', {
   paidLeaveNames: jsonb('paid_leave_names').$type<string[]>().notNull().default(['Earned Leave', 'Casual Leave', 'Sick Leave']),
   halfDayEnabled: boolean('half_day_enabled').notNull().default(true),
   lateGraceMinutes: integer('late_grace_minutes').notNull().default(15),
+  /** Most of a workspace team that may be on approved leave on one day; 100 disables the control. */
+  maxConcurrentLeavePercent: integer('max_concurrent_leave_percent').notNull().default(100),
   unresolvedCorrectionTreatment: varchar('unresolved_correction_treatment', { length: 16 }).notNull().default('EXCLUDE'),
   effectiveFrom: date('effective_from').notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

@@ -7,6 +7,9 @@ export const createLeaveTypeSchema = z.object({
   name: z.string().min(1).max(60),
   color: hexColor.optional(),
   defaultBalance: z.number().int().min(0).max(365).default(0),
+  accrualPerMonth: z.number().min(0).max(31).default(0),
+  carryForwardMax: z.number().min(0).max(365).default(0),
+  carryForwardExpiryMonths: z.number().int().min(1).max(24).nullable().default(null),
 });
 export type CreateLeaveTypeInput = z.infer<typeof createLeaveTypeSchema>;
 
@@ -15,6 +18,9 @@ export const updateLeaveTypeSchema = z
     name: z.string().min(1).max(60).optional(),
     color: hexColor.nullable().optional(),
     defaultBalance: z.number().int().min(0).max(365).optional(),
+    accrualPerMonth: z.number().min(0).max(31).optional(),
+    carryForwardMax: z.number().min(0).max(365).optional(),
+    carryForwardExpiryMonths: z.number().int().min(1).max(24).nullable().optional(),
     isActive: z.boolean().optional(),
   })
   .strict();
@@ -58,6 +64,8 @@ export const reviewLeaveRequestSchema = z
   .object({
     status: z.enum(['APPROVED', 'DECLINED']),
     note: z.string().max(1000).optional(),
+    /** Approve despite a staffing clash; requires a note explaining why. */
+    overrideStaffingClash: z.boolean().optional(),
   })
   .strict();
 export type ReviewLeaveRequestInput = z.infer<typeof reviewLeaveRequestSchema>;
@@ -102,6 +110,7 @@ export const organisationPolicySchema = z.object({
   paidLeaveNames: z.array(z.string().trim().min(1).max(60)).default(['Earned Leave', 'Casual Leave', 'Sick Leave']),
   halfDayEnabled: z.boolean().default(true),
   lateGraceMinutes: z.number().int().min(0).max(240).default(15),
+  maxConcurrentLeavePercent: z.number().int().min(1).max(100).default(100),
   unresolvedCorrectionTreatment: z.literal('EXCLUDE').default('EXCLUDE'),
   effectiveFrom: z.string().date(),
 });
