@@ -167,3 +167,16 @@ export const createDependencySchema = z.object({
 });
 export type CreateDependencyInput = z.infer<typeof createDependencySchema>;
 
+/**
+ * Delegates review authority for one task to another person for a bounded,
+ * effective-dated period (PRD §9 "Reviewer delegate": only the explicitly
+ * delegated scope, for its effective period — no automatic wider access).
+ */
+export const delegateReviewSchema = z.object({
+  delegateId: z.string().uuid(),
+  effectiveFrom: z.string().datetime(),
+  effectiveTo: z.string().datetime(),
+  reason: z.string().trim().min(1).max(2000),
+}).refine((v) => v.effectiveTo > v.effectiveFrom, { message: 'Effective end must be after the start', path: ['effectiveTo'] });
+export type DelegateReviewInput = z.infer<typeof delegateReviewSchema>;
+

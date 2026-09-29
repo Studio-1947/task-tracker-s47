@@ -224,6 +224,28 @@ export const taskReopenings = pgTable('task_reopenings', {
   reopenedAt: timestamp('reopened_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index('task_reopenings_task_idx').on(t.taskId)]);
 
+export const reviewerDelegations = pgTable('reviewer_delegations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  taskId: uuid('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  delegatorId: uuid('delegator_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  delegateId: uuid('delegate_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  effectiveFrom: timestamp('effective_from', { withTimezone: true }).notNull(),
+  effectiveTo: timestamp('effective_to', { withTimezone: true }).notNull(),
+  reason: text('reason').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('reviewer_delegations_task_effective_idx').on(t.taskId, t.effectiveFrom, t.effectiveTo)]);
+
+export const capacityAllocations = pgTable('capacity_allocations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  taskId: uuid('task_id').references(() => tasks.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  periodStart: date('period_start').notNull(),
+  periodEnd: date('period_end').notNull(),
+  allocatedMinutes: integer('allocated_minutes').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('capacity_allocations_workspace_period_idx').on(t.workspaceId, t.periodStart, t.periodEnd)]);
+
 export type TaskTimeEntryRow = typeof taskTimeEntries.$inferSelect;
 
 export const taskBlockers = pgTable(

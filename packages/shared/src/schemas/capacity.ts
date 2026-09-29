@@ -1,4 +1,21 @@
+import { z } from 'zod';
+
 export interface MinuteInterval { start: number; end: number }
+
+/**
+ * Persisted per-person planning allocation for a period (PRD §7: "Allocate
+ * remaining effort across the days or weeks when work is planned" and "split
+ * each task's remaining effort among contributors" — not the whole estimate
+ * to every tagged person).
+ */
+export const capacityAllocationSchema = z.object({
+  userId: z.string().uuid(),
+  taskId: z.string().uuid().nullable().optional(),
+  periodStart: z.string().date(),
+  periodEnd: z.string().date(),
+  allocatedMinutes: z.number().int().min(1).max(100_000),
+}).refine((v) => v.periodEnd >= v.periodStart, { message: 'Period end must be on or after the start', path: ['periodEnd'] });
+export type CapacityAllocationInput = z.infer<typeof capacityAllocationSchema>;
 
 /** Union overlapping exclusions before subtraction, preventing double-counting. */
 export function unionMinutes(intervals: MinuteInterval[]): number {

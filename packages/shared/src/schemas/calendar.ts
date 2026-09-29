@@ -23,6 +23,14 @@ export const scheduleGroupSchema = calendarSettingsBaseSchema.omit({ effectiveFr
 })).refine((v) => !v.effectiveTo || v.effectiveTo >= v.effectiveFrom, { message: 'Effective end must be on or after the start', path: ['effectiveTo'] });
 export type ScheduleGroupInput = z.infer<typeof scheduleGroupSchema>;
 
+/** Assigns a person to a schedule group for an effective-dated span (PRD §2 "by employee or schedule group"). */
+export const scheduleGroupAssignmentSchema = z.object({
+  userId: z.string().uuid(),
+  effectiveFrom: z.string().date(),
+  effectiveTo: z.string().date().nullable().optional(),
+}).refine((v) => !v.effectiveTo || v.effectiveTo >= v.effectiveFrom, { message: 'Effective end must be on or after the start', path: ['effectiveTo'] });
+export type ScheduleGroupAssignmentInput = z.infer<typeof scheduleGroupAssignmentSchema>;
+
 export const calendarExceptionSchema = z.object({
   date: z.string().date(),
   name: z.string().trim().min(1).max(120),

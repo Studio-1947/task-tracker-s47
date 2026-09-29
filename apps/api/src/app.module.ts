@@ -21,6 +21,7 @@ import { MeetingsModule } from './meetings/meetings.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { HealthController } from './health/health.controller';
 import { CalendarModule } from './calendar/calendar.module';
+import { RemindersModule } from './reminders/reminders.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { CalendarModule } from './calendar/calendar.module';
     MeetingsModule,
     NotificationsModule,
     CalendarModule,
+    RemindersModule,
   ],
 
   controllers: [HealthController],

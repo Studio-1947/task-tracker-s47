@@ -128,6 +128,39 @@ function CalendarSettingsCard() {
   );
 }
 
+function WorkforcePlanningCard() {
+  const qc = useQueryClient();
+  const [workspaceId, setWorkspaceId] = useState('');
+  const [userId, setUserId] = useState('');
+  const [taskId, setTaskId] = useState('');
+  const [groupId, setGroupId] = useState('');
+  const [periodStart, setPeriodStart] = useState('2026-09-28');
+  const [periodEnd, setPeriodEnd] = useState('2026-10-02');
+  const [minutes, setMinutes] = useState(300);
+  const { data: workspaces = [] } = useQuery({ queryKey: ['workspaces', 'planning'], queryFn: () => http.get<any[]>('/workspaces') });
+  const { data: members = [] } = useQuery({ queryKey: ['planning-members', workspaceId], enabled: !!workspaceId, queryFn: () => http.get<any[]>(`/workspaces/${workspaceId}/members`) });
+  const { data: taskPage } = useQuery({ queryKey: ['planning-tasks', workspaceId], enabled: !!workspaceId, queryFn: () => http.get<any>(`/workspaces/${workspaceId}/tasks?pageSize=100`) });
+  const { data: groups = [] } = useQuery({ queryKey: ['schedule-groups'], queryFn: () => http.get<any[]>('/calendar/schedule-groups') });
+  const { data: weekly = [] } = useQuery({ queryKey: ['weekly-capacity', workspaceId, periodStart, periodEnd], enabled: !!workspaceId && !!periodStart && !!periodEnd, queryFn: () => http.get<any[]>(`/workspaces/${workspaceId}/capacity-allocations/weekly?periodStart=${periodStart}&periodEnd=${periodEnd}`) });
+  const allocate = useMutation({ mutationFn: () => http.post(`/workspaces/${workspaceId}/capacity-allocations`, { userId, taskId: taskId || undefined, periodStart, periodEnd, allocatedMinutes: minutes }), onSuccess: () => qc.invalidateQueries({ queryKey: ['weekly-capacity'] }) });
+  const assign = useMutation({ mutationFn: () => http.post(`/calendar/schedule-groups/${groupId}/assignments`, { userId, effectiveFrom: periodStart }), onSuccess: () => qc.invalidateQueries({ queryKey: ['schedule-groups'] }) });
+  return <Card className="p-6">
+    <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">Workforce planning</h2>
+    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <select className="rounded-lg border p-2 dark:bg-[#252525]" value={workspaceId} onChange={(e)=>{setWorkspaceId(e.target.value);setUserId('');setTaskId('')}}><option value="">Select workspace</option>{workspaces.map((w:any)=><option key={w.id} value={w.id}>{w.name}</option>)}</select>
+      <select className="rounded-lg border p-2 dark:bg-[#252525]" value={userId} onChange={(e)=>setUserId(e.target.value)}><option value="">Select employee</option>{members.map((m:any)=><option key={m.id} value={m.id}>{m.name}</option>)}</select>
+      <select className="rounded-lg border p-2 dark:bg-[#252525]" value={groupId} onChange={(e)=>setGroupId(e.target.value)}><option value="">Schedule group</option>{groups.map((g:any)=><option key={g.id} value={g.id}>{g.name}</option>)}</select>
+      <Button disabled={!userId||!groupId} onClick={()=>assign.mutate()}>Assign schedule</Button>
+      <input aria-label="Capacity period start" type="date" className="rounded-lg border p-2 dark:bg-[#252525]" value={periodStart} onChange={(e)=>setPeriodStart(e.target.value)}/>
+      <input aria-label="Capacity period end" type="date" className="rounded-lg border p-2 dark:bg-[#252525]" value={periodEnd} onChange={(e)=>setPeriodEnd(e.target.value)}/>
+      <select className="rounded-lg border p-2 dark:bg-[#252525]" value={taskId} onChange={(e)=>setTaskId(e.target.value)}><option value="">Unallocated/reserved work</option>{(taskPage?.items??[]).map((t:any)=><option key={t.id} value={t.id}>{t.ref} - {t.title}</option>)}</select>
+      <input aria-label="Allocated minutes" type="number" min="1" className="rounded-lg border p-2 dark:bg-[#252525]" value={minutes} onChange={(e)=>setMinutes(Number(e.target.value))}/>
+      <Button disabled={!workspaceId||!userId||!periodStart||!periodEnd||minutes<1} onClick={()=>allocate.mutate()}>Allocate capacity</Button>
+    </div>
+    <div className="mt-4 space-y-2">{weekly.length===0?<p className="text-sm text-slate-500">No allocations for this period.</p>:weekly.map((row:any)=><div key={row.user.id} className="rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-850"><b>{row.user.name}</b>: {row.allocatedMinutes} allocated / {row.availableMinutes} available {row.overloadMinutes>0?<span className="text-red-600">({row.overloadMinutes} min overload)</span>:null}</div>)}</div>
+  </Card>;
+}
+
 export function SettingsPage() {
   const { user } = useAuth();
   return (
@@ -135,6 +168,7 @@ export function SettingsPage() {
       <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">Settings</h1>
       <ProfileCard />
       {user?.role === 'ADMIN' ? <CalendarSettingsCard /> : null}
+      {user?.role === 'ADMIN' ? <WorkforcePlanningCard /> : null}
       <ChangePasswordPage embedded />
     </div>
   );

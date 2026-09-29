@@ -105,6 +105,10 @@ export const AuditAction = {
   TASK_UNBLOCKED: 'TASK_UNBLOCKED',
   DEPENDENCY_ADDED: 'DEPENDENCY_ADDED',
   DEPENDENCY_REMOVED: 'DEPENDENCY_REMOVED',
+  REVIEW_DELEGATED: 'REVIEW_DELEGATED',
+  CAPACITY_ALLOCATED: 'CAPACITY_ALLOCATED',
+  CAPACITY_ALLOCATION_REMOVED: 'CAPACITY_ALLOCATION_REMOVED',
+  SCHEDULE_GROUP_ASSIGNED: 'SCHEDULE_GROUP_ASSIGNED',
 } as const;
 export type AuditAction = (typeof AuditAction)[keyof typeof AuditAction];
 export const AUDIT_ACTIONS = Object.values(AuditAction);
@@ -178,6 +182,8 @@ export const NotificationType = {
   TASK_STATUS_CHANGED: 'TASK_STATUS_CHANGED',
   TASK_COMMENT: 'TASK_COMMENT',
   TASK_DUE_SOON: 'TASK_DUE_SOON',
+  REVIEW_OVERDUE: 'REVIEW_OVERDUE',
+  BLOCKER_FOLLOW_UP: 'BLOCKER_FOLLOW_UP',
 } as const;
 export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
 export const NOTIFICATION_TYPES = Object.values(NotificationType);

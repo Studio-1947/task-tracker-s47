@@ -15,9 +15,9 @@ An item is complete only when its migration and rollback impact are reviewed, AP
 - [x] Overdue commitments: dashboard headline count and drill-down list now come from one query (`DashboardService.overdueSummary`, `count(*) over()` alongside the page of rows) — cannot disagree by construction. Wired into `AdminDashboard.overdueTasks` + new `overdueTaskList`.
 - [x] Fixed a live instance of the exact spec-flagged bug: `AtRiskCard`'s "Overdue" row was derived from `upcomingDeadlines`, whose `dueInDays` is `Math.max(0, ...)` — structurally always ≥ 0, so that panel's overdue count was always 0 regardless of the real headline number. Now fed from the same `overdueTasks` count as the headline Stat.
 - [x] Overdue drill-down rows include `overdueWorkingMinutes` (reuses C01's calendar-aware ageing), so the list and the working-time figure agree too.
-- [ ] Other metrics (open tasks, on-time submission/acceptance, first-pass acceptance, review turnaround) still lack a shared layer — only "overdue" is unified so far.
-- [ ] Exports (CSV/PDF monthly report) use a different, historically-appropriate definition (`completedAt`-based point-in-time snapshot) — intentionally distinct from the live dashboard's `status`-based definition, but not yet cross-checked or documented as such beyond this checklist entry.
-- [ ] The 245-vs-186 style scope/archive-filter mismatch not investigated this pass (no reproduction found yet in this codebase).
+- [x] Shared workspace metric endpoint covers open tasks, on-time submission/acceptance, first-pass acceptance and calendar-aware review turnaround with numerators, denominators, sample size and exact task IDs.
+- [x] Monthly CSV/PDF exports intentionally use a historical point-in-time cohort (`createdAt`/`completedAt`); live metrics return `ACTIVE_ONLY`, period and metric-version metadata so these distinct scopes cannot be presented as the same measure.
+- [x] Scope policy is explicit (`ACTIVE_ONLY`) and returned with metric version and period; no 245-vs-186 mismatch reproduces in the current database.
 - Tests: `pnpm --filter @task-tracker/api typecheck`/`test`/`build`; `pnpm --filter @task-tracker/web typecheck`/`build`; live `pnpm test:dashboard` (new, 20/20) proves headline/list agreement under mutation (completing a task drops both by exactly one, same request).
 - Smoke: AT01 passes for the overdue metric specifically via `scripts/dashboard-overdue-smoke.mjs`. AT19 not yet covered.
 
@@ -27,9 +27,9 @@ An item is complete only when its migration and rollback impact are reviewed, AP
 - [x] Monday-Friday schedule plus holiday, half-day and exceptional-workday records.
 - [x] Shared working-day calculator (`workingDayUnits`) used by leave.
 - [x] Shared working-*minute* calculator (`workingMinutesElapsed`) added and wired into task overdue ageing: `TaskListItem.overdueWorkingMinutes` is computed server-side (`tasks.service.ts`) from the calendar singleton, exposed on list/detail, and surfaced in the UI (`TaskDrawer`, `DueDateProgress`) alongside the raw due date — the due date itself is never mutated for ageing (Friday stays Friday).
-- [ ] Reminders and capacity integration remains (blocked on N01/P01 not existing yet).
+- [x] Reminder and capacity integration uses working-calendar intervals and effective schedule assignments.
 - [x] Effective-dated calendar version history with a mandatory change reason.
-- [~] Schedule-group definitions and API are implemented; per-employee assignment UI remains.
+- [x] Effective-dated schedule-group definitions, employee assignments and admin UI.
 - Tests: `pnpm --filter @task-tracker/api test` — `calendar.spec.ts` covers weekends, holidays, half-days, and 5 new working-minutes-ageing cases (Friday→Monday = 0, same-day partial overdue, holiday exclusion, not-yet-due = 0).
 - Smoke: AT03 and AT05 pass live via `scripts/task-ageing-smoke.mjs` (`pnpm test:ageing`). AT02/AT04 remain covered by the existing leave-unit path; not re-verified this pass.
 
@@ -38,8 +38,8 @@ An item is complete only when its migration and rollback impact are reviewed, AP
 - [x] Workspace access enforced for task and submission endpoints.
 - [x] Assigned reviewer/admin decision checks.
 - [x] Workspace-scoped manager role, admin-only role assignment, review authority, and audit trail.
-- [ ] Team/reviewer-delegate roles and effective dates.
-- [ ] Direct-link, attachment, export, location and payroll access matrix.
+- [x] Workspace manager and effective-dated task reviewer-delegate roles.
+- [x] Direct-link, attachment, report/export, location and payroll access enforced server-side; cross-workspace report denial covered by smoke test.
 - Tests: broader table-driven role/resource/action integration suite remains recommended.
 - Smoke: AT17 plus manager/member/workspace isolation via `scripts/workspace-manager-smoke.mjs` (`pnpm test:manager`).
 
@@ -90,7 +90,7 @@ An item is complete only when its migration and rollback impact are reviewed, AP
 - [x] Task blockers with reason, unblocker user, follow-up date, and unblock flow.
 - [x] Task dependencies (predecessor/successor links) with blocking flag.
 - [x] Capacity calculator unions overlapping exclusions, reports overload, and returns Not applicable for zero capacity.
-- [ ] Persisted per-person planning allocations and weekly planning UI.
+- [x] Persisted per-person planning allocations and weekly planning UI with overload visibility.
 - [x] Smoke test: `scripts/capacity-smoke.mjs` (`pnpm test:capacity`).
 
 ### M01 - Management dashboard and trends `[x]`
@@ -108,7 +108,7 @@ An item is complete only when its migration and rollback impact are reviewed, AP
 
 ### N01 - Reminders and distribution `[~]`
 
-- [ ] Calendar-aware reminders for review, blockers, updates and deadlines.
+- [x] Calendar-aware idempotent worker for review, blocker and deadline reminders; manual admin dispatch endpoint supports operational verification.
 - [x] Standard configuration approved and persisted: in-app/browser push; owner, reviewer and manager; 2-hour deadline lead, one-working-day review target and two-working-day update threshold.
 - [x] WhatsApp explicitly excluded from the current scope.
 
@@ -159,6 +159,7 @@ pnpm test:reports
 pnpm test:integrity
 pnpm test:calendar
 pnpm test:payroll
+pnpm test:final
 ```
 
 Running-API smoke prerequisites: Postgres is available, migrations `0016`, `0017`, `0018`, `0019`, and `0020` are applied, seed accounts exist, API is listening at `API_URL`, and a disposable/staging database is used. Smoke scripts create data and clean up where the current API permits; never run them against production without explicit approval.

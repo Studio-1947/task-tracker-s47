@@ -169,6 +169,20 @@
       "when": 1791158400000,
       "tag": "0023_standard_policy_payroll",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791244800000,
+      "tag": "0024_nasty_goliath",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791331200000,
+      "tag": "0025_awesome_dragon_man",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,7 @@
 import { BadRequestException, Controller, Get, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { Role } from '@task-tracker/shared';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { CurrentUser, type RequestUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { DashboardService } from './dashboard.service';
@@ -54,15 +54,20 @@ export class DashboardController {
   }
 
   @Get('reports/wednesday')
-  wednesdayReport(@Query('workspaceId') workspaceId: string) {
+  wednesdayReport(@Query('workspaceId') workspaceId: string, @CurrentUser() user: RequestUser) {
     if (!workspaceId) throw new BadRequestException('workspaceId is required');
-    return this.dashboard.generateWednesdayReport(workspaceId);
+    return this.dashboard.generateWednesdayReport(workspaceId, user);
   }
 
   @Get('reports/friday')
-  fridayReport(@Query('workspaceId') workspaceId: string) {
+  fridayReport(@Query('workspaceId') workspaceId: string, @CurrentUser() user: RequestUser) {
     if (!workspaceId) throw new BadRequestException('workspaceId is required');
-    return this.dashboard.generateFridayReport(workspaceId);
+    return this.dashboard.generateFridayReport(workspaceId, user);
+  }
+
+  @Get('metrics/workspace')
+  workspaceMetrics(@Query('workspaceId') workspaceId: string, @Query('from') from: string, @Query('to') to: string, @CurrentUser() user: RequestUser) {
+    if (!workspaceId || !from || !to) throw new BadRequestException('workspaceId, from and to are required');
+    return this.dashboard.workspaceMetrics(workspaceId, from, to, user);
   }
 }
-

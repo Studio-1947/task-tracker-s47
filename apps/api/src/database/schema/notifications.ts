@@ -1,4 +1,4 @@
-import { boolean, index, jsonb, pgTable, timestamp, uuid, varchar, text } from 'drizzle-orm/pg-core';
+import { boolean, index, jsonb, pgTable, timestamp, uniqueIndex, uuid, varchar, text } from 'drizzle-orm/pg-core';
 import { notificationTypeEnum } from './enums';
 import { users } from './users';
 
@@ -26,6 +26,15 @@ export const notifications = pgTable(
 
 export type NotificationRow = typeof notifications.$inferSelect;
 export type NewNotificationRow = typeof notifications.$inferInsert;
+
+export const reminderDispatches = pgTable('reminder_dispatches', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  taskId: uuid('task_id'),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  reminderType: varchar('reminder_type', { length: 32 }).notNull(),
+  dispatchKey: varchar('dispatch_key', { length: 180 }).notNull(),
+  dispatchedAt: timestamp('dispatched_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex('reminder_dispatches_key_uq').on(t.dispatchKey)]);
 
 export const pushSubscriptions = pgTable(
   'push_subscriptions',

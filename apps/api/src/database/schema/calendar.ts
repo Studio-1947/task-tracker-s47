@@ -1,5 +1,6 @@
 import { check, date, index, integer, pgTable, timestamp, uniqueIndex, uuid, varchar, text } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { users } from './users';
 
 export const calendarSettings = pgTable('calendar_settings', {
   id: integer('id').primaryKey().default(1),
@@ -49,3 +50,12 @@ export const scheduleGroups = pgTable('schedule_groups', {
   effectiveTo: date('effective_to'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index('schedule_groups_effective_idx').on(t.effectiveFrom, t.effectiveTo)]);
+
+export const scheduleGroupAssignments = pgTable('schedule_group_assignments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  scheduleGroupId: uuid('schedule_group_id').notNull().references(() => scheduleGroups.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  effectiveFrom: date('effective_from').notNull(),
+  effectiveTo: date('effective_to'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('schedule_group_assignments_user_effective_idx').on(t.userId, t.effectiveFrom, t.effectiveTo)]);

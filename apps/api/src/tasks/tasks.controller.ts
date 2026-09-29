@@ -31,6 +31,8 @@ import {
   reviseEstimateSchema,
   reopenTaskSchema,
   allocateTimeEntrySchema,
+  delegateReviewSchema,
+  capacityAllocationSchema,
   updateTaskSchema,
   type CreateCommentInput,
   type CreateLinkAttachmentInput,
@@ -42,6 +44,8 @@ import {
   type ReviseEstimateInput,
   type ReopenTaskInput,
   type AllocateTimeEntryInput,
+  type DelegateReviewInput,
+  type CapacityAllocationInput,
   type UpdateTaskInput,
 } from '@task-tracker/shared';
 import { CurrentUser, type RequestUser } from '../common/decorators/current-user.decorator';
@@ -71,6 +75,46 @@ export class WorkspaceTasksController {
     @CurrentUser() user: RequestUser,
   ) {
     return this.tasks.create(workspaceId, user, body);
+  }
+}
+
+/** Persisted per-person planning allocations and the weekly planning view (PRD §7 P01). */
+@Controller('workspaces/:workspaceId/capacity-allocations')
+export class WorkspaceCapacityController {
+  constructor(private readonly tasks: TasksService) {}
+
+  @Get()
+  list(
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Query('userId') userId: string | undefined,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.tasks.listCapacityAllocations(workspaceId, user, userId);
+  }
+
+  @Post()
+  allocate(
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Body(new ZodValidationPipe(capacityAllocationSchema)) body: CapacityAllocationInput,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.tasks.allocateCapacity(workspaceId, user, body);
+  }
+
+  @Delete(':allocationId')
+  remove(@Param('allocationId', ParseUUIDPipe) allocationId: string, @CurrentUser() user: RequestUser) {
+    return this.tasks.removeCapacityAllocation(allocationId, user);
+  }
+
+  @Get('weekly')
+  weekly(
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Query('periodStart') periodStart: string,
+    @Query('periodEnd') periodEnd: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    if (!periodStart || !periodEnd) throw new BadRequestException('periodStart and periodEnd are required');
+    return this.tasks.weeklyCapacity(workspaceId, user, periodStart, periodEnd);
   }
 }
 
@@ -144,6 +188,20 @@ export class TasksController {
     @CurrentUser() user: RequestUser,
   ) {
     return this.tasks.reviewSubmission(id, submissionId, user, body);
+  }
+
+  @Post(':id/delegate-review')
+  delegateReview(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(delegateReviewSchema)) body: DelegateReviewInput,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.tasks.delegateReview(id, user, body);
+  }
+
+  @Get(':id/delegations')
+  listDelegations(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.tasks.listDelegations(id, user);
   }
 
   @Post(':id/comments')

@@ -28,6 +28,8 @@
     "test:integrity": "node scripts/completion-integrity-smoke.mjs",
     "test:calendar": "node scripts/calendar-version-smoke.mjs",
     "test:payroll": "node scripts/payroll-policy-smoke.mjs",
+    "test:final": "node scripts/final-improvements-smoke.mjs",
+    "test:stress": "node scripts/stress-test.mjs",
     "verify:improvements": "pnpm typecheck && pnpm test && pnpm build",
     "typecheck": "turbo run typecheck",
     "db:up": "docker compose up -d postgres",

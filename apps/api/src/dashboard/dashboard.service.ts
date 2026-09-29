@@ -15,7 +15,7 @@ import {
   type WorkspacePerformance,
 } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
-import { auditLogs, projects, taskAssignees, tasks, users, workspaces } from '../database/schema';
+import { auditLogs, projects, taskAssignees, taskSubmissions, tasks, users, workspaces } from '../database/schema';
 import { AuditService } from '../audit/audit.service';
 import { CalendarService } from '../calendar/calendar.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
@@ -365,7 +365,8 @@ export class DashboardService {
 
   // ── Wednesday & Friday Report Drafts (X01) ──
 
-  async generateWednesdayReport(workspaceId: string) {
+  async generateWednesdayReport(workspaceId: string, actor: { id: string; role: string }) {
+    await this.workspaces.assertCanAccess(workspaceId, actor);
     const [accepted, blocked, upcoming] = await Promise.all([
       this.db
         .select({ id: tasks.id, title: tasks.title, status: tasks.status })
@@ -391,7 +392,8 @@ export class DashboardService {
     };
   }
 
-  async generateFridayReport(workspaceId: string) {
+  async generateFridayReport(workspaceId: string, actor: { id: string; role: string }) {
+    await this.workspaces.assertCanAccess(workspaceId, actor);
     const [accepted, carryover] = await Promise.all([
       this.db
         .select({ id: tasks.id, title: tasks.title, completedAt: tasks.completedAt })
@@ -413,6 +415,31 @@ export class DashboardService {
       carryoverTasks: carryover,
       summaryNotes: 'Friday routine: accepted outcomes, carryover with reasons, review backlog, next week capacity & priorities.',
     };
+  }
+
+  async workspaceMetrics(workspaceId: string, fromIso: string, toIso: string, actor: { id: string; role: string }) {
+    await this.workspaces.assertCanAccess(workspaceId, actor);
+    const from = new Date(fromIso); const to = new Date(toIso);
+    if (!(from < to)) throw new Error('Invalid metric period');
+    const [taskRows, submissionRows, calendar] = await Promise.all([
+      this.db.select({ id: tasks.id, status: tasks.status, dueDate: tasks.dueDate, originalDueDate: tasks.originalDueDate })
+        .from(tasks).where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.isArchived, false))),
+      this.db.select().from(taskSubmissions).innerJoin(tasks, eq(tasks.id, taskSubmissions.taskId))
+        .where(and(eq(tasks.workspaceId, workspaceId), gte(taskSubmissions.submittedAt, from), lt(taskSubmissions.submittedAt, to)))
+        .orderBy(asc(taskSubmissions.submittedAt)),
+      this.calendar.get(),
+    ]);
+    const open = taskRows.filter((t) => t.status !== 'DONE');
+    const eligible = taskRows.filter((t) => { const due = t.originalDueDate ?? t.dueDate; return !!due && due >= from && due < to; });
+    const byTask = new Map<string, typeof submissionRows>();
+    for (const row of submissionRows) { const list = byTask.get(row.task_submissions.taskId) ?? []; list.push(row); byTask.set(row.task_submissions.taskId, list); }
+    const onTimeSubmissionIds = eligible.filter((t) => { const first = byTask.get(t.id)?.[0]?.task_submissions; const due=t.originalDueDate??t.dueDate; return !!first && !!due && first.submittedAt <= due; }).map((t)=>t.id);
+    const onTimeAcceptanceIds = eligible.filter((t) => { const accepted = byTask.get(t.id)?.find((r)=>r.task_submissions.status==='ACCEPTED')?.task_submissions; const due=t.originalDueDate??t.dueDate; return !!accepted?.decidedAt && !!due && accepted.decidedAt <= due; }).map((t)=>t.id);
+    const decided = [...byTask.entries()].filter(([,rows])=>rows.some((r)=>r.task_submissions.decidedAt));
+    const firstPassIds = decided.filter(([,rows])=>rows.find((r)=>r.task_submissions.decidedAt)?.task_submissions.status==='ACCEPTED').map(([id])=>id);
+    const reviewMinutes = submissionRows.filter((r)=>r.task_submissions.decidedAt && calendar.settings).map((r)=>workingMinutesElapsed(r.task_submissions.submittedAt.toISOString(),r.task_submissions.decidedAt!.toISOString(),calendar.settings!,calendar.exceptions)).sort((a,b)=>a-b);
+    const metric=(ids:string[],denominator:number)=>({numerator:ids.length,denominator,percentage:denominator?Math.round(ids.length/denominator*10000)/100:null,taskIds:ids});
+    return { scope:{workspaceId,from:from.toISOString(),to:to.toISOString(),archivePolicy:'ACTIVE_ONLY',metricVersion:'1.0'}, openTasks:{count:open.length,taskIds:open.map(t=>t.id)}, onTimeSubmission:metric(onTimeSubmissionIds,eligible.length), onTimeAcceptance:metric(onTimeAcceptanceIds,eligible.length), firstPassAcceptance:metric(firstPassIds,decided.length), reviewTurnaround:{sampleSize:reviewMinutes.length,medianMinutes:reviewMinutes.length?reviewMinutes[Math.floor((reviewMinutes.length-1)/2)]!:null,p90Minutes:reviewMinutes.length?reviewMinutes[Math.ceil(reviewMinutes.length*.9)-1]!:null} };
   }
 }
 

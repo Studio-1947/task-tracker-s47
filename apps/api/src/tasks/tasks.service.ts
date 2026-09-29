@@ -22,9 +22,11 @@ import type {
   ReviseEstimateInput,
   ReopenTaskInput,
   AllocateTimeEntryInput,
+  DelegateReviewInput,
   UserRef,
 } from '@task-tracker/shared';
-import { AttachmentKind, AuditAction, Role, workingMinutesElapsed } from '@task-tracker/shared';
+import type { CapacityAllocationInput } from '@task-tracker/shared';
+import { AttachmentKind, AuditAction, Role, calculateCapacity, workingMinutesElapsed } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
 import {
   labels,
@@ -39,6 +41,8 @@ import {
   taskDependencies,
   taskEstimateRevisions,
   taskReopenings,
+  reviewerDelegations,
+  capacityAllocations,
   tasks,
   users,
   workspaceMembers,
@@ -893,24 +897,120 @@ export class TasksService {
     return (await this.listSubmissions(taskId, actor)).find((s) => s.id === row.id)!;
   }
 
-  async reviewSubmission(taskId: string, submissionId: string, actor: Actor, input: ReviewTaskInput): Promise<TaskSubmission> {
+  /**
+   * The active reviewer-delegate for a task at a point in time, if any (PRD
+   * §9 "Reviewer delegate" — a bounded, effective-dated scope, not a standing
+   * role). Most-recently-created wins if spans somehow overlap.
+   */
+  private async activeDelegateFor(taskId: string, at: Date): Promise<string | null> {
+    const rows = await this.db
+      .select({ delegateId: reviewerDelegations.delegateId })
+      .from(reviewerDelegations)
+      .where(
+        and(
+          eq(reviewerDelegations.taskId, taskId),
+          lte(reviewerDelegations.effectiveFrom, at),
+          gte(reviewerDelegations.effectiveTo, at),
+        ),
+      )
+      .orderBy(desc(reviewerDelegations.createdAt))
+      .limit(1);
+    return rows[0]?.delegateId ?? null;
+  }
+
+  /** Only the current reviewer, an admin, or a workspace manager can hand off review authority. */
+  async delegateReview(taskId: string, actor: Actor, input: DelegateReviewInput): Promise<{ id: string; delegateId: string; effectiveFrom: string; effectiveTo: string; reason: string }> {
     const task = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(task.workspaceId, actor);
-    // A workspace MANAGER can decide any submission in their assigned workspace
-    // (PRD §9 "Team manager": reviews), not only tasks where they're the literal
-    // assigned reviewer — a global admin retains that authority everywhere too.
     if (
       actor.role !== Role.ADMIN &&
       task.reviewerId !== actor.id &&
       !(await this.workspaces.isManager(task.workspaceId, actor))
     ) {
-      throw new ForbiddenException('Only the assigned reviewer or a workspace manager can decide this submission');
+      throw new ForbiddenException('Only the assigned reviewer, an admin, or a workspace manager can delegate review');
+    }
+    if (input.delegateId === task.reviewerId) {
+      throw new BadRequestException('The delegate must be different from the assigned reviewer');
+    }
+    const [delegateIsMember] = await this.db
+      .select({ userId: workspaceMembers.userId })
+      .from(workspaceMembers)
+      .where(and(eq(workspaceMembers.workspaceId, task.workspaceId), eq(workspaceMembers.userId, input.delegateId)))
+      .limit(1);
+    if (!delegateIsMember) throw new BadRequestException('The delegate must be a member of this workspace');
+
+    const row = await this.db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(reviewerDelegations)
+        .values({
+          taskId,
+          delegatorId: actor.id,
+          delegateId: input.delegateId,
+          effectiveFrom: new Date(input.effectiveFrom),
+          effectiveTo: new Date(input.effectiveTo),
+          reason: input.reason,
+        })
+        .returning();
+      if (!created) throw new Error('Failed to record delegation');
+      await this.audit.record(
+        {
+          workspaceId: task.workspaceId,
+          taskId,
+          userId: actor.id,
+          action: AuditAction.REVIEW_DELEGATED,
+          afterValue: { delegateId: input.delegateId, effectiveFrom: input.effectiveFrom, effectiveTo: input.effectiveTo, reason: input.reason },
+        },
+        tx,
+      );
+      return created;
+    });
+    return {
+      id: row.id,
+      delegateId: row.delegateId,
+      effectiveFrom: row.effectiveFrom.toISOString(),
+      effectiveTo: row.effectiveTo.toISOString(),
+      reason: row.reason,
+    };
+  }
+
+  async listDelegations(taskId: string, actor: Actor) {
+    const task = await this.loadTaskOrThrow(taskId);
+    await this.workspaces.assertCanAccess(task.workspaceId, actor);
+    const rows = await this.db.select().from(reviewerDelegations).where(eq(reviewerDelegations.taskId, taskId)).orderBy(desc(reviewerDelegations.createdAt));
+    const people = await this.userRefs(rows.flatMap((r) => [r.delegatorId, r.delegateId]));
+    return rows.map((r) => ({
+      id: r.id,
+      delegator: people.get(r.delegatorId)!,
+      delegate: people.get(r.delegateId)!,
+      effectiveFrom: r.effectiveFrom.toISOString(),
+      effectiveTo: r.effectiveTo.toISOString(),
+      reason: r.reason,
+      createdAt: r.createdAt.toISOString(),
+    }));
+  }
+
+  async reviewSubmission(taskId: string, submissionId: string, actor: Actor, input: ReviewTaskInput): Promise<TaskSubmission> {
+    const task = await this.loadTaskOrThrow(taskId);
+    await this.workspaces.assertCanAccess(task.workspaceId, actor);
+    const now = new Date();
+    const activeDelegateId = await this.activeDelegateFor(taskId, now);
+    // A workspace MANAGER can decide any submission in their assigned workspace
+    // (PRD §9 "Team manager": reviews), not only tasks where they're the literal
+    // assigned reviewer — a global admin retains that authority everywhere too.
+    // An active, effective-dated reviewer delegate (PRD §9) can decide it too,
+    // scoped to exactly this task and only while their delegation is in effect.
+    if (
+      actor.role !== Role.ADMIN &&
+      task.reviewerId !== actor.id &&
+      activeDelegateId !== actor.id &&
+      !(await this.workspaces.isManager(task.workspaceId, actor))
+    ) {
+      throw new ForbiddenException('Only the assigned reviewer, an active delegate, or a workspace manager can decide this submission');
     }
     const [submission] = await this.db.select().from(taskSubmissions)
       .where(and(eq(taskSubmissions.id, submissionId), eq(taskSubmissions.taskId, taskId))).limit(1);
     if (!submission) throw new NotFoundException('Submission not found');
     if (submission.status !== 'PENDING') throw new BadRequestException('This submission has already been decided');
-    const now = new Date();
     await this.db.transaction(async (tx) => {
       await tx.update(taskSubmissions).set({ status: input.decision, reviewerId: actor.id, reviewNote: input.note ?? null, decidedAt: now }).where(eq(taskSubmissions.id, submissionId));
       await tx.update(tasks).set({ status: input.decision === 'ACCEPTED' ? 'DONE' : 'IN_PROGRESS', completedAt: input.decision === 'ACCEPTED' ? now : null, updatedAt: now }).where(eq(tasks.id, taskId));
@@ -1647,6 +1747,91 @@ export class TasksService {
     });
 
     return { id: dependencyId };
+  }
+
+  // ── capacity allocation (P01) ────────────────────────────────────────────
+
+  /**
+   * Persists a planned allocation of a person's effort for a period (PRD §7:
+   * spread remaining effort across the days/weeks it's actually planned for,
+   * and split a task's effort among its contributors rather than double
+   * counting the full estimate per tagged person).
+   */
+  async allocateCapacity(workspaceId: string, actor: Actor, input: CapacityAllocationInput): Promise<typeof capacityAllocations.$inferSelect> {
+    await this.workspaces.assertCanAccess(workspaceId, actor);
+    const [isMember] = await this.db
+      .select({ userId: workspaceMembers.userId })
+      .from(workspaceMembers)
+      .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, input.userId)))
+      .limit(1);
+    if (!isMember) throw new BadRequestException('The person must be a member of this workspace');
+    if (input.taskId) {
+      const task = await this.loadTaskOrThrow(input.taskId);
+      if (task.workspaceId !== workspaceId) throw new BadRequestException('Task must belong to this workspace');
+    }
+    const [row] = await this.db
+      .insert(capacityAllocations)
+      .values({
+        workspaceId,
+        taskId: input.taskId ?? null,
+        userId: input.userId,
+        periodStart: input.periodStart,
+        periodEnd: input.periodEnd,
+        allocatedMinutes: input.allocatedMinutes,
+      })
+      .returning();
+    if (!row) throw new Error('Failed to record allocation');
+    await this.audit.record({ workspaceId, taskId: input.taskId ?? null, userId: actor.id, action: AuditAction.CAPACITY_ALLOCATED, afterValue: { userId: input.userId, periodStart: input.periodStart, periodEnd: input.periodEnd, allocatedMinutes: input.allocatedMinutes } });
+    return row;
+  }
+
+  async removeCapacityAllocation(id: string, actor: Actor): Promise<{ id: string }> {
+    const [row] = await this.db.select().from(capacityAllocations).where(eq(capacityAllocations.id, id)).limit(1);
+    if (!row) throw new NotFoundException('Allocation not found');
+    await this.workspaces.assertCanAccess(row.workspaceId, actor);
+    await this.db.delete(capacityAllocations).where(eq(capacityAllocations.id, id));
+    await this.audit.record({ workspaceId: row.workspaceId, taskId: row.taskId, userId: actor.id, action: AuditAction.CAPACITY_ALLOCATION_REMOVED, beforeValue: { userId: row.userId, periodStart: row.periodStart, periodEnd: row.periodEnd, allocatedMinutes: row.allocatedMinutes } });
+    return { id };
+  }
+
+  /** Weekly planning view (PRD §7 "expose overload, available capacity, unassigned work"): one row per workspace member with allocations in range. */
+  async weeklyCapacity(workspaceId: string, actor: Actor, periodStart: string, periodEnd: string) {
+    await this.workspaces.assertCanAccess(workspaceId, actor);
+    const [members, allocations, calendar] = await Promise.all([
+      this.db
+        .select({ id: users.id, name: users.name, email: users.email, avatarKey: users.avatarKey })
+        .from(workspaceMembers)
+        .innerJoin(users, eq(users.id, workspaceMembers.userId))
+        .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(users.isActive, true))),
+      this.db
+        .select()
+        .from(capacityAllocations)
+        .where(and(eq(capacityAllocations.workspaceId, workspaceId), lte(capacityAllocations.periodStart, periodEnd), gte(capacityAllocations.periodEnd, periodStart))),
+      this.calendar.get(),
+    ]);
+
+    // Scheduled minutes for the whole office over the period — a first-order
+    // figure shared by everyone; personal leave isn't subtracted here yet
+    // (tracked separately by the attendance module), so this is an upper
+    // bound on a given person's true available capacity, not the final word.
+    const scheduledMinutes = calendar.settings
+      ? workingMinutesElapsed(`${periodStart}T00:00:00.000Z`, `${periodEnd}T23:59:59.999Z`, calendar.settings, calendar.exceptions)
+      : 0;
+
+    const byUser = new Map<string, number>();
+    for (const a of allocations) byUser.set(a.userId, (byUser.get(a.userId) ?? 0) + a.allocatedMinutes);
+
+    return members.map((m) => ({
+      user: { id: m.id, name: m.name, email: m.email, avatarKey: m.avatarKey },
+      ...calculateCapacity(scheduledMinutes, [], byUser.get(m.id) ?? 0),
+    }));
+  }
+
+  async listCapacityAllocations(workspaceId: string, actor: Actor, userId?: string) {
+    await this.workspaces.assertCanAccess(workspaceId, actor);
+    const conds = [eq(capacityAllocations.workspaceId, workspaceId)];
+    if (userId) conds.push(eq(capacityAllocations.userId, userId));
+    return this.db.select().from(capacityAllocations).where(and(...conds)).orderBy(asc(capacityAllocations.periodStart));
   }
 }
 
