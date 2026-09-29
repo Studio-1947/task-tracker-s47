@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { workingDayUnits, workingMinutesElapsed, type WorkingCalendarSettings } from '@task-tracker/shared';
+import { eligibleWorkingMinutes, workingDayUnits, workingMinutesElapsed, type WorkingCalendarSettings } from '@task-tracker/shared';
 
 describe('working calendar calculations', () => {
   const weekdays = [1, 2, 3, 4, 5];
@@ -46,5 +46,35 @@ describe('working-time ageing (AT03, AT05)', () => {
 
   it('returns zero when the due date has not passed yet', () => {
     expect(workingMinutesElapsed('2026-10-07T10:30:00.000Z', '2026-10-07T09:30:00.000Z', settings, [])).toBe(0);
+  });
+});
+
+describe('eligible working minutes for update-overdue', () => {
+  const settings: WorkingCalendarSettings = { timezone: 'Asia/Kolkata', workdays: [1, 2, 3, 4, 5], startMinute: 600, endMinute: 1140 };
+  const day = 540; // 09:00 working span
+  const mon = '2026-10-05'; // Monday
+  const at = (date: string, hhmmIst: string) => new Date(`${date}T${hhmmIst}:00+05:30`);
+
+  it('counts a plain two-day gap as two working days', () => {
+    expect(eligibleWorkingMinutes(at(mon, '10:00'), at('2026-10-07', '10:00'), settings, [], [])).toBe(2 * day);
+  });
+
+  it('does not count a weekend', () => {
+    expect(eligibleWorkingMinutes(at('2026-10-02', '10:00'), at('2026-10-05', '10:00'), settings, [], [])).toBe(day);
+  });
+
+  it('excludes a leave day', () => {
+    const leave = [{ start: at('2026-10-06', '00:00').getTime(), end: at('2026-10-07', '00:00').getTime() }];
+    expect(eligibleWorkingMinutes(at(mon, '10:00'), at('2026-10-07', '10:00'), settings, [], leave)).toBe(day);
+  });
+
+  it('excludes overlapping non-actionable periods only once', () => {
+    const tue = { start: at('2026-10-06', '00:00').getTime(), end: at('2026-10-07', '00:00').getTime() };
+    expect(eligibleWorkingMinutes(at(mon, '10:00'), at('2026-10-07', '10:00'), settings, [], [tue, tue, { ...tue }])).toBe(day);
+  });
+
+  it('never goes negative', () => {
+    const all = [{ start: at(mon, '00:00').getTime(), end: at('2026-10-09', '00:00').getTime() }];
+    expect(eligibleWorkingMinutes(at(mon, '10:00'), at('2026-10-07', '10:00'), settings, [], all)).toBe(0);
   });
 });

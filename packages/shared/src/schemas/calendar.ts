@@ -231,3 +231,25 @@ export function mergeIntervals(intervals: Array<{ start: number; end: number }>)
   }
   return out;
 }
+
+/**
+ * Working minutes between two instants with non-actionable periods (leave,
+ * blocked, awaiting review) taken out. Overlapping periods are merged first so
+ * a blocked day that is also a leave day is only excluded once.
+ */
+export function eligibleWorkingMinutes(
+  from: Date,
+  to: Date,
+  settings: WorkingCalendarSettings,
+  exceptions: WorkingCalendarException[],
+  nonActionable: Array<{ start: number; end: number }>,
+): number {
+  if (to.getTime() <= from.getTime()) return 0;
+  const total = workingMinutesElapsed(from.toISOString(), to.toISOString(), settings, exceptions);
+  const clipped = nonActionable.map((i) => ({ start: Math.max(i.start, from.getTime()), end: Math.min(i.end, to.getTime()) }));
+  const excluded = mergeIntervals(clipped).reduce(
+    (sum, i) => sum + workingMinutesElapsed(new Date(i.start).toISOString(), new Date(i.end).toISOString(), settings, exceptions),
+    0,
+  );
+  return Math.max(0, total - excluded);
+}
