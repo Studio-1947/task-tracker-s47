@@ -185,6 +185,7 @@ export const NotificationType = {
   REVIEW_OVERDUE: 'REVIEW_OVERDUE',
   BLOCKER_FOLLOW_UP: 'BLOCKER_FOLLOW_UP',
   UPDATE_OVERDUE: 'UPDATE_OVERDUE',
+  REPORT_SHARED: 'REPORT_SHARED',
 } as const;
 export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
 export const NOTIFICATION_TYPES = Object.values(NotificationType);

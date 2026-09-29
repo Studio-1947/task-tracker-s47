@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, Query, Res, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { Role } from '@task-tracker/shared';
 import { CurrentUser, type RequestUser } from '../common/decorators/current-user.decorator';
@@ -65,6 +65,28 @@ export class DashboardController {
   fridayReport(@Query('workspaceId') workspaceId: string, @CurrentUser() user: RequestUser) {
     if (!workspaceId) throw new BadRequestException('workspaceId is required');
     return this.dashboard.generateFridayReport(workspaceId, user);
+  }
+
+  @Post('reports/drafts')
+  createReportDraft(@Body() body: { workspaceId: string; reportType: 'WEDNESDAY_PROGRESS' | 'FRIDAY_OUTCOMES' }, @CurrentUser() user: RequestUser) {
+    if (!body.workspaceId || !['WEDNESDAY_PROGRESS', 'FRIDAY_OUTCOMES'].includes(body.reportType)) throw new BadRequestException('workspaceId and a valid reportType are required');
+    return this.dashboard.createReportDraft(body.workspaceId, body.reportType, user);
+  }
+
+  @Get('reports/snapshots')
+  listReportSnapshots(@Query('workspaceId') workspaceId: string, @CurrentUser() user: RequestUser) {
+    if (!workspaceId) throw new BadRequestException('workspaceId is required');
+    return this.dashboard.listReportSnapshots(workspaceId, user);
+  }
+
+  @Post('reports/:id/approve')
+  approveReport(@Param('id', ParseUUIDPipe) id: string, @Body() body: { recipientIds?: string[] }, @CurrentUser() user: RequestUser) {
+    return this.dashboard.approveReport(id, body.recipientIds, user);
+  }
+
+  @Post('reports/:id/distribute')
+  distributeReport(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.dashboard.distributeReport(id, user);
   }
 
   private basis(value?: string): CommitmentBasis {

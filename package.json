@@ -34,6 +34,7 @@
     "test:metrics": "node scripts/metrics-reconciliation-smoke.mjs",
     "test:final": "node scripts/final-improvements-smoke.mjs",
     "test:stress": "node scripts/stress-test.mjs",
+    "test:permissions": "node scripts/permissions-matrix-smoke.mjs",
     "verify:improvements": "pnpm typecheck && pnpm test && pnpm build",
     "typecheck": "turbo run typecheck",
     "db:up": "docker compose up -d postgres",

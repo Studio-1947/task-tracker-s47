@@ -10,7 +10,7 @@ import {
   type WorkloadEntry,
   type WorkspacePerformance,
 } from '@task-tracker/shared';
-import { useAdminDashboard, useMemberDashboard, useWednesdayReport, useFridayReport } from '../hooks/useDashboard';
+import { useAdminDashboard, useMemberDashboard, useWednesdayReport, useFridayReport, useApproveReport, useCreateReportDraft, useDistributeReport } from '../hooks/useDashboard';
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import { useAuth } from '../stores/auth';
 import { apiBlob, ApiRequestError } from '../lib/api';
@@ -461,6 +461,11 @@ function OperationalDraftReportsCard() {
   const { data: workspaces } = useWorkspaces();
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('');
   const [reportType, setReportType] = useState<'wednesday' | 'friday' | null>(null);
+  const [snapshotId, setSnapshotId] = useState<string | null>(null);
+  const [distributionMessage, setDistributionMessage] = useState<string | null>(null);
+  const createDraft = useCreateReportDraft();
+  const approveReport = useApproveReport();
+  const distributeReport = useDistributeReport();
 
   const activeWorkspaces = (workspaces ?? []).filter((w) => !w.isArchived);
   const targetId = selectedWorkspaceId || activeWorkspaces[0]?.id || null;
@@ -470,6 +475,22 @@ function OperationalDraftReportsCard() {
 
   const currentReport = reportType === 'wednesday' ? wednesday.data : reportType === 'friday' ? friday.data : null;
   const isLoading = reportType === 'wednesday' ? wednesday.isLoading : reportType === 'friday' ? friday.isLoading : false;
+
+  const saveForApproval = async () => {
+    if (!targetId || !reportType) return;
+    setDistributionMessage(null);
+    const row = await createDraft.mutateAsync({ workspaceId: targetId, reportType: reportType === 'wednesday' ? 'WEDNESDAY_PROGRESS' : 'FRIDAY_OUTCOMES' });
+    setSnapshotId(row.id);
+    setDistributionMessage('Draft snapshot saved. Review it, then approve before sharing.');
+  };
+
+  const approveAndShare = async () => {
+    if (!snapshotId) return;
+    setDistributionMessage(null);
+    await approveReport.mutateAsync(snapshotId);
+    const result = await distributeReport.mutateAsync(snapshotId);
+    setDistributionMessage(`Approved and shared in-app/push with ${result.delivered} workspace member${result.delivered === 1 ? '' : 's'}.`);
+  };
 
   const downloadReport = (title: string, content: string) => {
     const blob = new Blob([content], { type: 'text/markdown;charset=utf-8;' });
@@ -547,7 +568,9 @@ function OperationalDraftReportsCard() {
             </div>
 
             {currentReport ? (
-              <div className="flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
+              <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
+                {distributionMessage ? <p className="mb-2 text-xs font-medium text-emerald-600 dark:text-emerald-400">{distributionMessage}</p> : null}
+                <div className="flex flex-wrap justify-end gap-2">
                 <Button
                   variant="ghost"
                   className="py-1.5 px-3 text-xs"
@@ -561,6 +584,13 @@ function OperationalDraftReportsCard() {
                 >
                   Download .MD File
                 </Button>
+                <Button variant="ghost" className="py-1.5 px-3 text-xs" disabled={createDraft.isPending} onClick={() => void saveForApproval()}>
+                  {createDraft.isPending ? 'Saving...' : 'Save reviewed draft'}
+                </Button>
+                <Button className="py-1.5 px-3 text-xs font-semibold" disabled={!snapshotId || approveReport.isPending || distributeReport.isPending} onClick={() => void approveAndShare()}>
+                  {approveReport.isPending || distributeReport.isPending ? 'Sharing...' : 'Approve & share'}
+                </Button>
+                </div>
               </div>
             ) : null}
           </Card>

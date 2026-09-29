@@ -1,0 +1,535 @@
+
+===== PAGE 1 =====
+Studio 1947  |  1
+Studio 1947 Task Tracker Improvement 
+Specification
+Detailed product requirements and implementation report
+Prepared for Rabi and the Studio 1947 development and management teams
+27 September 2026  |  Version 1.0
+Purpose and recommended direction
+Make the task tracker a reliable system for planning work, accepting deliverables and managing a Monday to 
+Friday office. Prioritise consistent dashboard numbers, one shared working calendar, accountable task 
+ownership and evidence-based completion. Then add effort forecasting, attendance corrections and 
+performance trends built on consistent records.
+This document combines the improvement plan with detailed task breakup and time calculation requirements. It 
+specifies proposed behaviour, formulas, examples, access rules, rollout priorities and acceptance checks. 
+Proposed thresholds are configurable operating choices, not approved employment or payroll policy.
+Decisions already established
+ Offices operate Monday to Friday. Saturday and Sunday are weekly off by default.
+ Task breakup and time calculations are core requirements, alongside attendance, quality and delivery.
+ Production is intended to report to Dipanjan. The tech team needs a designated manager.
+ The proposed launch reference is Thursday 1 October 2026; release readiness must determine the final 
+scope.
+Document map
+Section Focus
+1 to 3 Observed gaps, working calendar and task structure
+4 to 6 Breakup examples, review workflow and time calculations
+7 to 9 Capacity, attendance, leave and permissions
+10 to 12 Dashboard, metrics, reports and implementation model
+13 to 15 Delivery backlog, acceptance tests and operating decisions
+
+===== PAGE 2 =====
+Studio 1947  |  2
+1 Current state and issues to resolve
+The existing interface provides workspaces, projects, list/table/Kanban views, priorities, due dates, assignees, 
+subtasks, attachments, comments and history. Attendance includes check-in/out, leave requests, approvals, 
+leave types, individual allotments and a team log. Dashboard export controls are present.
+Finding Interpretation and next action
+13 overdue in headline and 0 in at-
+risk panel
+Observed inconsistency. Reconcile scope and query definitions before using these 
+figures for management.
+Studio totals of 245 versus list count 
+of 186
+Observed different counts. Confirm archive, filter and scope rules; do not assume 
+missing data.
+Tasks displayed as 35 and 39 days 
+overdue Overdue work exists in the workspace. Validate date ageing and display units.
+No upcoming deadlines May be correct even when old overdue work exists. Distinguish missing dates 
+from an empty upcoming window.
+Done is directly exposed in task 
+status control
+Verify whether backend permissions and evidence checks restrict this action. UI 
+availability alone does not prove enforcement.
+Generic task title and multiple tagged 
+people
+Introduce a clear outcome and one accountable owner while retaining 
+collaborators.
+Idle labels on workspace 
+performance
+Definition is not explained in the inspected interface. Replace with actionable, 
+calendar-aware states.
+Similar ElegantSip and Elegantsip 
+projects Check whether these are duplicates before any consolidation.
+Controls needing verification
+The inspected screens did not expose effort estimates, time entries, blocker ownership, a dedicated review 
+queue, attendance corrections or organisation calendar settings. Inspect the code and other relevant screens 
+before building replacements. Salary permissions, API access control, exports and manager restrictions require 
+separate verification.
+Evidence reference
+Application: https://s47-task.duckdns.org/ . Screens inspected in the preceding review: dashboard, Studio 1947 
+workspace, WEB-96 task detail, attendance sections and profile settings. The observed counts are a point-in-
+time record, not a current reconciliation. No backend audit or changes to the live application were performed.
+
+===== PAGE 3 =====
+Studio 1947  |  3
+2 Working calendar and deadline rules
+Create one calendar service that supplies scheduled working intervals to attendance, capacity, reminders, leave 
+calculations and performance metrics. Use Asia/Kolkata as the proposed office timezone, subject to 
+confirmation. Store event timestamps consistently and display them in the configured office timezone.
+Setting Required behaviour
+Working week Monday to Friday; Saturday and Sunday have zero standard capacity.
+Daily schedule Configure start, end and unpaid breaks by employee or schedule group. Do not assume eight 
+hours for everyone.
+Holidays and exceptions Support office holidays, half-days and approved exceptional working days, with effective 
+dates.
+Attendance Show weekly off and holiday explicitly. No absence or late-arrival alerts outside scheduled 
+intervals.
+Leave Count eligible scheduled hours or days under the configured policy. Show the calculation 
+before submission.
+Reminders Send normal work reminders during working intervals; account for leave and holidays.
+Deadline selection Warn for weekly off or holiday deadlines. Allow an intentional exception with a reason.
+Calendar changes Apply effective dates; preserve the calendar version used for approved historical records.
+Preserve commitments while measuring working time
+A task becomes overdue when its committed timestamp passes and it is not accepted or otherwise validly 
+closed. A Friday deadline stays a Friday deadline; skipping weekend hours in ageing must not silently move it to 
+Monday. Display the due date alongside working-time ageing so a newly overdue task can show less than one 
+working day overdue without ambiguity.
+For date-only deadlines, adopt and display a consistent office cutoff, such as the end of the assigned workday. 
+Deadline revisions require a reason and retain the original commitment for reporting.
+Examples
+ Friday end of day to Monday start of day contains zero scheduled working time when no exception applies.
+ Friday through Monday leave ordinarily covers two scheduled days, before holiday and employee-schedule 
+adjustments.
+ Weekend work can be recorded, but does not create a routine weekend attendance expectation.
+ Wednesday is the progress-report day; Friday replaces the previously suggested Saturday weekly close.
+
+===== PAGE 4 =====
+Studio 1947  |  4
+3 Task structure and planning requirements
+Use Project > Deliverable > Subtask. A project describes the broader result; a deliverable is an independently 
+reviewable output; subtasks describe the work needed to produce it. A simple task may itself be a deliverable 
+with no children.
+Field Requirement
+Outcome and acceptance 
+criteria State what must be produced and how the reviewer will decide it is complete.
+Accountable owner Exactly one owner per actionable task. Collaborators and tagged people remain 
+separate.
+Project and workspace Required for committed work; preserve IDs when titles change.
+Reviewer Named manager or authorised delegate for reviewable deliverables.
+Planning dates Planned start, commitment date and original commitment history. Undated backlog is 
+allowed.
+Effort Original estimate, current approved estimate, remaining estimate and recorded actual 
+effort.
+Dependencies Predecessor, dependency owner and whether the dependency prevents starting or 
+finishing.
+Blocked record Reason, responsible unblocker, next follow-up and time interval.
+Completion evidence Link, attachment or appropriate completion note, tied to a submission version.
+Rules for task breakup
+Prompt for breakup when estimated effort exceeds 120 minutes or work spans several people, distinct 
+deliverables or dependency stages. Permit an explained exception for work that would be distorted by artificial 
+splitting. Use checklists for tiny actions that do not need separate ownership or review.
+Every subtask needs a completion condition. “Submit three layout options” is useful; “work on design” is too 
+vague. Divide by outcome or handoff, not simply into equal time blocks. Avoid tracking both a checklist action 
+and an identical subtask as separate output.
+Parent rollup
+Once a parent has effort-bearing children, its forecast and actual effort roll up from those children. Stop direct 
+time entry on that parent. Represent coordination or review as explicit work items. When splitting a task with 
+existing time, preserve the history and move or allocate entries through an audited operation so the same 
+minutes appear exactly once.
+
+===== PAGE 5 =====
+Studio 1947  |  5
+4 Task size and worked breakup examples
+Size Estimate Treatment
+Small action Under 10 minutes Checklist or grouped administration, unless separate tracking is needed.
+Short 10 to 30 minutes One clear result.
+Big 31 to 60 minutes One result with acceptance criteria.
+Huge 61 to 120 minutes Checkpoints or subtasks where useful.
+Larger work Over 120 minutes Breakup prompt with an explained exception option.
+Derive the size label from estimated minutes. Keep the original label for historical comparison and show the 
+current label when the approved estimate changes. Priority remains independent of size.
+Example A Promotional poster
+Work item Owner role Minutes
+Review brief and references Designer 20
+Develop design Designer 60
+Copy and detail check Designer or copy owner 25
+Export and submit Designer 15
+Review and acceptance decision Reviewer 15
+Total planned effort All contributors 135
+Production effort is 120 minutes; review adds 15 minutes, so the complete deliverable plan is 135 person-
+minutes. The parent displays 135, not 270. Returning the work adds actual rework and a revised remaining 
+forecast while retaining the original baseline.
+Example B Website form improvement
+Break the deliverable into requirements and acceptance cases (30 minutes), form interface (60), validation and 
+integration (90), functional checks (45), and release review (15). Total planned effort is 240 minutes. Integration 
+depends on the agreed requirements; checks depend on the implementation. Each item has an owner and 
+result.
+Parallel work and output counting
+Two people each working 60 minutes contribute 120 person-minutes. If they work simultaneously, the elapsed 
+interval may be only 60 minutes. Report the parent as one accepted deliverable and the children as execution 
+items; do not combine both levels in the same completed-output count.
+
+===== PAGE 6 =====
+Studio 1947  |  6
+5 Submission review and correction workflow
+Use To Do > In Progress > In Review > Done. A return moves the task to In Progress and creates a recorded 
+review decision. Treat blocked work as a flag with its own intervals so it can coexist with the appropriate 
+workflow stage.
+Submission and acceptance
+ Submission requires completion evidence appropriate to the work, plus a short delivery note. Freeze a 
+version of the submitted evidence or its reference.
+ Only an authorised reviewer can accept a deliverable. For small low-risk tasks, a manager may configure a 
+documented simplified review policy.
+ A return requires a reason and concrete requested corrections. The owner receives the next action and 
+revised expectation.
+ Record submission, review, acceptance and reopening timestamps with actors. Reopening requires a reason 
+and retains past decisions.
+ A parent is accepted when its required work is complete and its own acceptance criteria have been 
+reviewed; child completion alone is insufficient.
+Review queue
+Show project, owner, reviewer, deliverable link, submission time, deadline, working time awaiting review and 
+prior return reasons. Provide accept, return and delegate actions according to permissions. Begin with a 
+proposed one-working-day review target, configurable by work type and reviewer schedule.
+Separate submission timeliness from acceptance timeliness
+Measure both owner submission and the end-to-end acceptance outcome. A manager review delay must remain 
+distinguishable from late execution. Preserve first submission, first qualifying submission and final acceptance 
+timestamps. A submission with missing required evidence does not qualify as an on-time submission.
+Classify rework
+Reason Reporting treatment
+Error or missed agreed requirement Quality correction; retain the evidence and review reason.
+Unclear or incomplete brief Planning issue; identify the clarification needed.
+Client change or additional scope Scope change; record approved added effort and any revised deadline.
+Internal preference change Record the decision separately from an execution error.
+Retain both raw return counts and reason-specific quality measures. Do not silently classify all returns as 
+employee mistakes. Review effort is active work; time waiting for review is a separate duration.
+
+===== PAGE 7 =====
+Studio 1947  |  7
+6 Time recording and calculation specification
+Measure Definition
+Original estimate Agreed effort baseline before execution; never silently overwritten.
+Current approved estimate Latest approved total effort budget, including documented scope changes.
+Actual effort Sum of valid recorded work entries across contributors.
+Remaining estimate Owner forecast of work still needed; may rise when new information appears.
+Forecast total Actual effort plus remaining estimate.
+Forecast variance Forecast total minus original estimate; also show variance against current approved 
+estimate.
+Elapsed duration Wall-clock interval from start to completion, including non-working time.
+Blocked or review wait Relevant waiting intervals measured against the chosen working calendar.
+Attendance duration Attendance intervals adjusted by the attendance policy; independent of task effort.
+Recording rules
+Provide timers and manual entries. Store person, task, work date, duration, category, note and edit history. 
+Categories should distinguish execution, review and rework. Only one active timer per person is allowed. Flag 
+overlapping entries, long sessions and time beyond scheduled capacity for correction rather than silently 
+deleting them.
+Store precise durations and sum before display rounding. Display hours and minutes. If manual input uses whole 
+minutes, disclose that precision. Split cross-midnight sessions into reporting-day segments using the office 
+timezone. Paused timers add no effort. A checkout prompts for a running timer; it must not create task time 
+from the full attendance interval.
+Calculation examples
+ A 60-minute baseline with 45 minutes recorded and 30 minutes remaining has a 75-minute forecast and a 
+15-minute forecast overrun.
+ A 120-minute baseline plus an approved 30-minute scope increase creates a 150-minute current estimate. 
+Final effort of 160 minutes is 40 over the original baseline and 10 over the approved scope.
+ Two people each recording 60 minutes produce 120 person-minutes, regardless of whether their sessions 
+overlap.
+ A two-hour task blocked overnight still has two hours of active effort; waiting and elapsed duration are 
+reported separately.
+Never use actual effort divided by estimated effort as completion percentage. Deliverable acceptance and effort 
+consumption answer different questions. At zero remaining estimate, the task may still await review; acceptance 
+status remains explicit.
+
+===== PAGE 8 =====
+Studio 1947  |  8
+7 Capacity scheduling and progress calculation
+Calculate capacity per employee from scheduled working intervals. Remove the union of leave, holidays, unpaid 
+breaks, meetings and reserved non-task work; overlapping exclusions must not be subtracted twice. Choose 
+whether meetings are reserved capacity or planned tasks and apply that choice consistently.
+Capacity formulas
+Available task capacity = scheduled working time after applicable exclusions. Planned utilisation = allocated 
+remaining task effort for the period divided by available task capacity, multiplied by 100. When capacity is zero, 
+show “No available capacity” rather than a percentage.
+Example: a 40-hour Monday to Friday schedule with eight hours of leave and five non-overlapping hours 
+reserved for meetings and administration has 27 hours of task capacity. Assigning 30 hours creates a three-hour 
+overload and approximately 111 percent planned utilisation.
+Scheduling behaviour
+ Allocate remaining effort across the days or weeks when work is planned; do not place the entire estimate in 
+its deadline week.
+ Split each task’s remaining effort among contributors. Do not allocate the full task estimate to every tagged 
+person.
+ Respect dependencies and owner capacity before forecasting a finish date. Total effort alone cannot 
+determine delivery date.
+ Use zero standard weekend capacity; approved exceptional work is separately identified.
+ Show unallocated effort and unscheduled work so a low utilisation figure cannot conceal missing plans.
+ Keep a configurable planning reserve for unplanned work; define it openly rather than automatically filling 
+everyone to 100 percent.
+Progress reporting
+Show accepted deliverables versus planned deliverables and milestone status. If weighted progress is needed, 
+use fixed agreed weights for required deliverables and disclose them. Do not let a later estimate increase 
+retroactively inflate progress. Cancelled scope needs an approved adjustment and retained baseline.
+Useful manager decisions
+The weekly planning view should expose overload, available capacity, unassigned work and dependencies. 
+Managers can then move a date, reduce scope, reassign a task or resolve a blocker. Compare estimates with 
+actuals by comparable work type to improve templates; faster completion alone is not proof of better quality.
+
+===== PAGE 9 =====
+Studio 1947  |  9
+8 Attendance leave and payroll inputs
+Extend the existing attendance and leave sections into an auditable daily record. Classify each day or scheduled 
+interval as worked, paid leave, unpaid leave or absence, holiday, weekly off, or pending correction. Support 
+partial days if the approved policy requires them.
+Required controls
+ Handle missing checkouts and allow correction requests with proposed times and a reason.
+ Require an authorised decision on corrections and retain original values, changed values and approver.
+ Show individual balances, accruals, usage, expiry, carry-forward and approval history.
+ Before leave approval, show staffing clashes and relevant project commitments.
+ Support approved fieldwork and other attendance exceptions without treating them as missing work.
+ Define late thresholds, grace periods and working schedules before generating late flags.
+ Limit access to captured location to the relevant authorised attendance roles.
+Explainable payable indicator
+Use a clearly labelled attendance/payable indicator, separate from performance. If an hours-based scheduled-
+work model is approved, divide eligible payable scheduled hours by scheduled hours after weekly-off and 
+holiday exclusions. Include paid leave in the numerator as the approved policy specifies. Show zero-denominator 
+cases as not applicable.
+Illustration only: 160 scheduled hours after calendar exclusions, 144 worked hours and eight approved paid-
+leave hours produce 152 payable scheduled hours and a 95 percent indicator. This is not automatically a 
+monthly salary multiplier; payroll treatment must follow the approved employment and payroll policy.
+Policy decisions before payroll automation
+Clarify whether “1 EL plus 1 CL” means monthly accrual or a different allowance. Reconcile the visible Casual, 
+Menstrual and Sick Leave configuration with the intended policy. Define half-days, rounding, unpaid absence 
+and treatment of unresolved corrections. Keep final payroll inputs subject to admin review; do not implement 
+an automatic “two late days equals half-day deduction” rule without an approved policy.
+Acceptance example
+An employee misses checkout on Friday and requests a correction on Monday. Friday remains pending until the 
+decision; Saturday and Sunday remain weekly off. The correction updates the monthly attendance view with an 
+audit trail, without manufacturing task effort.
+
+===== PAGE 10 =====
+Studio 1947  |  10
+9 Roles projects and access controls
+Role Permitted scope
+Admin or founder All authorised workspaces, cross-team reporting, attendance administration, access audit and 
+separate payroll approval.
+Team manager Assigned teams and spaces, task planning, reviews, workload, leave availability and relevant 
+attendance decisions; no salary access by default.
+Team member Permitted spaces and tasks, own time entries, attendance, leave balances and performance 
+feedback.
+Reviewer delegate Only the explicitly delegated review scope for its effective period; no automatic payroll or 
+wider admin access.
+Map Production to Dipanjan as intended and explicitly assign the tech manager. Verify user identities and team 
+membership before changing access. Enforce all rules in the API and data layer as well as the interface, including 
+attachments, exports and direct links.
+Project management
+Each project needs an accountable owner, intended result, milestones, target dates and health. Use Open, 
+Ongoing, On hold and Completed. An on-hold project records its reason and next review date. Completion 
+requires acceptance of required deliverables; optional or cancelled scope remains visible.
+Distinguish physical office, client, workspace and team. The current office-performance table uses workspace 
+names; choose the correct label and data relationship so office capacity is not confused with client-project 
+output.
+Audit and historical integrity
+ Record who changed owners, estimates, dates, status, evidence, access, time entries and attendance, with 
+old and new values.
+ Preserve records used in approved reports when people move teams or tasks change workspaces.
+ Archive completed or inactive records using a documented policy; distinguish archive from cancellation and 
+deletion.
+ Export permissions must match on-screen permissions. Historical reports should show the scope and metric 
+version used.
+Verification
+Test direct URLs and API requests using member, manager and admin roles. A member must not retrieve 
+another team’s restricted tasks or payroll information. A manager must not accept a task outside the authorised 
+review scope. Reassignments and delegation should have explicit effective dates and remain auditable.
+
+===== PAGE 11 =====
+Studio 1947  |  11
+10 Dashboard and performance definitions
+Place period and workspace filters at the top. Prioritise actionable exceptions, delivery, capacity and project 
+health; keep the activity feed as supporting context. Every card should disclose its scope and open the exact 
+records behind its count.
+Metric Definition and guardrail
+Open tasks Tasks in the selected scope that are not accepted, cancelled or excluded by the archive 
+policy.
+Overdue commitments Open committed tasks whose due timestamp has passed. Use the same scope in cards, 
+lists and exports.
+On-time submission Due deliverables with a qualifying submission by the applicable commitment divided by 
+eligible deliverables due.
+On-time acceptance Due deliverables accepted by the applicable commitment divided by eligible deliverables 
+due; expose review delays.
+First-pass acceptance Deliverables accepted at their first review decision divided by deliverables with a first 
+review decision in the period.
+Review turnaround Scheduled working time from submission to decision; show median and an upper 
+percentile as volumes permit.
+Update discipline Eligible assigned-work days with a meaningful update divided by eligible assigned-work 
+days.
+Planned utilisation Allocated remaining effort divided by available capacity; show missing allocations and 
+zero-capacity cases.
+Rework effort Recorded correction effort with reason categories; report scope changes separately.
+Interpretation rules
+Show numerator, denominator and sample size alongside percentages. Use not applicable when the 
+denominator is zero. Define cancellation, archive, deadline-revision and cohort rules once. Retain original-
+commitment and revised-commitment views so repeatedly moving dates cannot erase missed promises.
+Do not combine parent and child counts. Do not backfill quality or time metrics for legacy tasks without reliable 
+evidence. Avoid one employee ranking score: work complexity, review delays, scope changes and sample size 
+affect interpretation.
+Meaningful alerts
+Replace unexplained Idle with No active work, Awaiting review, Blocked, Update overdue, Weekly off or Active. 
+A proposed update threshold is two eligible working days, configurable after a trial. Exclude leave and non-
+actionable waiting periods; a status toggle alone does not satisfy an update requirement.
+
+===== PAGE 12 =====
+Studio 1947  |  12
+11 Page improvements and reporting
+Screen Changes required
+Dashboard Shared period and workspace filters; reconciled totals; drill-downs; reviews, blockers, capacity 
+and corrections needing attention.
+Task detail Outcome, accountable owner, reviewer, size, baseline/current/remaining effort, evidence, 
+dependencies and time-entry history.
+Task list and Kanban Filters for no owner, no deadline, blocked, review overdue and missing estimates; show 
+forecast and deadline together.
+Project detail Milestones, lifecycle, required deliverables, baseline and forecast effort, dependencies and 
+health reasons.
+Team planning Weekly availability, allocated effort per person, overload and unallocated work.
+Attendance Weekly-off labels, holidays, partial days, corrections, monthly explanation and team 
+availability.
+Settings and users Organisation calendar, schedule groups, managers, review policies, access and effective-dated 
+leave rules.
+Review queue Submission evidence, waiting time, prior corrections, accept/return/delegate actions.
+Reports Reconciled PDF/CSV output with period, scope, generated time, definitions and authorised 
+data only.
+Wednesday and Friday reports
+Wednesday: commitments progressed, accepted deliverables, blocked work, decisions needed and next 
+deadlines. Friday: accepted outcomes, carryover with reasons, review backlog and next week’s capacity and 
+priorities. Include owners for actions and links to relevant tasks.
+Generate a manager-reviewed, ready-to-share report first. Automated WhatsApp distribution requires a 
+separate capability and account eligibility check before implementation. Keep individual attendance, salary and 
+performance concerns outside the general team report.
+Usability improvements
+Use clear loading, error and empty states; preserve filters when returning from task detail. Make deadline and 
+working-time labels explicit. Provide keyboard-accessible controls and readable mobile task review. Validate 
+that permission errors explain the issue without exposing restricted data.
+
+===== PAGE 13 =====
+Studio 1947  |  13
+12 Data model and migration requirements
+Extend the existing implementation after inspecting its schema; do not create duplicate concepts where 
+equivalent records already exist. The following records describe required behaviour rather than a prescribed 
+database technology.
+Record Minimum responsibilities
+Calendar and schedule Timezone, effective dates, working intervals, holidays and exceptions.
+Task and hierarchy Parent ID, task type, accountable owner, reviewer, required/optional scope, workflow 
+and commitments.
+Estimate revision Original baseline, approved revisions, remaining forecast, reason, actor and time.
+Time entry Contributor, task, interval or duration, work category, note, source and correction 
+history.
+Submission and review Evidence version, submitted time, decision, reason, reviewer and acceptance time.
+Dependency and blocker Related work, unblocker, blocking intervals and follow-up.
+Capacity allocation Contributor, period, allocated remaining effort and schedule reference.
+Attendance and leave Daily intervals, classification, request, decision, correction and policy reference.
+Audit and report snapshot Actor, change, previous/new values, scope, metric version and report timestamp.
+Consistency rules
+Use a shared metric layer for cards, task drill-downs and exports. Avoid double submissions or duplicate timer 
+entries through idempotent operations. Enforce reviewer and owner rules server-side. Calculate rollups from 
+one source of truth and invalidate cached totals when relevant records change.
+Migration
+Inventory existing tasks and identify missing owner, deadline, estimate and evidence. Keep unknown historical 
+values unknown rather than creating invented time or acceptance records. Tag legacy completion separately 
+where acceptance cannot be verified. Review potential duplicate projects with their owners before merging.
+Back up before schema changes, run migrations on a staging copy, compare pre/post counts and retain a 
+rollback path. Reconcile the 13-versus-0 overdue issue and the 245-versus-186 scope difference using explicit 
+record IDs. Pilot with a small team before turning on broad alerts or performance reporting.
+
+===== PAGE 14 =====
+Studio 1947  |  14
+13 Prioritised implementation backlog
+Priority and ID Delivery item Completion evidence
+P0 D01 Unify metric scopes and definitions Dashboard, list and export return the same record set.
+P0 C01 Working calendar and timezone Weekend, holiday and effective-date checks pass.
+P0 A01 Verify and repair permissions Role-based direct-link and API checks pass.
+P1 T01 Task breakup and accountable owner Parents roll up children once; each action has an 
+owner.
+P1 R01 Evidence and review workflow Submission, return, acceptance and reopening are 
+audited.
+P1 E01 Time entries and forecast fields Actual, remaining and baseline examples reconcile.
+P1 H01 Attendance corrections and day states Weekend and correction cases display correctly.
+P2 P01 Capacity and dependencies Overload and scheduling examples match planned 
+allocations.
+P2 M01 Management dashboard and trends Metrics show scope, denominator and actionable drill-
+down.
+P2 X01 Verified exports and report drafts Reports reconcile and exclude unauthorised fields.
+P3 N01 Reminders and distribution Approved routes and calendar-aware timing verified.
+P3 Y01 Payroll integration Approved policy, reconciled inputs and admin sign-off 
+in place.
+Rollout sequence
+For the proposed 1 October 2026 launch, release only the tested foundation: calendar, trustworthy counts, core 
+task ownership/review and essential access controls. Add effort and attendance workflows next if they cannot 
+be verified by that date. Do not label incomplete gates as passed to meet the date.
+Assign a product owner for definitions, a technical lead for implementation, and managers for scenario testing. 
+Development estimates should follow repository and schema inspection; this report does not claim a verified 
+engineering timeline.
+Measure improvement
+Establish a baseline during the first complete working weeks. Track count reconciliation, missing planning fields, 
+review waiting time, repeated corrections, unresolved blockers and manager time spent chasing updates. 
+Choose targets after baseline measurement rather than inventing precision from incomplete history.
+
+===== PAGE 15 =====
+Studio 1947  |  15
+14 Acceptance test scenarios
+ID Scenario Expected result
+AT01 Open overdue card and export at same scope/time Matching task IDs and totals.
+AT02 No Saturday or Sunday check-in Weekly off; no missing-attendance alert.
+AT03 Friday close to Monday opening Zero scheduled inactivity time without exceptions.
+AT04 Friday to Monday leave request Two eligible days before holidays and individual 
+schedule adjustments.
+AT05 Friday task deadline passes Task remains overdue; original deadline is preserved.
+AT06 Parent contains 20, 60, 25, 15 and 15 minute children Parent estimate is 135 minutes, counted once.
+AT07 Two people each work one concurrent hour Two person-hours; elapsed interval may be one hour.
+AT08 60 estimated, 45 actual, 30 remaining 75 forecast; 15 over original estimate.
+AT09 120 baseline, 30 approved scope, 160 actual Current estimate 150; variance 40 original and 10 
+current.
+AT10 Timer paused, duplicated or overlapping Pause adds no effort; duplicates prevented; overlaps 
+flagged.
+AT11 Submit without required evidence Submission blocked with clear missing requirement.
+AT12 Submit on time, reviewer responds late Owner submission and review delay reported 
+separately.
+AT13 Client changes approved scope Revision recorded separately from execution error.
+AT14 40 hours less 8 leave and 5 reserved 27 available; 30 assigned shows 3 hours overload.
+AT15 Leave overlaps a meeting Exclusion interval counted once.
+AT16 No available capacity or no reviewed tasks Not applicable; no division error or misleading zero 
+score.
+AT17 Member opens restricted direct URL Access denied at server; no restricted data returned.
+AT18 Correct a missed Friday checkout Original and approved values retained; weekend 
+unchanged.
+AT19 Move a deadline or archive old work History preserved; metric policy applied consistently.
+AT20 Split an existing task with logged time Minutes preserved exactly once; audit records 
+allocation.
+
+===== PAGE 16 =====
+Studio 1947  |  16
+15 Operating decisions and team routine
+Decisions needed before each related feature is activated
+Decision Proposed starting point
+Daily hours and breaks Confirm schedules by employee or group; Monday to Friday is established.
+Office timezone and date-only cutoff Asia/Kolkata and scheduled workday end, subject to confirmation.
+Tech manager and review delegates Name the responsible manager; Production is intended for Dipanjan.
+Review target and update threshold Trial one working day for review and two eligible days for an update alert.
+Effort tracking detail Minute-based entry with execution, review and rework categories.
+Planning reserve Set after observing interruptions and routine non-task work.
+Leave accrual and payroll rules Clarify EL/CL allowance, paid leave, half-days and correction treatment.
+Historical and archive reporting Define eligible cohorts; retain unknown legacy values explicitly.
+Automation recipients and timing Manager-reviewed Wednesday and Friday drafts before automated sharing.
+Recommended weekly routine
+Monday: managers review capacity, confirm owners and commitment dates, and break large deliverables into 
+actionable work. During the week: owners record meaningful progress, effort and remaining estimates; 
+managers resolve blockers and review submitted work. Wednesday: share progress and decisions needed. 
+Friday: accept completed deliverables, explain carryover, resolve time-entry issues and prepare next week’s 
+plan.
+Responsibility for data quality
+Employees own accurate task updates and time entries. Managers own clear briefs, feasible assignments, 
+prompt review and correction decisions. Administrators own calendar policy, permissions and final 
+attendance/payroll approval. The product owner owns shared metric definitions and verifies that changes do 
+not alter historical meaning silently.
+Release sign off
+For each release, record the features enabled, scenarios passed, unresolved defects, migration reconciliation 
+and accountable approver. Confirm that a real user can plan a deliverable, perform and record the work, submit 
+evidence, receive review, and understand the dashboard result. That complete workflow is the main readiness 
+test.

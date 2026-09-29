@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, lt, ne, sql } from 'drizzle-orm';
 import {
   TASK_STATUSES,
@@ -15,10 +15,11 @@ import {
   type WorkspacePerformance,
 } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
-import { auditLogs, projects, taskAssignees, taskSubmissions, tasks, users, workspaces } from '../database/schema';
+import { auditLogs, projects, reportSnapshots, taskAssignees, taskSubmissions, tasks, users, workspaceMembers, workspaces } from '../database/schema';
 import { AuditService } from '../audit/audit.service';
 import { CalendarService } from '../calendar/calendar.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /** Overdue-tasks scope shared by the headline count, the drill-down list and (eventually) exports — PRD §10/§12 D01. */
 const OVERDUE_LIST_LIMIT = 20;
@@ -30,7 +31,33 @@ export class DashboardService {
     private readonly audit: AuditService,
     private readonly workspaces: WorkspacesService,
     private readonly calendar: CalendarService,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  private async assertReportManager(workspaceId: string, actor: { id: string; role: string }) {
+    await this.workspaces.assertCanAccess(workspaceId, actor);
+    if (actor.role !== 'ADMIN' && !(await this.workspaces.isManager(workspaceId, actor))) {
+      throw new ForbiddenException('Only an administrator or workspace manager can approve and distribute reports');
+    }
+  }
+
+  private async workspaceName(workspaceId: string): Promise<string> {
+    const [row] = await this.db.select({ name: workspaces.name }).from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1);
+    if (!row) throw new NotFoundException('Workspace not found');
+    return row.name;
+  }
+
+  private reportMarkdown(title: string, workspaceName: string, generatedAt: string, sections: Array<[string, unknown[]]>, notes: string) {
+    const lines = [`# ${title}`, '', `Workspace: ${workspaceName}`, `Generated: ${generatedAt}`, 'Scope: active tasks in this workspace', 'Metric version: 1.0', ''];
+    for (const [heading, rows] of sections) {
+      lines.push(`## ${heading}`, '');
+      if (rows.length) lines.push(...rows.map((row: any) => `- ${row.ref ? `${row.ref}: ` : ''}${row.title ?? row.id}`));
+      else lines.push('- None');
+      lines.push('');
+    }
+    lines.push(notes);
+    return lines.join('\n');
+  }
 
   private emptyStatusCounts(): StatusCounts {
     return Object.fromEntries(TASK_STATUSES.map((s) => [s, 0])) as StatusCounts;
@@ -367,6 +394,7 @@ export class DashboardService {
 
   async generateWednesdayReport(workspaceId: string, actor: { id: string; role: string }) {
     await this.workspaces.assertCanAccess(workspaceId, actor);
+    const workspaceName = await this.workspaceName(workspaceId);
     const [accepted, blocked, upcoming] = await Promise.all([
       this.db
         .select({ id: tasks.id, title: tasks.title, status: tasks.status })
@@ -381,19 +409,25 @@ export class DashboardService {
       this.upcomingDeadlines(),
     ]);
 
-    return {
+    const generatedAt = new Date().toISOString();
+    const summaryNotes = 'Wednesday routine: commitments progressed, accepted deliverables, blocked work, decisions needed, next deadlines.';
+    const payload = {
       reportType: 'WEDNESDAY_PROGRESS',
-      generatedAt: new Date().toISOString(),
+      generatedAt,
+      reportDate: generatedAt.slice(0, 10),
       workspaceId,
+      workspaceName,
       acceptedDeliverables: accepted,
       commitmentsProgressed: blocked,
       upcomingDeadlines: upcoming,
-      summaryNotes: 'Wednesday routine: commitments progressed, accepted deliverables, blocked work, decisions needed, next deadlines.',
+      summaryNotes,
     };
+    return { ...payload, summary: payload, markdown: this.reportMarkdown('Wednesday Mid-Week Progress', workspaceName, generatedAt, [['Accepted deliverables', accepted], ['Commitments progressed', blocked], ['Upcoming deadlines', upcoming]], summaryNotes) };
   }
 
   async generateFridayReport(workspaceId: string, actor: { id: string; role: string }) {
     await this.workspaces.assertCanAccess(workspaceId, actor);
+    const workspaceName = await this.workspaceName(workspaceId);
     const [accepted, carryover] = await Promise.all([
       this.db
         .select({ id: tasks.id, title: tasks.title, completedAt: tasks.completedAt })
@@ -407,13 +441,57 @@ export class DashboardService {
         .limit(20),
     ]);
 
-    return {
+    const generatedAt = new Date().toISOString();
+    const summaryNotes = 'Friday routine: accepted outcomes, carryover with reasons, review backlog, next week capacity & priorities.';
+    const payload = {
       reportType: 'FRIDAY_OUTCOMES',
-      generatedAt: new Date().toISOString(),
+      generatedAt,
+      reportDate: generatedAt.slice(0, 10),
       workspaceId,
+      workspaceName,
       acceptedOutcomes: accepted,
       carryoverTasks: carryover,
-      summaryNotes: 'Friday routine: accepted outcomes, carryover with reasons, review backlog, next week capacity & priorities.',
+      summaryNotes,
     };
+    return { ...payload, summary: payload, markdown: this.reportMarkdown('Friday Outcomes', workspaceName, generatedAt, [['Accepted outcomes', accepted], ['Carryover', carryover]], summaryNotes) };
+  }
+
+  async createReportDraft(workspaceId: string, reportType: 'WEDNESDAY_PROGRESS' | 'FRIDAY_OUTCOMES', actor: { id: string; role: string }) {
+    await this.assertReportManager(workspaceId, actor);
+    const report = reportType === 'WEDNESDAY_PROGRESS'
+      ? await this.generateWednesdayReport(workspaceId, actor)
+      : await this.generateFridayReport(workspaceId, actor);
+    const [row] = await this.db.insert(reportSnapshots).values({ workspaceId, reportType, reportDate: report.reportDate, markdown: report.markdown, payload: report.summary, generatedById: actor.id }).returning();
+    return row;
+  }
+
+  async approveReport(reportId: string, recipientIds: string[] | undefined, actor: { id: string; role: string }) {
+    const [report] = await this.db.select().from(reportSnapshots).where(eq(reportSnapshots.id, reportId)).limit(1);
+    if (!report) throw new NotFoundException('Report draft not found');
+    await this.assertReportManager(report.workspaceId, actor);
+    if (report.status !== 'DRAFT') throw new BadRequestException('Only a draft report can be approved');
+    const members = await this.db.select({ userId: workspaceMembers.userId }).from(workspaceMembers).where(eq(workspaceMembers.workspaceId, report.workspaceId));
+    const allowed = new Set(members.map((m) => m.userId));
+    const recipients = recipientIds?.length ? [...new Set(recipientIds)] : [...allowed];
+    if (recipients.some((id) => !allowed.has(id))) throw new BadRequestException('Every report recipient must belong to the workspace');
+    const [updated] = await this.db.update(reportSnapshots).set({ status: 'APPROVED', recipientIds: recipients, approvedById: actor.id, approvedAt: new Date() }).where(eq(reportSnapshots.id, reportId)).returning();
+    return updated;
+  }
+
+  async distributeReport(reportId: string, actor: { id: string; role: string }) {
+    const [report] = await this.db.select().from(reportSnapshots).where(eq(reportSnapshots.id, reportId)).limit(1);
+    if (!report) throw new NotFoundException('Report not found');
+    await this.assertReportManager(report.workspaceId, actor);
+    if (report.status !== 'APPROVED') throw new BadRequestException('The report must be approved before distribution');
+    for (const userId of report.recipientIds) {
+      await this.notifications.createNotification(userId, actor.id, 'REPORT_SHARED', report.reportType === 'WEDNESDAY_PROGRESS' ? 'Wednesday progress report' : 'Friday outcomes report', 'A manager-approved workspace report is ready to review.', { reportId: report.id, workspaceId: report.workspaceId, reportType: report.reportType });
+    }
+    const [updated] = await this.db.update(reportSnapshots).set({ status: 'DISTRIBUTED', distributedAt: new Date() }).where(eq(reportSnapshots.id, reportId)).returning();
+    return { ...updated, delivered: report.recipientIds.length };
+  }
+
+  async listReportSnapshots(workspaceId: string, actor: { id: string; role: string }) {
+    await this.workspaces.assertCanAccess(workspaceId, actor);
+    return this.db.select().from(reportSnapshots).where(eq(reportSnapshots.workspaceId, workspaceId)).orderBy(desc(reportSnapshots.createdAt));
   }
 }

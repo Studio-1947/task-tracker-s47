@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AdminDashboard, MemberDashboard } from '@task-tracker/shared';
 import { http } from '../lib/api';
 
@@ -26,6 +26,17 @@ export interface OperationalDraftReport {
   summary: Record<string, unknown>;
 }
 
+export interface OperationalReportSnapshot {
+  id: string;
+  workspaceId: string;
+  reportType: 'WEDNESDAY_PROGRESS' | 'FRIDAY_OUTCOMES';
+  reportDate: string;
+  status: 'DRAFT' | 'APPROVED' | 'DISTRIBUTED';
+  recipientIds: string[];
+  approvedAt: string | null;
+  distributedAt: string | null;
+}
+
 export function useWednesdayReport(workspaceId: string | null) {
   return useQuery({
     queryKey: ['reports', 'wednesday', workspaceId],
@@ -42,3 +53,27 @@ export function useFridayReport(workspaceId: string | null) {
   });
 }
 
+export function useCreateReportDraft() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { workspaceId: string; reportType: 'WEDNESDAY_PROGRESS' | 'FRIDAY_OUTCOMES' }) =>
+      http.post<OperationalReportSnapshot>('/reports/drafts', input),
+    onSuccess: (row) => qc.invalidateQueries({ queryKey: ['reports', 'snapshots', row.workspaceId] }),
+  });
+}
+
+export function useApproveReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => http.post<OperationalReportSnapshot>(`/reports/${id}/approve`, {}),
+    onSuccess: (row) => qc.invalidateQueries({ queryKey: ['reports', 'snapshots', row.workspaceId] }),
+  });
+}
+
+export function useDistributeReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => http.post<OperationalReportSnapshot & { delivered: number }>(`/reports/${id}/distribute`, {}),
+    onSuccess: (row) => qc.invalidateQueries({ queryKey: ['reports', 'snapshots', row.workspaceId] }),
+  });
+}
