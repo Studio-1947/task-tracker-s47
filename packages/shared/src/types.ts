@@ -769,3 +769,60 @@ export interface NotificationSubscriptionInput {
 export interface NotificationCreatedEvent {
   notification: NotificationItem;
 }
+
+/* ── Shared metric layer (cards, drill-downs and exports read the same object) ── */
+export type CommitmentBasis = 'ORIGINAL' | 'REVISED';
+
+export interface RatioMetric {
+  numerator: number;
+  denominator: number;
+  /** Null when the denominator is zero (reported as "not applicable", never 0%). */
+  percentage: number | null;
+  notApplicable: boolean;
+  taskIds: string[];
+}
+
+export interface WorkspaceMetrics {
+  scope: {
+    workspaceId: string;
+    workspaceName: string;
+    from: string;
+    to: string;
+    basis: CommitmentBasis;
+    archivePolicy: 'ACTIVE_ONLY';
+    /** Parent/top-level work and subtasks are never combined in one count. */
+    countedLevel: 'TOP_LEVEL';
+    topLevelTasks: number;
+    subtasksExcluded: number;
+    generatedAt: string;
+    metricVersion: string;
+  };
+  openTasks: { count: number; taskIds: string[] };
+  overdueCommitments: { count: number; taskIds: string[]; asOf: string };
+  onTimeSubmission: RatioMetric;
+  onTimeAcceptance: RatioMetric;
+  firstPassAcceptance: RatioMetric;
+  reviewTurnaround: { sampleSize: number; medianMinutes: number | null; p90Minutes: number | null };
+  updateDiscipline: RatioMetric & { eligibleDays: number };
+  plannedUtilisation: {
+    allocatedMinutes: number;
+    availableMinutes: number;
+    percentage: number | null;
+    notApplicable: boolean;
+    missingAllocationUserIds: string[];
+    zeroCapacityUserIds: string[];
+  };
+  reworkEffort: {
+    reworkMinutes: number;
+    totalMinutes: number;
+    percentage: number | null;
+    entries: number;
+    returnedSubmissions: { count: number; taskIds: string[] };
+  };
+  /** Scope changes are reported separately from rework, never folded into it. */
+  scopeChanges: { count: number; netEstimateMinutes: number; byClassification: Record<string, number> };
+  /** Deliverables accepted with no recorded submission: excluded from quality metrics rather than back-filled. */
+  legacyUnverified: { count: number; taskIds: string[] };
+  reconciliation: { statusBreakdown: Record<string, number>; topLevelTotal: number; consistent: boolean };
+}
+

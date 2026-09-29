@@ -15,6 +15,7 @@ import { useWorkspaces } from '../hooks/useWorkspaces';
 import { useAuth } from '../stores/auth';
 import { apiBlob, ApiRequestError } from '../lib/api';
 import { Avatar } from '../components/Avatar';
+import { MetricsPanel } from '../components/MetricsPanel';
 import { HBarList, LineChart } from '../components/charts';
 import { Badge, Button, Card, ErrorState, Spinner } from '../components/ui';
 import { describeAudit, formatDate, formatDateTime, formatWorkingDuration, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
@@ -379,6 +380,7 @@ function AdminView() {
 
   return (
     <div className="mt-6 space-y-6 animate-fade-in">
+      <MetricsPanel />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <MonthlyReportDownloads />
         <OperationalDraftReportsCard />

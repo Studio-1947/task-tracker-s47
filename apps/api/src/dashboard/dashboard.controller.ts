@@ -5,6 +5,7 @@ import { CurrentUser, type RequestUser } from '../common/decorators/current-user
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { DashboardService } from './dashboard.service';
+import { MetricsService, type CommitmentBasis } from './metrics.service';
 import { MonthlyReportService } from './monthly-report.service';
 
 @Controller()
@@ -13,6 +14,7 @@ export class DashboardController {
   constructor(
     private readonly dashboard: DashboardService,
     private readonly monthlyReports: MonthlyReportService,
+    private readonly metrics: MetricsService,
   ) {}
 
   private reportMonth(month?: string): string {
@@ -65,9 +67,44 @@ export class DashboardController {
     return this.dashboard.generateFridayReport(workspaceId, user);
   }
 
+  private basis(value?: string): CommitmentBasis {
+    if (value === undefined || value === 'ORIGINAL') return 'ORIGINAL';
+    if (value === 'REVISED') return 'REVISED';
+    throw new BadRequestException('basis must be ORIGINAL or REVISED');
+  }
+
   @Get('metrics/workspace')
-  workspaceMetrics(@Query('workspaceId') workspaceId: string, @Query('from') from: string, @Query('to') to: string, @CurrentUser() user: RequestUser) {
+  workspaceMetrics(
+    @Query('workspaceId') workspaceId: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+    @Query('basis') basis: string | undefined,
+    @CurrentUser() user: RequestUser,
+  ) {
     if (!workspaceId || !from || !to) throw new BadRequestException('workspaceId, from and to are required');
-    return this.dashboard.workspaceMetrics(workspaceId, from, to, user);
+    return this.metrics.workspaceMetrics(workspaceId, from, to, user, this.basis(basis)).catch((e: Error) => {
+      if (e.message === 'Invalid metric period') throw new BadRequestException(e.message);
+      throw e;
+    });
+  }
+
+  /** The same figures as `metrics/workspace`, as an export built from that exact object. */
+  @Get('metrics/workspace.csv')
+  async workspaceMetricsCsv(
+    @Query('workspaceId') workspaceId: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+    @Query('basis') basis: string | undefined,
+    @CurrentUser() user: RequestUser,
+    @Res() res: Response,
+  ): Promise<void> {
+    if (!workspaceId || !from || !to) throw new BadRequestException('workspaceId, from and to are required');
+    const m = await this.metrics.workspaceMetrics(workspaceId, from, to, user, this.basis(basis)).catch((e: Error) => {
+      if (e.message === 'Invalid metric period') throw new BadRequestException(e.message);
+      throw e;
+    });
+    res.type('text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="workspace-metrics-${m.scope.from.slice(0, 10)}.csv"`);
+    res.send(await this.metrics.workspaceMetricsCsv(m));
   }
 }

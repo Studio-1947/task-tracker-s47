@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { and, asc, eq, gte, inArray, lt, or, sql } from 'drizzle-orm';
 import { DRIZZLE, type Database } from '../database/database.module';
+import { TASK_STATUSES } from '@task-tracker/shared';
 import { projects, taskAssignees, tasks, users, workspaces } from '../database/schema';
 
 type MonthlyTaskRow = {
@@ -48,9 +49,13 @@ export class MonthlyReportService {
 
   private async data(month: string): Promise<MonthlyReport> {
     const { start, end, label } = this.range(month);
-    const activeInMonth = or(
-      and(gte(tasks.createdAt, start), lt(tasks.createdAt, end)),
-      and(gte(tasks.completedAt, start), lt(tasks.completedAt, end)),
+    // Same archive policy as the dashboard and metrics (active, non-archived work only).
+    const activeInMonth = and(
+      eq(tasks.isArchived, false),
+      or(
+        and(gte(tasks.createdAt, start), lt(tasks.createdAt, end)),
+        and(gte(tasks.completedAt, start), lt(tasks.completedAt, end)),
+      ),
     );
     const rows = await this.db
       .select({
@@ -100,7 +105,7 @@ export class MonthlyReportService {
     const completed = rows.filter((row) => row.completedAt && row.completedAt >= start && row.completedAt < end).length;
     const overdueAtMonthEnd = rows.filter((row) => row.dueDate && row.dueDate < end && (!row.completedAt || row.completedAt >= end)).length;
     const openAtMonthEnd = rows.filter((row) => row.createdAt < end && (!row.completedAt || row.completedAt >= end)).length;
-    const statusCounts = Object.fromEntries(['TODO', 'IN_PROGRESS', 'DONE'].map((status) => [status, 0])) as Record<string, number>;
+    const statusCounts = Object.fromEntries(TASK_STATUSES.map((status) => [status, 0])) as Record<string, number>;
     for (const row of rows) statusCounts[row.status] = (statusCounts[row.status] ?? 0) + 1;
 
     const workspaceMap = new Map<string, { created: number; completed: number; overdue: number }>();
@@ -128,6 +133,15 @@ export class MonthlyReportService {
       .map(([name, values]) => ({ name, ...values }))
       .sort((a, b) => b.completed - a.completed || b.assigned - a.assigned || a.name.localeCompare(b.name));
 
+    const mismatches = [
+      Object.values(statusCounts).reduce((a, b) => a + b, 0) !== rows.length ? 'status counts do not sum to the task total' : null,
+      workspaceRows.reduce((a, r) => a + r.created, 0) !== created ? 'workspace created does not sum to the total' : null,
+      workspaceRows.reduce((a, r) => a + r.completed, 0) !== completed ? 'workspace completed does not sum to the total' : null,
+      workspaceRows.reduce((a, r) => a + r.overdue, 0) !== overdueAtMonthEnd ? 'workspace overdue does not sum to the total' : null,
+    ].filter((m): m is string => !!m);
+    // An export that disagrees with itself must fail loudly, not ship.
+    if (mismatches.length) throw new Error(`Monthly report failed reconciliation: ${mismatches.join('; ')}`);
+
     return {
       month,
       label,
@@ -147,11 +161,20 @@ export class MonthlyReportService {
     const report = await this.data(month);
     const lines = [
       ['Monthly Task Report', report.label],
+      ['Scope', 'All workspaces; active (non-archived) tasks created or completed in the month'],
+      ['Generated at', new Date().toISOString()],
+      ['Definitions', 'Overdue at month end = due before month end and not completed by then; Open at month end = created before month end and not completed by then'],
+      ['Reconciliation', `OK: ${report.tasks.length} task(s); workspace and status breakdowns sum to these totals`],
       ['Created', report.created],
       ['Completed', report.completed],
       ['Completion rate', `${report.completionRate}%`],
       ['Open at month end', report.openAtMonthEnd],
       ['Overdue at month end', report.overdueAtMonthEnd],
+      ['Status counts', TASK_STATUSES.map((st) => `${st}=${report.statusCounts[st] ?? 0}`).join(' ')],
+      [],
+      ['Workspace', 'Created', 'Completed', 'Overdue at month end'],
+      ...report.workspaceRows.map((row) => [row.name, row.created, row.completed, row.overdue]),
+      ['Total', report.created, report.completed, report.overdueAtMonthEnd],
       [],
       ['Task ref', 'Title', 'Workspace', 'Project', 'Status', 'Priority', 'Assignees', 'Due date', 'Created', 'Completed'],
       ...report.tasks.map((task) => [task.ref, task.title, task.workspace, task.project, task.status, task.priority, task.assignees, dateCell(task.dueDate), dateCell(task.createdAt), dateCell(task.completedAt)]),
@@ -230,6 +253,7 @@ export class MonthlyReportService {
       const statuses = [
         { label: 'To do', value: report.statusCounts.TODO ?? 0, color: '#94a3b8' },
         { label: 'In progress', value: report.statusCounts.IN_PROGRESS ?? 0, color: '#f59e0b' },
+        { label: 'In review', value: report.statusCounts.IN_REVIEW ?? 0, color: '#6366f1' },
         { label: 'Done', value: report.statusCounts.DONE ?? 0, color: '#10b981' },
       ];
       pie(105, doc.y + 55, 42, statuses);
@@ -262,7 +286,7 @@ export class MonthlyReportService {
         ? `No tasks were created in ${report.label}. ${report.completed} tasks were completed from existing work.`
         : `${report.completed} of ${report.created} newly created tasks were completed (${report.completionRate}%). ${report.openAtMonthEnd} tasks remained open at month end, including ${report.overdueAtMonthEnd} overdue tasks.`;
       doc.font('Helvetica').fontSize(10).fillColor('#334155').text(summary, { lineGap: 3 });
-      doc.moveDown(0.4).fontSize(9).text(`Status across monthly activity: To do ${report.statusCounts.TODO ?? 0} | In progress ${report.statusCounts.IN_PROGRESS ?? 0} | Done ${report.statusCounts.DONE ?? 0}`);
+      doc.moveDown(0.4).fontSize(9).text(`Status across monthly activity: To do ${report.statusCounts.TODO ?? 0} | In progress ${report.statusCounts.IN_PROGRESS ?? 0} | In review ${report.statusCounts.IN_REVIEW ?? 0} | Done ${report.statusCounts.DONE ?? 0}`);
 
       heading('Workspace performance');
       const workspaceColumns = [{ label: 'Workspace', x: 42, width: 230 }, { label: 'Created', x: 280, width: 58 }, { label: 'Completed', x: 346, width: 70 }, { label: 'Overdue', x: 424, width: 58 }, { label: 'Rate', x: 490, width: 55 }];

@@ -31,6 +31,7 @@
     "test:reserved": "node scripts/reserved-time-smoke.mjs",
     "test:updates": "node scripts/update-overdue-smoke.mjs",
     "test:leave": "node scripts/leave-controls-smoke.mjs",
+    "test:metrics": "node scripts/metrics-reconciliation-smoke.mjs",
     "test:final": "node scripts/final-improvements-smoke.mjs",
     "test:stress": "node scripts/stress-test.mjs",
     "verify:improvements": "pnpm typecheck && pnpm test && pnpm build",
