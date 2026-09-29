@@ -141,7 +141,13 @@ export function MemberSwimlanes({
                       day={d}
                       slot={slot}
                       items={items
-                        .filter((i) => i.user.id === m.user.id && i.dayDate === d && i.slot === slot)
+                        .filter(
+                          (i) =>
+                            (i.user.id === m.user.id ||
+                              i.assignees.some((assignee) => assignee.id === m.user.id)) &&
+                            i.dayDate === d &&
+                            i.slot === slot,
+                        )
                         .sort((a, b) => a.position - b.position || a.createdAt.localeCompare(b.createdAt))}
                       isAdmin={isAdmin}
                       currentUserId={currentUserId}
@@ -204,7 +210,6 @@ function SwimlaneCell({
   const isMine = member.user.id === currentUserId;
   // You fill your own lane; an admin can also plan on somebody else's behalf.
   const canAdd = canWrite && (isMine || isAdmin);
-  const canEdit = isAdmin || (isMine && !board.isLocked);
 
   return (
     <div
@@ -232,18 +237,21 @@ function SwimlaneCell({
       </div>
 
       <div className="space-y-1">
-        {items.map((item) => (
-          <BoardItemCard
-            key={`${item.id}-${item.dayDate}`}
-            item={item}
-            compact
-            draggable={canEdit}
-            canToggle={canEdit}
-            onOpen={() => onOpen(item.id)}
-            onError={onError}
-            onDragStart={onDragStart}
-          />
-        ))}
+        {items.map((item) => {
+          const canEditItem = isAdmin || (item.user.id === currentUserId && !board.isLocked);
+          return (
+            <BoardItemCard
+              key={`${item.id}-${item.dayDate}`}
+              item={item}
+              compact
+              draggable={canEditItem}
+              canToggle={canEditItem}
+              onOpen={() => onOpen(item.id)}
+              onError={onError}
+              onDragStart={onDragStart}
+            />
+          );
+        })}
       </div>
 
       {canAdd ? (

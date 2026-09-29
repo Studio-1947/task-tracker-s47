@@ -483,13 +483,20 @@ export class MeetingsService {
     const notes = noteRows.map((r) => this.toNote(r, refs));
     const moodByUser = new Map(moodRows.map((m) => [m.userId, this.toMood(m, refs)]));
 
-    // A member shows up on the board if they own a card or checked in a mood.
+    // A member shows up on the board if they own or are assigned to a card, or
+    // checked in a mood. A tagged card contributes to each assignee's personal
+    // planning lane while remaining a single card in the team-wide totals.
     const memberIds = [
-      ...new Set([...itemRows.map((i) => i.userId), ...moodRows.map((m) => m.userId)]),
+      ...new Set([
+        ...items.flatMap((item) => [item.user.id, ...item.assignees.map((assignee) => assignee.id)]),
+        ...moodRows.map((m) => m.userId),
+      ]),
     ];
     const members: BoardMemberSummary[] = memberIds
       .map((uid) => {
-        const mine = items.filter((i) => i.user.id === uid);
+        const mine = items.filter(
+          (item) => item.user.id === uid || item.assignees.some((assignee) => assignee.id === uid),
+        );
         return {
           user: this.refOrUnknown(refs, uid),
           mood: moodByUser.get(uid) ?? null,
@@ -510,7 +517,9 @@ export class MeetingsService {
       .map(([key, group]) => ({
         project: key === '' ? null : (group[0]?.project ?? null),
         progress: progressOf(group),
-        memberCount: new Set(group.map((i) => i.user.id)).size,
+        memberCount: new Set(
+          group.flatMap((item) => [item.user.id, ...item.assignees.map((assignee) => assignee.id)]),
+        ).size,
       }))
       .sort(
         (a, b) =>

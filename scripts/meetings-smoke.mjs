@@ -393,16 +393,30 @@ async function main() {
       'a project option carries its workspace and task prefix',
     );
 
+    const projectMembersBefore = await call(admin, 'GET', `/workspaces/${project.workspaceId}/members`);
+    const memberWasInProject = projectMembersBefore.body?.some((entry) => entry.id === created.body.id);
+    if (!memberWasInProject) {
+      const addProjectMember = await call(admin, 'POST', `/workspaces/${project.workspaceId}/members`, {
+        add: [created.body.id],
+      });
+      assert(addProjectMember.status === 201, 'tagged person added to the project workspace');
+    }
+
     const filed = await call(admin, 'POST', `/meeting-boards/${board.id}/items`, {
       dayDate: mon,
       slot: 'SECOND',
       title: 'Ship the pricing page',
       note: 'Agreed in the meeting',
       projectId: project.id,
+      assigneeIds: [created.body.id],
     });
     assert(filed.status === 201, 'a card can be filed under a project', JSON.stringify(filed.body));
     assert(filed.body?.project?.id === project.id, 'the card reports the project it is filed under');
     assert(Boolean(filed.body?.taskId), 'filing the card mirrors it as a workspace task');
+    assert(
+      filed.body?.assignees?.some((assignee) => assignee.id === created.body.id),
+      'tagged person is returned as a card assignee',
+    );
     assert(
       filed.body?.taskRef?.startsWith(`${project.taskPrefix}-`),
       'the mirror task gets a human-readable ref',
@@ -415,6 +429,28 @@ async function main() {
     assert(task.body?.description === 'Agreed in the meeting', 'the card note becomes the description');
     assert(task.body?.status === 'TODO', 'PENDING maps to TODO', String(task.body?.status));
     assert(task.body?.projectId === project.id, 'the mirror task lands in the chosen project');
+    assert(
+      task.body?.assignees?.some((assignee) => assignee.id === created.body.id),
+      'tagged person is assigned to the mirrored task',
+    );
+
+    const assignedBoard = (await call(admin, 'GET', `/meeting-boards?date=${board.weekStart}`)).body;
+    const assignedCard = assignedBoard.items.find((item) => item.id === filed.body.id);
+    const taggedMemberSummary = assignedBoard.members.find((summary) => summary.user.id === created.body.id);
+    const expectedTaggedTotal = assignedBoard.items.filter(
+      (item) =>
+        item.user.id === created.body.id ||
+        item.assignees.some((assignee) => assignee.id === created.body.id),
+    ).length;
+    assert(
+      assignedCard?.assignees?.some((assignee) => assignee.id === created.body.id),
+      'tagged assignment survives a fresh board read',
+    );
+    assert(
+      taggedMemberSummary?.progress?.total === expectedTaggedTotal,
+      "tagged card contributes to the assignee's member lane and roll-up",
+      `${taggedMemberSummary?.progress?.total} vs ${expectedTaggedTotal}`,
+    );
 
     // Board -> task.
     await call(admin, 'PATCH', `/meeting-boards/items/${filed.body.id}`, {
@@ -471,6 +507,9 @@ async function main() {
     // That surviving task is the assertion's whole point, so the suite has to be
     // the one to clear it up — otherwise every run leaves one behind.
     await call(admin, 'DELETE', `/tasks/${filed.body.taskId}`);
+    if (!memberWasInProject) {
+      await call(admin, 'POST', `/workspaces/${project.workspaceId}/members`, { remove: [created.body.id] });
+    }
   }
 
   console.log('\n── validation & cascade ──');

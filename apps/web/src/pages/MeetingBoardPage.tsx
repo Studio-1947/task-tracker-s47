@@ -130,10 +130,13 @@ export function MeetingBoardPage() {
     return [...people].sort((a, b) => a.name.localeCompare(b.name));
   }, [allUsers, board?.members, isAdmin]);
 
+  const isAssignedTo = (item: BoardItem, userId: string) =>
+    item.user.id === userId || item.assignees.some((assignee) => assignee.id === userId);
+
   const matches = (i: BoardItem) =>
     (ownerFilter === 'all' ||
-      (ownerFilter === 'mine' && i.user.id === user?.id) ||
-      (ownerFilter === 'selected' && watchedMemberIds.includes(i.user.id))) &&
+      (ownerFilter === 'mine' && Boolean(user?.id && isAssignedTo(i, user.id))) ||
+      (ownerFilter === 'selected' && watchedMemberIds.some((id) => isAssignedTo(i, id)))) &&
     (projectFilter === 'all' ||
       (projectFilter === 'none' ? i.project === null : i.project?.id === projectFilter));
 
@@ -261,7 +264,8 @@ export function MeetingBoardPage() {
     if (sameCell && dragged.user.id === userId) return;
     const occupied = board.items.filter((i) => i.dayDate === day && i.slot === slot).length;
 
-    if (dragged.user.id !== userId) {
+    const alreadyAssigned = isAssignedTo(dragged, userId);
+    if (dragged.user.id !== userId && !alreadyAssigned) {
       if (!isAdmin) return;
       void run(() =>
         updateItem.mutateAsync({
