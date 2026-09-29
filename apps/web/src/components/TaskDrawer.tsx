@@ -24,6 +24,8 @@ import {
   useTaskAttachments,
   useSubmitTask,
   useReviewTask,
+  useTaskDelegations,
+  useDelegateReview,
   useUpdateTask,
   useTimeSummary,
   useLogTimeEntry,
@@ -306,7 +308,7 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
             ) : null}
 
             <Attachments taskId={taskId} workspaceId={workspaceId} />
-            <ReviewWorkflow taskId={taskId} workspaceId={workspaceId} reviewerId={task.reviewer?.id ?? null} status={task.status} />
+            <ReviewWorkflow taskId={taskId} workspaceId={workspaceId} reviewerId={task.reviewer?.id ?? null} status={task.status} members={members} />
 
             <section>
               <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">Comments</h3>
@@ -377,7 +379,53 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
   );
 }
 
-function ReviewWorkflow({ taskId, workspaceId, reviewerId, status }: { taskId: string; workspaceId: string; reviewerId: string | null; status: TaskStatus }) {
+function DelegationPanel({ taskId, reviewerId, members, delegations, canDelegate }: { taskId: string; reviewerId: string; members: UserRef[]; delegations: { id: string; delegate: UserRef; delegator: UserRef; effectiveFrom: string; effectiveTo: string; reason: string }[]; canDelegate: boolean }) {
+  const delegate = useDelegateReview(taskId);
+  const [open, setOpen] = useState(false);
+  const [delegateId, setDelegateId] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [reason, setReason] = useState('');
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    delegate.mutate(
+      { delegateId, effectiveFrom: new Date(from).toISOString(), effectiveTo: new Date(to).toISOString(), reason: reason.trim() },
+      { onSuccess: () => { setOpen(false); setDelegateId(''); setFrom(''); setTo(''); setReason(''); } },
+    );
+  };
+  const field = 'w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800 dark:bg-[#252525] dark:text-white';
+  return (
+    <div className="mt-4 border-t border-slate-200 pt-3 dark:border-slate-800">
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Review delegation</h4>
+        {canDelegate ? <button type="button" className="text-xs font-semibold text-indigo-600 hover:underline dark:text-indigo-400" onClick={() => setOpen((o) => !o)}>{open ? 'Cancel' : 'Delegate'}</button> : null}
+      </div>
+      {delegations.length === 0 ? <p className="mt-1 text-xs text-slate-500">No delegation for this task.</p> : null}
+      {delegations.map((d) => (
+        <p key={d.id} className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+          {d.delegate.name} · {formatDateTime(d.effectiveFrom)} → {formatDateTime(d.effectiveTo)} · {d.reason}
+        </p>
+      ))}
+      {open ? (
+        <form onSubmit={submit} className="mt-3 space-y-2">
+          <select aria-label="Delegate" className={field} value={delegateId} onChange={(e) => setDelegateId(e.target.value)} required>
+            <option value="">Choose a delegate…</option>
+            {members.filter((m) => m.id !== reviewerId).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <input aria-label="Delegation start" type="datetime-local" className={field} value={from} onChange={(e) => setFrom(e.target.value)} required />
+            <input aria-label="Delegation end" type="datetime-local" className={field} value={to} onChange={(e) => setTo(e.target.value)} required />
+          </div>
+          <input aria-label="Delegation reason" className={field} placeholder="Reason (e.g. on leave)" value={reason} onChange={(e) => setReason(e.target.value)} required />
+          <Button type="submit" disabled={delegate.isPending}>Save delegation</Button>
+          {delegate.error ? <p className="text-sm text-red-600">{delegate.error instanceof ApiRequestError ? delegate.error.message : 'Could not delegate'}</p> : null}
+        </form>
+      ) : null}
+    </div>
+  );
+}
+
+function ReviewWorkflow({ taskId, workspaceId, reviewerId, status, members }: { taskId: string; workspaceId: string; reviewerId: string | null; status: TaskStatus; members: UserRef[] }) {
   const { user } = useAuth();
   const { data: attachments } = useTaskAttachments(taskId);
   const { data: submissions } = useTaskSubmissions(taskId);
@@ -387,7 +435,11 @@ function ReviewWorkflow({ taskId, workspaceId, reviewerId, status }: { taskId: s
   const [evidenceAttachmentId, setEvidenceAttachmentId] = useState('');
   const [reviewNote, setReviewNote] = useState('');
   const pending = submissions?.find((s) => s.status === 'PENDING');
-  const canReview = user?.role === 'ADMIN' || user?.id === reviewerId;
+  const { data: delegations } = useTaskDelegations(taskId);
+  const nowMs = Date.now();
+  const activeDelegation = delegations?.find((d) => new Date(d.effectiveFrom).getTime() <= nowMs && new Date(d.effectiveTo).getTime() >= nowMs);
+  const canReview = user?.role === 'ADMIN' || user?.id === reviewerId || user?.id === activeDelegation?.delegate.id;
+  const canDelegate = user?.role === 'ADMIN' || user?.id === reviewerId;
   const error = submit.error ?? review.error;
   return (
     <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
@@ -427,6 +479,9 @@ function ReviewWorkflow({ taskId, workspaceId, reviewerId, status }: { taskId: s
           {s.reviewNote ? <p className="mt-1 text-slate-600 dark:text-slate-300">{s.reviewNote}</p> : null}
         </div>
       ))}
+      {reviewerId ? (
+        <DelegationPanel taskId={taskId} reviewerId={reviewerId} members={members} delegations={delegations ?? []} canDelegate={canDelegate} />
+      ) : null}
       {error ? <p className="mt-2 text-sm text-red-600">{error instanceof ApiRequestError ? error.message : 'Review action failed'}</p> : null}
     </section>
   );

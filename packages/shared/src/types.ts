@@ -227,6 +227,24 @@ export interface TaskSubmission {
   decidedAt: string | null;
 }
 
+export interface ReviewQueueItem {
+  submissionId: string;
+  taskId: string;
+  taskRef: string;
+  taskTitle: string;
+  workspaceId: string;
+  workspaceName: string;
+  submitter: UserRef;
+  reviewer: UserRef | null;
+  /** Set when the viewer sees this item only through an active delegation. */
+  delegatedBy: UserRef | null;
+  submittedAt: string;
+  /** Working minutes (office calendar) the submission has waited; null if no calendar. */
+  waitingWorkingMinutes: number | null;
+  /** Wall-clock minutes waited, for contrast with the working-time figure. */
+  waitingWallMinutes: number;
+}
+
 interface AttachmentBase {
   id: string;
   /** Uploaded file: the original filename. Link: the display title. */

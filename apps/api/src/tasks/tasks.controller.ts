@@ -118,6 +118,17 @@ export class WorkspaceCapacityController {
   }
 }
 
+/** The actor's review queue across workspaces. */
+@Controller('review-queue')
+export class ReviewQueueController {
+  constructor(private readonly tasks: TasksService) {}
+
+  @Get()
+  list(@CurrentUser() user: RequestUser) {
+    return this.tasks.reviewQueue(user);
+  }
+}
+
 /** Task-scoped operations. */
 @Controller('tasks')
 export class TasksController {

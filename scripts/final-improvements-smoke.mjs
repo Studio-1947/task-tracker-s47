@@ -14,8 +14,14 @@ async function main(){
   const delegation=await call(r.accessToken,'POST',`/tasks/${task.body.id}/delegate-review`,{delegateId:m.user.id,effectiveFrom:new Date(now.getTime()-60000).toISOString(),effectiveTo:later.toISOString(),reason:'Coverage'});
   ok(delegation.status===201,'effective-dated reviewer delegation created',JSON.stringify(delegation.body));
   const evidence=await call(a.accessToken,'POST',`/tasks/${task.body.id}/attachments/links`,{url:'https://example.com/final',title:'Final evidence'}); const submission=await call(a.accessToken,'POST',`/tasks/${task.body.id}/submissions`,{evidenceAttachmentId:evidence.body.id,note:'Ready'});
+  const queue=await call(m.accessToken,'GET','/review-queue'); const qi=queue.body?.find?.(x=>x.submissionId===submission.body.id);
+  ok(queue.status===200 && !!qi && qi.delegatedBy?.id===r.user.id && (qi.waitingWorkingMinutes===null||qi.waitingWorkingMinutes>=0) && qi.waitingWallMinutes>=0,'delegate review queue shows delegated item with working-time waiting',JSON.stringify(queue.body));
+  const ownerQueue=await call(r.accessToken,'GET','/review-queue'); ok(ownerQueue.body?.some?.(x=>x.submissionId===submission.body.id && x.delegatedBy===null),'assigned reviewer still sees own item, not marked delegated');
+  const stranger=await call(a.accessToken,'POST','/users',{name:'Queue Stranger',email:`queue_${Date.now()}@example.com`,role:'MEMBER'}); const sg=await login(stranger.body.email,stranger.body.tempPassword);
+  const strangerQueue=await call(sg.accessToken,'GET','/review-queue'); ok(strangerQueue.status===200 && !strangerQueue.body.some(x=>x.submissionId===submission.body.id),'unrelated member does not see the item in the queue');
   const decision=await call(m.accessToken,'POST',`/tasks/${task.body.id}/submissions/${submission.body.id}/review`,{decision:'ACCEPTED',note:'Accepted as active delegate'});
   ok(decision.status===201,'active delegate can review only delegated task',JSON.stringify(decision.body));
+  const after=await call(m.accessToken,'GET','/review-queue'); ok(!after.body.some(x=>x.submissionId===submission.body.id),'decided submission leaves the queue');
   const group=await call(a.accessToken,'POST','/calendar/schedule-groups',{name:`Final group ${Date.now()}`,timezone:'Asia/Kolkata',workdays:[1,2,3,4,5],startMinute:600,endMinute:1140,unpaidBreakMinutes:60,effectiveFrom:'2026-09-01'});
   const assignment=await call(a.accessToken,'POST',`/calendar/schedule-groups/${group.body.id}/assignments`,{userId:m.user.id,effectiveFrom:'2026-09-01'});
   ok(assignment.status===201,'employee assigned to effective-dated schedule group',JSON.stringify(assignment.body));

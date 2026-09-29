@@ -12,6 +12,8 @@ import type {
   TaskSubmission,
   SubmitTaskInput,
   ReviewTaskInput,
+  ReviewQueueItem,
+  DelegateReviewInput,
   UpdateTaskInput,
   UserRef,
   WorkspaceSummary,
@@ -105,6 +107,7 @@ export function useSubmitTask(taskId: string, workspaceId: string) {
       qc.invalidateQueries({ queryKey: ['task', taskId, 'submissions'] });
       qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });
       qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
+      qc.invalidateQueries({ queryKey: ['review-queue'] });
     },
   });
 }
@@ -390,4 +393,35 @@ export function useRemoveDependency(workspaceId: string) {
       qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
     },
   });
-}
+}
+
+export function useReviewQueue() {
+  return useQuery({
+    queryKey: ['review-queue'],
+    queryFn: () => http.get<ReviewQueueItem[]>('/review-queue'),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useTaskDelegations(taskId: string | null) {
+  return useQuery({
+    queryKey: ['task', taskId, 'delegations'],
+    queryFn: () =>
+      http.get<
+        { id: string; delegator: UserRef; delegate: UserRef; effectiveFrom: string; effectiveTo: string; reason: string; createdAt: string }[]
+      >(`/tasks/${taskId}/delegations`),
+    enabled: !!taskId,
+  });
+}
+
+export function useDelegateReview(taskId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: DelegateReviewInput) => http.post(`/tasks/${taskId}/delegate-review`, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'delegations'] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });
+      qc.invalidateQueries({ queryKey: ['review-queue'] });
+    },
+  });
+}

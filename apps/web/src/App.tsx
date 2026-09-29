@@ -8,6 +8,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AttendancePage } from './pages/AttendancePage';
 import { MeetingBoardPage } from './pages/MeetingBoardPage';
+import { ReviewQueuePage } from './pages/ReviewQueuePage';
 import { LoginPage } from './pages/LoginPage';
 import { UsersPage } from './pages/UsersPage';
 import { WorkspacesPage } from './pages/WorkspacesPage';
@@ -70,6 +71,7 @@ export default function App() {
           <Route path="workspaces/:id" element={<WorkspaceTasksPage />} />
           <Route path="chat" element={<ChatPage />} />
           <Route path="attendance" element={<AttendancePage />} />
+          <Route path="reviews" element={<ReviewQueuePage />} />
           <Route path="meetings" element={<MeetingBoardPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route element={<RequireAdmin />}>

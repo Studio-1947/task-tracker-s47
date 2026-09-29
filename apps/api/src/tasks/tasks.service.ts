@@ -23,6 +23,7 @@ import type {
   ReopenTaskInput,
   AllocateTimeEntryInput,
   DelegateReviewInput,
+  ReviewQueueItem,
   UserRef,
 } from '@task-tracker/shared';
 import type { CapacityAllocationInput } from '@task-tracker/shared';
@@ -46,6 +47,7 @@ import {
   tasks,
   users,
   workspaceMembers,
+  workspaces,
   type TaskAttachmentRow,
   type TaskRow,
 } from '../database/schema';
@@ -987,6 +989,61 @@ export class TasksService {
       reason: r.reason,
       createdAt: r.createdAt.toISOString(),
     }));
+  }
+
+  /**
+   * Pending submissions the actor may decide: as assigned reviewer, as an active
+   * delegate, or (admin) everything. Waiting time is counted in working minutes
+   * so a Friday-evening submission doesn't look three days stale on Monday.
+   */
+  async reviewQueue(actor: Actor): Promise<ReviewQueueItem[]> {
+    const now = new Date();
+    const rows = await this.db
+      .select({ sub: taskSubmissions, task: tasks, workspaceName: workspaces.name, prefix: projects.taskPrefix })
+      .from(taskSubmissions)
+      .innerJoin(tasks, eq(tasks.id, taskSubmissions.taskId))
+      .innerJoin(workspaces, eq(workspaces.id, tasks.workspaceId))
+      .innerJoin(projects, eq(projects.id, tasks.projectId))
+      .where(and(eq(taskSubmissions.status, 'PENDING'), eq(tasks.isArchived, false)))
+      .orderBy(asc(taskSubmissions.submittedAt));
+    const taskIds = rows.map((r) => r.task.id);
+    const delegations = taskIds.length
+      ? await this.db.select().from(reviewerDelegations).where(and(inArray(reviewerDelegations.taskId, taskIds), lte(reviewerDelegations.effectiveFrom, now), gte(reviewerDelegations.effectiveTo, now))).orderBy(desc(reviewerDelegations.createdAt))
+      : [];
+    const activeDelegation = new Map<string, (typeof delegations)[number]>();
+    for (const d of delegations) if (!activeDelegation.has(d.taskId)) activeDelegation.set(d.taskId, d);
+    const managerCache = new Map<string, boolean>();
+    const visible: typeof rows = [];
+    for (const r of rows) {
+      const delegation = activeDelegation.get(r.task.id);
+      let ok = actor.role === Role.ADMIN || r.task.reviewerId === actor.id || delegation?.delegateId === actor.id;
+      if (!ok) {
+        if (!managerCache.has(r.task.workspaceId)) managerCache.set(r.task.workspaceId, await this.workspaces.isManager(r.task.workspaceId, actor));
+        ok = managerCache.get(r.task.workspaceId)!;
+      }
+      if (ok) visible.push(r);
+    }
+    const [people, cal] = await Promise.all([
+      this.userRefs(visible.flatMap((r) => [r.sub.submitterId, r.task.reviewerId, activeDelegation.get(r.task.id)?.delegatorId ?? null])),
+      this.calendar.get(),
+    ]);
+    return visible.map((r) => {
+      const d = activeDelegation.get(r.task.id);
+      return {
+        submissionId: r.sub.id,
+        taskId: r.task.id,
+        taskRef: this.ref(r.prefix, r.task.number),
+        taskTitle: r.task.title,
+        workspaceId: r.task.workspaceId,
+        workspaceName: r.workspaceName,
+        submitter: people.get(r.sub.submitterId)!,
+        reviewer: r.task.reviewerId ? people.get(r.task.reviewerId) ?? null : null,
+        delegatedBy: d && d.delegateId === actor.id && r.task.reviewerId !== actor.id ? people.get(d.delegatorId) ?? null : null,
+        submittedAt: r.sub.submittedAt.toISOString(),
+        waitingWorkingMinutes: cal.settings ? workingMinutesElapsed(r.sub.submittedAt.toISOString(), now.toISOString(), cal.settings, cal.exceptions) : null,
+        waitingWallMinutes: Math.max(0, Math.round((now.getTime() - r.sub.submittedAt.getTime()) / 60000)),
+      };
+    });
   }
 
   async reviewSubmission(taskId: string, submissionId: string, actor: Actor, input: ReviewTaskInput): Promise<TaskSubmission> {
