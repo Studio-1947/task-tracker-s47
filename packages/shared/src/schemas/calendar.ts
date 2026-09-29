@@ -210,3 +210,24 @@ export function apportionMinutes(totalMinutes: number, segments: Pick<TimeSegmen
 export function intervalsOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
   return aStart.getTime() < bEnd.getTime() && bStart.getTime() < aEnd.getTime();
 }
+
+/** The instant at which the office-local calendar day `date` (YYYY-MM-DD) begins. */
+export function localMidnight(date: string, timezone: string): Date {
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  const utcMidnight = Date.UTC(y, m - 1, d);
+  const p = zonedParts(new Date(utcMidnight), timezone);
+  const dayDiff = Math.round((Date.UTC(p.y, p.m - 1, p.d) - utcMidnight) / 86400000);
+  return new Date(utcMidnight - (dayDiff * 1440 + p.minuteOfDay) * 60000);
+}
+
+/** Merges overlapping/adjacent [start,end) epoch-ms intervals so nothing is counted twice. */
+export function mergeIntervals(intervals: Array<{ start: number; end: number }>): Array<{ start: number; end: number }> {
+  const sorted = intervals.filter((i) => i.end > i.start).sort((a, b) => a.start - b.start);
+  const out: Array<{ start: number; end: number }> = [];
+  for (const i of sorted) {
+    const last = out[out.length - 1];
+    if (last && i.start <= last.end) last.end = Math.max(last.end, i.end);
+    else out.push({ ...i });
+  }
+  return out;
+}

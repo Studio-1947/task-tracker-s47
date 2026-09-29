@@ -56,3 +56,31 @@ export function calculatePayableIndicator(scheduledMinutes: number, workedMinute
 export function personMinutes(entries: Array<{ durationMinutes: number }>): number {
   return entries.reduce((sum, entry) => sum + Math.max(0, entry.durationMinutes), 0);
 }
+
+/**
+ * Time a person has set aside that is not available for planned task work
+ * (meetings, training, …). Only its overlap with scheduled working hours
+ * reduces capacity, and overlapping reservations are never double-counted.
+ */
+export const reservedTimeSchema = z.object({
+  userId: z.string().uuid().optional(),
+  kind: z.enum(['MEETING', 'TRAINING', 'OTHER']).default('MEETING'),
+  title: z.string().trim().min(1).max(200),
+  startsAt: z.string().datetime(),
+  endsAt: z.string().datetime(),
+}).refine((v) => v.endsAt > v.startsAt, { message: 'End must be after the start', path: ['endsAt'] })
+  .refine((v) => new Date(v.endsAt).getTime() - new Date(v.startsAt).getTime() <= 7 * 86400000, { message: 'A reservation cannot exceed 7 days', path: ['endsAt'] });
+export type ReservedTimeInput = z.infer<typeof reservedTimeSchema>;
+
+export interface UnallocatedWorkItem {
+  taskId: string;
+  ref: string;
+  title: string;
+  workspaceId: string;
+  remainingMinutes: number;
+  allocatedMinutes: number;
+  /** Remaining effort no one has been planned against yet. */
+  unallocatedMinutes: number;
+  assigneeCount: number;
+  dueDate: string | null;
+}

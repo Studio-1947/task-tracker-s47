@@ -249,6 +249,22 @@ export const capacityAllocations = pgTable('capacity_allocations', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index('capacity_allocations_workspace_period_idx').on(t.workspaceId, t.periodStart, t.periodEnd)]);
 
+/** Time a person has set aside (meetings, training…) that reduces planned-work capacity. */
+export const reservedTimeBlocks = pgTable('reserved_time_blocks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  kind: varchar('kind', { length: 12 }).notNull().default('MEETING'),
+  title: varchar('title', { length: 200 }).notNull(),
+  startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+  endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+  createdById: uuid('created_by_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('reserved_time_blocks_user_range_idx').on(t.userId, t.startsAt, t.endsAt),
+  check('reserved_time_blocks_kind_check', sql`${t.kind} IN ('MEETING', 'TRAINING', 'OTHER')`),
+  check('reserved_time_blocks_range_check', sql`${t.endsAt} > ${t.startsAt}`),
+]);
+
 export type TaskTimeEntryRow = typeof taskTimeEntries.$inferSelect;
 
 export const taskBlockers = pgTable(

@@ -33,6 +33,7 @@ import {
   allocateTimeEntrySchema,
   delegateReviewSchema,
   logTimeEntrySchema,
+  reservedTimeSchema,
   capacityAllocationSchema,
   updateTaskSchema,
   type CreateCommentInput,
@@ -47,6 +48,7 @@ import {
   type AllocateTimeEntryInput,
   type DelegateReviewInput,
   type LogTimeEntryInput,
+  type ReservedTimeInput,
   type CapacityAllocationInput,
   type UpdateTaskInput,
 } from '@task-tracker/shared';
@@ -108,6 +110,11 @@ export class WorkspaceCapacityController {
     return this.tasks.removeCapacityAllocation(allocationId, user);
   }
 
+  @Get('unallocated')
+  unallocated(@Param('workspaceId', ParseUUIDPipe) workspaceId: string, @CurrentUser() user: RequestUser) {
+    return this.tasks.unallocatedWork(workspaceId, user);
+  }
+
   @Get('weekly')
   weekly(
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
@@ -117,6 +124,32 @@ export class WorkspaceCapacityController {
   ) {
     if (!periodStart || !periodEnd) throw new BadRequestException('periodStart and periodEnd are required');
     return this.tasks.weeklyCapacity(workspaceId, user, periodStart, periodEnd);
+  }
+}
+
+/** A person's reserved time (meetings, training) that reduces their planned-work capacity. */
+@Controller('reserved-time')
+export class ReservedTimeController {
+  constructor(private readonly tasks: TasksService) {}
+
+  @Get()
+  list(
+    @Query('userId') userId: string | undefined,
+    @Query('from') from: string | undefined,
+    @Query('to') to: string | undefined,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.tasks.listReservedTime(user, userId, from, to);
+  }
+
+  @Post()
+  add(@Body(new ZodValidationPipe(reservedTimeSchema)) body: ReservedTimeInput, @CurrentUser() user: RequestUser) {
+    return this.tasks.addReservedTime(user, body);
+  }
+
+  @Delete(':id')
+  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.tasks.removeReservedTime(id, user);
   }
 }
 

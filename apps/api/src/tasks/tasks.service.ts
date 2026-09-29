@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Logger } from '@nestjs/common';
-import { and, asc, count, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, gte, ilike, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import type {
   AuditEntry,
   CreateLinkAttachmentInput,
@@ -26,8 +26,8 @@ import type {
   ReviewQueueItem,
   UserRef,
 } from '@task-tracker/shared';
-import type { CapacityAllocationInput } from '@task-tracker/shared';
-import { AttachmentKind, AuditAction, Role, apportionMinutes, calculateCapacity, intervalsOverlap, localWorkDate, splitAcrossLocalDays, workingMinutesElapsed } from '@task-tracker/shared';
+import type { CapacityAllocationInput, ReservedTimeInput, UnallocatedWorkItem } from '@task-tracker/shared';
+import { AttachmentKind, AuditAction, Role, apportionMinutes, calculateCapacity, intervalsOverlap, localMidnight, localWorkDate, mergeIntervals, splitAcrossLocalDays, workingMinutesElapsed } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
 import {
   labels,
@@ -44,6 +44,8 @@ import {
   taskReopenings,
   reviewerDelegations,
   capacityAllocations,
+  reservedTimeBlocks,
+  leaveRequests,
   tasks,
   users,
   workspaceMembers,
@@ -1969,21 +1971,139 @@ export class TasksService {
       this.calendar.get(),
     ]);
 
-    // Scheduled minutes for the whole office over the period — a first-order
-    // figure shared by everyone; personal leave isn't subtracted here yet
-    // (tracked separately by the attendance module), so this is an upper
-    // bound on a given person's true available capacity, not the final word.
-    const scheduledMinutes = calendar.settings
-      ? workingMinutesElapsed(`${periodStart}T00:00:00.000Z`, `${periodEnd}T23:59:59.999Z`, calendar.settings, calendar.exceptions)
+    const settings = calendar.settings;
+    const tz = settings?.timezone ?? 'Asia/Kolkata';
+    const periodFrom = localMidnight(periodStart, tz);
+    const periodTo = localMidnight(this.nextDay(periodEnd), tz);
+
+    // Scheduled working minutes for the office over the period, before any personal time is taken out.
+    const scheduledMinutes = settings
+      ? workingMinutesElapsed(periodFrom.toISOString(), periodTo.toISOString(), settings, calendar.exceptions)
       : 0;
+    const workingIn = (intervals: Array<{ start: number; end: number }>) =>
+      settings
+        ? mergeIntervals(intervals).reduce((sum, i) => sum + workingMinutesElapsed(new Date(i.start).toISOString(), new Date(i.end).toISOString(), settings, calendar.exceptions), 0)
+        : 0;
+
+    const memberIds = members.map((m) => m.id);
+    const [reservations, leaves] = memberIds.length
+      ? await Promise.all([
+          this.db
+            .select()
+            .from(reservedTimeBlocks)
+            .where(and(inArray(reservedTimeBlocks.userId, memberIds), lt(reservedTimeBlocks.startsAt, periodTo), gt(reservedTimeBlocks.endsAt, periodFrom))),
+          this.db
+            .select()
+            .from(leaveRequests)
+            .where(and(inArray(leaveRequests.userId, memberIds), eq(leaveRequests.status, 'APPROVED'), lte(leaveRequests.startDate, periodEnd), gte(leaveRequests.endDate, periodStart))),
+        ])
+      : [[], []];
 
     const byUser = new Map<string, number>();
     for (const a of allocations) byUser.set(a.userId, (byUser.get(a.userId) ?? 0) + a.allocatedMinutes);
 
-    return members.map((m) => ({
-      user: { id: m.id, name: m.name, email: m.email, avatarKey: m.avatarKey },
-      ...calculateCapacity(scheduledMinutes, [], byUser.get(m.id) ?? 0),
-    }));
+    const clip = (start: number, end: number) => ({ start: Math.max(start, periodFrom.getTime()), end: Math.min(end, periodTo.getTime()) });
+    const halfDayEnd = settings ? (settings.startMinute + (settings.endMinute - settings.startMinute) / 2) * 60000 : 0;
+
+    return members.map((m) => {
+      const reserved = reservations.filter((r) => r.userId === m.id).map((r) => clip(r.startsAt.getTime(), r.endsAt.getTime()));
+      const leave = leaves
+        .filter((l) => l.userId === m.id)
+        .map((l) => {
+          const from = localMidnight(l.startDate, tz).getTime();
+          return clip(from, l.halfDay ? from + halfDayEnd : localMidnight(this.nextDay(l.endDate), tz).getTime());
+        });
+      const excludedWorking = workingIn([...reserved, ...leave]);
+      return {
+        user: { id: m.id, name: m.name, email: m.email, avatarKey: m.avatarKey },
+        ...calculateCapacity(scheduledMinutes, excludedWorking > 0 ? [{ start: 0, end: excludedWorking }] : [], byUser.get(m.id) ?? 0),
+        reservedMinutes: workingIn(reserved),
+        leaveMinutes: workingIn(leave),
+      };
+    });
+  }
+
+  private nextDay(date: string): string {
+    const d = new Date(`${date}T00:00:00.000Z`);
+    d.setUTCDate(d.getUTCDate() + 1);
+    return d.toISOString().slice(0, 10);
+  }
+
+  /**
+   * Open work whose remaining effort nobody has been planned against (PRD §7
+   * "unassigned work"): remaining estimate minus everything already allocated
+   * to the task. Also surfaces tasks with no assignee at all.
+   */
+  async unallocatedWork(workspaceId: string, actor: Actor): Promise<UnallocatedWorkItem[]> {
+    await this.workspaces.assertCanAccess(workspaceId, actor);
+    const rows = await this.db
+      .select({ task: tasks, prefix: projects.taskPrefix })
+      .from(tasks)
+      .innerJoin(projects, eq(projects.id, tasks.projectId))
+      .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.isArchived, false), sql`${tasks.status} <> 'DONE'`));
+    if (!rows.length) return [];
+    const ids = rows.map((r) => r.task.id);
+    const [allocs, assignees] = await Promise.all([
+      this.db
+        .select({ taskId: capacityAllocations.taskId, minutes: sql<number>`coalesce(sum(${capacityAllocations.allocatedMinutes}), 0)::int` })
+        .from(capacityAllocations)
+        .where(inArray(capacityAllocations.taskId, ids))
+        .groupBy(capacityAllocations.taskId),
+      this.db
+        .select({ taskId: taskAssignees.taskId, n: count() })
+        .from(taskAssignees)
+        .where(inArray(taskAssignees.taskId, ids))
+        .groupBy(taskAssignees.taskId),
+    ]);
+    const allocated = new Map(allocs.map((a) => [a.taskId!, a.minutes]));
+    const assigneeCount = new Map(assignees.map((a) => [a.taskId, Number(a.n)]));
+    return rows
+      .map((r) => {
+        const remaining = r.task.remainingEstimateMinutes ?? 0;
+        const done = allocated.get(r.task.id) ?? 0;
+        return {
+          taskId: r.task.id,
+          ref: this.ref(r.prefix, r.task.number),
+          title: r.task.title,
+          workspaceId,
+          remainingMinutes: remaining,
+          allocatedMinutes: done,
+          unallocatedMinutes: Math.max(0, remaining - done),
+          assigneeCount: assigneeCount.get(r.task.id) ?? 0,
+          dueDate: r.task.dueDate ? r.task.dueDate.toISOString() : null,
+        };
+      })
+      .filter((x) => x.unallocatedMinutes > 0 || x.assigneeCount === 0)
+      .sort((a, b) => b.unallocatedMinutes - a.unallocatedMinutes);
+  }
+
+  // ── reserved time (meetings, training …) ─────────────────────────────────
+
+  async addReservedTime(actor: Actor, input: ReservedTimeInput) {
+    const userId = input.userId ?? actor.id;
+    if (userId !== actor.id && actor.role !== Role.ADMIN) throw new ForbiddenException('You can only reserve time for yourself');
+    const [row] = await this.db
+      .insert(reservedTimeBlocks)
+      .values({ userId, kind: input.kind, title: input.title, startsAt: new Date(input.startsAt), endsAt: new Date(input.endsAt), createdById: actor.id })
+      .returning();
+    return row!;
+  }
+
+  async listReservedTime(actor: Actor, userId?: string, from?: string, to?: string) {
+    const target = userId ?? actor.id;
+    if (target !== actor.id && actor.role !== Role.ADMIN) throw new ForbiddenException('You can only view your own reserved time');
+    const conds = [eq(reservedTimeBlocks.userId, target)];
+    if (from) conds.push(gt(reservedTimeBlocks.endsAt, new Date(from)));
+    if (to) conds.push(lt(reservedTimeBlocks.startsAt, new Date(to)));
+    return this.db.select().from(reservedTimeBlocks).where(and(...conds)).orderBy(asc(reservedTimeBlocks.startsAt));
+  }
+
+  async removeReservedTime(id: string, actor: Actor): Promise<{ id: string }> {
+    const [row] = await this.db.select().from(reservedTimeBlocks).where(eq(reservedTimeBlocks.id, id)).limit(1);
+    if (!row) throw new NotFoundException('Reservation not found');
+    if (row.userId !== actor.id && actor.role !== Role.ADMIN) throw new ForbiddenException('You can only remove your own reserved time');
+    await this.db.delete(reservedTimeBlocks).where(eq(reservedTimeBlocks.id, id));
+    return { id };
   }
 
   async listCapacityAllocations(workspaceId: string, actor: Actor, userId?: string) {

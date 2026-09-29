@@ -26,6 +26,7 @@ import { Button, Card, EmptyState, ErrorState, Input, LabelChip, Spinner } from 
 import { AvatarStack } from '../components/AvatarStack';
 import { TaskDrawer } from '../components/TaskDrawer';
 import { KanbanView } from '../components/KanbanView';
+import { PlanningPanel } from '../components/PlanningPanel';
 import { CreateTaskModal } from '../components/CreateTaskModal';
 import { CreateProjectModal } from '../components/CreateProjectModal';
 import { WorkspaceSettings } from '../components/WorkspaceSettings';
@@ -69,6 +70,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
   const [showCreate, setShowCreate] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showPlanning, setShowPlanning] = useState(false);
   const navigate = useNavigate();
   const ensureProjectConv = useEnsureProjectConversation();
   const openProjectChat = async (projectId: string) => {
@@ -202,6 +204,9 @@ function Board({ workspaceId }: { workspaceId: string }) {
                 </button>
               ))}
             </div>
+            <Button variant="ghost" className="text-xs font-semibold py-2" onClick={() => setShowPlanning((v) => !v)}>
+              {showPlanning ? 'Hide planning' : 'Planning'}
+            </Button>
             {isAdmin ? (
               <Button variant="ghost" className="text-xs font-semibold py-2" onClick={() => void setShowSettings(true)}>
                 Manage
@@ -356,6 +361,8 @@ function Board({ workspaceId }: { workspaceId: string }) {
             </select>
           </div>
         </Card>
+
+        {showPlanning ? <PlanningPanel workspaceId={workspaceId} onOpenTask={setOpenTaskId} /> : null}
 
         <div className="mt-6">
           {isLoading ? (
