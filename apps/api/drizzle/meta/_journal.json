@@ -183,6 +183,13 @@
       "when": 1791331200000,
       "tag": "0025_awesome_dragon_man",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791417600000,
+      "tag": "0026_timer_pause",
+      "breakpoints": true
     }
   ]
 }

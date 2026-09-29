@@ -31,6 +31,7 @@ import {
   useLogTimeEntry,
   useStartTimer,
   useStopTimer,
+  usePauseResumeTimer,
   useAddBlocker,
 } from '../hooks/useTasks';
 import { useCreateLabel } from '../hooks/useLabels';
@@ -1161,12 +1162,14 @@ function TimeTrackingSection({ taskId, workspaceId }: { taskId: string; workspac
   const logTime = useLogTimeEntry(taskId, workspaceId);
   const startTimer = useStartTimer(taskId, workspaceId);
   const stopTimer = useStopTimer(taskId, workspaceId);
+  const pauseResume = usePauseResumeTimer(taskId);
 
   const [showLogForm, setShowLogForm] = useState(false);
   const [workDate, setWorkDate] = useState(new Date().toISOString().slice(0, 10));
   const [durationMinutes, setDurationMinutes] = useState('30');
   const [category, setCategory] = useState<'EXECUTION' | 'REVIEW' | 'REWORK'>('EXECUTION');
   const [note, setNote] = useState('');
+  const [startedAtLocal, setStartedAtLocal] = useState('');
 
   const activeTimer = summary?.entries.find((e) => !e.endedAt);
 
@@ -1174,11 +1177,12 @@ function TimeTrackingSection({ taskId, workspaceId }: { taskId: string; workspac
     e.preventDefault();
     const mins = Math.max(1, Math.round(Number(durationMinutes)));
     logTime.mutate(
-      { workDate, durationMinutes: mins, category, note: note.trim() || undefined },
+      { workDate, durationMinutes: mins, startedAt: startedAtLocal ? new Date(startedAtLocal).toISOString() : undefined, category, note: note.trim() || undefined },
       {
         onSuccess: () => {
           setShowLogForm(false);
           setNote('');
+          setStartedAtLocal('');
         },
       },
     );
@@ -1194,6 +1198,16 @@ function TimeTrackingSection({ taskId, workspaceId }: { taskId: string; workspac
           <span>⏱️ Time Log & Timer</span>
         </h3>
         <div className="flex gap-2">
+          {activeTimer ? (
+            <Button
+              variant="ghost"
+              className="py-1 px-2.5 text-xs font-semibold"
+              disabled={pauseResume.isPending}
+              onClick={() => pauseResume.mutate(activeTimer.isPaused ? 'resume' : 'pause')}
+            >
+              {activeTimer.isPaused ? '▶ Resume' : '⏸ Pause'}
+            </Button>
+          ) : null}
           {activeTimer ? (
             <Button
               variant="danger"
@@ -1228,7 +1242,7 @@ function TimeTrackingSection({ taskId, workspaceId }: { taskId: string; workspac
           <span className="font-semibold text-indigo-700 dark:text-indigo-300">
             Live Timer active ({activeTimer.category}) started by {activeTimer.userName}
           </span>
-          <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">In progress…</span>
+          <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">{activeTimer.isPaused ? 'Paused' : 'In progress…'}</span>
         </div>
       ) : null}
 
@@ -1257,6 +1271,15 @@ function TimeTrackingSection({ taskId, workspaceId }: { taskId: string; workspac
               />
             </label>
           </div>
+          <label className="block text-xs">
+            <span className="mb-1 block font-semibold text-slate-600 dark:text-slate-400">Started at (optional — checked for overlap, split at midnight)</span>
+            <input
+              type="datetime-local"
+              className="w-full rounded border border-slate-200 dark:border-slate-700 p-1.5 dark:bg-[#2c2c2c] dark:text-white"
+              value={startedAtLocal}
+              onChange={(e) => setStartedAtLocal(e.target.value)}
+            />
+          </label>
           <div className="text-xs">
             <label className="mb-1 block font-semibold text-slate-600 dark:text-slate-400">Category</label>
             <select
@@ -1283,6 +1306,11 @@ function TimeTrackingSection({ taskId, workspaceId }: { taskId: string; workspac
           </Button>
         </form>
       ) : null}
+
+      {(() => {
+        const err = logTime.error ?? startTimer.error ?? stopTimer.error ?? pauseResume.error;
+        return err ? <p className="mb-3 text-xs text-red-600">{err instanceof ApiRequestError ? err.message : 'Time action failed'}</p> : null;
+      })()}
 
       <div className="grid grid-cols-2 gap-2 text-xs mb-3">
         <div className="rounded-lg bg-slate-50 dark:bg-[#222] p-2.5 border border-slate-100 dark:border-slate-800">

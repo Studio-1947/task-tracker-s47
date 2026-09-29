@@ -289,6 +289,8 @@ export interface TimeSummary {
     startedAt?: string;
     endedAt?: string;
     isPaused: boolean;
+    pausedAt?: string | null;
+    pausedMs?: number;
     userId: string;
     userName: string;
   }>;
@@ -311,7 +313,7 @@ export function useTimeSummary(taskId: string | null) {
 export function useLogTimeEntry(taskId: string, workspaceId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { workDate: string; durationMinutes: number; category?: string; note?: string }) =>
+    mutationFn: (input: { workDate: string; durationMinutes: number; startedAt?: string; category?: string; note?: string }) =>
       http.post(`/tasks/${taskId}/time-entries`, input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['task', taskId] });
@@ -422,6 +424,16 @@ export function useDelegateReview(taskId: string) {
       qc.invalidateQueries({ queryKey: ['task', taskId, 'delegations'] });
       qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });
       qc.invalidateQueries({ queryKey: ['review-queue'] });
+    },
+  });
+}
+
+export function usePauseResumeTimer(taskId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (action: 'pause' | 'resume') => http.post(`/tasks/${taskId}/timer/${action}`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'time-entries'] });
     },
   });
 }

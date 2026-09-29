@@ -125,6 +125,8 @@ export type TaskQuery = z.infer<typeof taskQuerySchema>;
 export const logTimeEntrySchema = z.object({
   workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   durationMinutes: z.number().int().min(1).max(1440),
+  /** When the work began. Without it the entry is a plain duration on `workDate`; with it the entry is a real interval, overlap-checked and split at office-local midnight. */
+  startedAt: z.string().datetime().optional(),
   category: z.enum(['EXECUTION', 'REVIEW', 'REWORK']).default('EXECUTION'),
   note: z.string().max(2000).optional(),
 });

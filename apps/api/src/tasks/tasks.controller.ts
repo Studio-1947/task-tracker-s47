@@ -32,6 +32,7 @@ import {
   reopenTaskSchema,
   allocateTimeEntrySchema,
   delegateReviewSchema,
+  logTimeEntrySchema,
   capacityAllocationSchema,
   updateTaskSchema,
   type CreateCommentInput,
@@ -45,6 +46,7 @@ import {
   type ReopenTaskInput,
   type AllocateTimeEntryInput,
   type DelegateReviewInput,
+  type LogTimeEntryInput,
   type CapacityAllocationInput,
   type UpdateTaskInput,
 } from '@task-tracker/shared';
@@ -269,7 +271,7 @@ export class TasksController {
   @Post(':id/time-entries')
   logTimeEntry(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { workDate: string; durationMinutes: number; category?: string; note?: string },
+    @Body(new ZodValidationPipe(logTimeEntrySchema)) body: LogTimeEntryInput,
     @CurrentUser() user: RequestUser,
   ) {
     return this.tasks.logTimeEntry(id, user, body);
@@ -287,6 +289,16 @@ export class TasksController {
     @CurrentUser() user: RequestUser,
   ) {
     return this.tasks.startTimer(id, user, body);
+  }
+
+  @Post(':id/timer/pause')
+  pauseTimer(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.tasks.pauseTimer(id, user);
+  }
+
+  @Post(':id/timer/resume')
+  resumeTimer(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.tasks.resumeTimer(id, user);
   }
 
   @Post(':id/timer/stop')

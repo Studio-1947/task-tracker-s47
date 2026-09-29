@@ -194,6 +194,9 @@ export const taskTimeEntries = pgTable(
     startedAt: timestamp('started_at', { withTimezone: true }),
     endedAt: timestamp('ended_at', { withTimezone: true }),
     isPaused: boolean('is_paused').notNull().default(false),
+    pausedAt: timestamp('paused_at', { withTimezone: true }),
+    /** Total closed pause time so far (ms); the open pause, if any, starts at pausedAt. */
+    pausedMs: integer('paused_ms').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

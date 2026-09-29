@@ -148,3 +148,65 @@ export function workingMinutesElapsed(
   }
   return total;
 }
+
+/** The office-local calendar date (YYYY-MM-DD) an instant falls on. */
+export function localWorkDate(instant: Date, timezone: string): string {
+  const p = zonedParts(instant, timezone);
+  return dayKey(p.y, p.m, p.d);
+}
+
+export interface TimeSegment {
+  workDate: string;
+  startedAt: Date;
+  endedAt: Date;
+  /** Wall-clock milliseconds inside this local day. */
+  wallMs: number;
+}
+
+/**
+ * Splits a worked interval at every office-local midnight so a session that
+ * runs 23:30 → 00:45 books 30 minutes to one day and 45 to the next, rather
+ * than the whole span landing on the start date (PRD time-entry rules).
+ */
+export function splitAcrossLocalDays(startedAt: Date, endedAt: Date, timezone: string): TimeSegment[] {
+  const segments: TimeSegment[] = [];
+  let cursor = startedAt;
+  while (cursor.getTime() < endedAt.getTime()) {
+    const { minuteOfDay } = zonedParts(cursor, timezone);
+    const subMinuteMs = (cursor.getTime() % 60000 + 60000) % 60000;
+    let next = new Date(cursor.getTime() - subMinuteMs + (1440 - minuteOfDay) * 60000);
+    // DST days are not 1440 minutes long: nudge until we land exactly on local 00:00.
+    for (let i = 0; i < 3; i += 1) {
+      const mod = zonedParts(next, timezone).minuteOfDay;
+      if (mod === 0) break;
+      next = new Date(next.getTime() + (mod < 720 ? -mod : 1440 - mod) * 60000);
+    }
+    if (next.getTime() <= cursor.getTime()) next = new Date(cursor.getTime() + 60000);
+    const end = next.getTime() < endedAt.getTime() ? next : endedAt;
+    segments.push({ workDate: localWorkDate(cursor, timezone), startedAt: cursor, endedAt: end, wallMs: end.getTime() - cursor.getTime() });
+    cursor = end;
+  }
+  return segments;
+}
+
+/**
+ * Shares `totalMinutes` of active (unpaused) effort across segments in
+ * proportion to wall time, so the parts always sum exactly to the total.
+ */
+export function apportionMinutes(totalMinutes: number, segments: Pick<TimeSegment, 'wallMs'>[]): number[] {
+  const wall = segments.reduce((sum, s) => sum + s.wallMs, 0);
+  if (segments.length === 0) return [];
+  if (wall <= 0) return segments.map((_, i) => (i === 0 ? totalMinutes : 0));
+  let allocated = 0;
+  return segments.map((s, i) => {
+    if (i === segments.length - 1) return totalMinutes - allocated;
+    const share = Math.round((totalMinutes * s.wallMs) / wall);
+    allocated += share;
+    return share;
+  });
+}
+
+/** Half-open interval overlap: back-to-back entries (one ends when the next starts) do not clash. */
+export function intervalsOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
+  return aStart.getTime() < bEnd.getTime() && bStart.getTime() < aEnd.getTime();
+}

@@ -27,7 +27,7 @@ import type {
   UserRef,
 } from '@task-tracker/shared';
 import type { CapacityAllocationInput } from '@task-tracker/shared';
-import { AttachmentKind, AuditAction, Role, calculateCapacity, workingMinutesElapsed } from '@task-tracker/shared';
+import { AttachmentKind, AuditAction, Role, apportionMinutes, calculateCapacity, intervalsOverlap, localWorkDate, splitAcrossLocalDays, workingMinutesElapsed } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
 import {
   labels,
@@ -1472,27 +1472,70 @@ export class TasksService {
 
   // ── Time Entries & Forecast calculations (E01) ──────────────────────────────
 
+  private async officeTimezone(): Promise<string> {
+    return (await this.calendar.get()).settings?.timezone ?? 'Asia/Kolkata';
+  }
+
+  /**
+   * One person cannot be working two intervals at once. Zero-length rows are the
+   * legacy duration-only entries (started == ended) and carry no interval, so
+   * they are ignored; a running timer counts up to `now`.
+   */
+  private async assertNoTimeOverlap(
+    db: Pick<Database, 'select'>,
+    userId: string,
+    start: Date,
+    end: Date,
+    now: Date,
+  ): Promise<void> {
+    const rows = await db
+      .select({ id: taskTimeEntries.id, startedAt: taskTimeEntries.startedAt, endedAt: taskTimeEntries.endedAt })
+      .from(taskTimeEntries)
+      .where(and(eq(taskTimeEntries.userId, userId), sql`${taskTimeEntries.startedAt} IS NOT NULL`));
+    for (const r of rows) {
+      const rStart = r.startedAt!;
+      const rEnd = r.endedAt ?? now;
+      if (rEnd.getTime() <= rStart.getTime()) continue;
+      if (intervalsOverlap(start, end, rStart, rEnd)) {
+        throw new BadRequestException(
+          `This time overlaps another entry (${rStart.toISOString()} – ${r.endedAt ? rEnd.toISOString() : 'running'}). Adjust the times or stop the other timer.`,
+        );
+      }
+    }
+  }
+
   async logTimeEntry(
     taskId: string,
     actor: Actor,
-    input: { workDate: string; durationMinutes: number; category?: string; note?: string },
+    input: { workDate: string; durationMinutes: number; startedAt?: string; category?: string; note?: string },
   ) {
     const task = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(task.workspaceId, actor);
+    const now = new Date();
+    const category = input.category ?? 'EXECUTION';
+
+    // Interval-bearing entry: overlap-checked and split at office-local midnight.
+    let rows: { workDate: string; durationMinutes: number; startedAt: Date; endedAt: Date }[];
+    if (input.startedAt) {
+      const start = new Date(input.startedAt);
+      const end = new Date(start.getTime() + input.durationMinutes * 60000);
+      if (end.getTime() > now.getTime() + 60000) throw new BadRequestException('Time cannot be logged for a period that has not happened yet');
+      const segments = splitAcrossLocalDays(start, end, await this.officeTimezone());
+      const parts = apportionMinutes(input.durationMinutes, segments);
+      rows = segments.map((seg, i) => ({ workDate: seg.workDate, durationMinutes: parts[i]!, startedAt: seg.startedAt, endedAt: seg.endedAt }));
+    } else {
+      rows = [{ workDate: input.workDate, durationMinutes: input.durationMinutes, startedAt: now, endedAt: now }];
+    }
 
     return await this.db.transaction(async (tx) => {
-      const [entry] = await tx
+      if (input.startedAt) {
+        // Serialise per user so two concurrent logs cannot both pass the check.
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${actor.id}))`);
+        await this.assertNoTimeOverlap(tx, actor.id, rows[0]!.startedAt, rows[rows.length - 1]!.endedAt, now);
+      }
+      const entries = await tx
         .insert(taskTimeEntries)
-        .values({
-          taskId,
-          userId: actor.id,
-          workDate: input.workDate,
-          durationMinutes: input.durationMinutes,
-          category: input.category ?? 'EXECUTION',
-          note: input.note ?? null,
-          startedAt: new Date(),
-          endedAt: new Date(),
-        })
+        .values(rows.map((r) => ({ taskId, userId: actor.id, workDate: r.workDate, durationMinutes: r.durationMinutes, category, note: input.note ?? null, startedAt: r.startedAt, endedAt: r.endedAt })))
         .returning();
 
       // Deduct from remaining estimate if set
@@ -1510,12 +1553,13 @@ export class TasksService {
           taskId,
           userId: actor.id,
           action: AuditAction.TIME_ENTRY_CREATED,
-          afterValue: { entryId: entry.id, durationMinutes: input.durationMinutes, category: input.category ?? 'EXECUTION' },
+          afterValue: { entryId: entries[0]!.id, entryIds: entries.map((e) => e.id), durationMinutes: input.durationMinutes, category },
         },
         tx,
       );
 
-      return entry;
+      // Callers get the first row; a cross-midnight log also returns every part.
+      return { ...entries[0]!, parts: entries };
     });
   }
 
@@ -1533,17 +1577,19 @@ export class TasksService {
       throw new BadRequestException('You already have an active timer running. Stop it before starting a new one.');
     }
 
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    // A timer starting inside an already-logged interval would double-count that time.
+    await this.assertNoTimeOverlap(this.db, actor.id, now, new Date(now.getTime() + 1), now);
     const [entry] = await this.db
       .insert(taskTimeEntries)
       .values({
         taskId,
         userId: actor.id,
-        workDate: todayStr,
+        workDate: localWorkDate(now, await this.officeTimezone()),
         durationMinutes: 0,
         category: input.category ?? 'EXECUTION',
         note: input.note ?? null,
-        startedAt: new Date(),
+        startedAt: now,
         endedAt: null,
         isPaused: false,
       })
@@ -1552,10 +1598,9 @@ export class TasksService {
     return entry;
   }
 
-  async stopTimer(taskId: string, actor: Actor) {
+  private async loadRunningTimer(taskId: string, actor: Actor) {
     const task = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(task.workspaceId, actor);
-
     const [running] = await this.db
       .select()
       .from(taskTimeEntries)
@@ -1564,21 +1609,76 @@ export class TasksService {
     if (!running || !running.startedAt) {
       throw new NotFoundException('No active timer running for this task');
     }
+    return { task, running };
+  }
+
+  async pauseTimer(taskId: string, actor: Actor) {
+    const { running } = await this.loadRunningTimer(taskId, actor);
+    if (running.isPaused) throw new BadRequestException('This timer is already paused');
+    const now = new Date();
+    const [updated] = await this.db
+      .update(taskTimeEntries)
+      .set({ isPaused: true, pausedAt: now, updatedAt: now })
+      .where(eq(taskTimeEntries.id, running.id))
+      .returning();
+    return updated;
+  }
+
+  async resumeTimer(taskId: string, actor: Actor) {
+    const { running } = await this.loadRunningTimer(taskId, actor);
+    if (!running.isPaused || !running.pausedAt) throw new BadRequestException('This timer is not paused');
+    const now = new Date();
+    const [updated] = await this.db
+      .update(taskTimeEntries)
+      .set({ isPaused: false, pausedAt: null, pausedMs: running.pausedMs + Math.max(0, now.getTime() - running.pausedAt.getTime()), updatedAt: now })
+      .where(eq(taskTimeEntries.id, running.id))
+      .returning();
+    return updated;
+  }
+
+  async stopTimer(taskId: string, actor: Actor) {
+    const { task, running } = await this.loadRunningTimer(taskId, actor);
+    const startedAt = running.startedAt!;
 
     const now = new Date();
-    const elapsedMinutes = Math.max(1, Math.round((now.getTime() - running.startedAt.getTime()) / 60000));
+    // Time spent paused (including a pause still open at stop) is not effort.
+    const openPauseMs = running.isPaused && running.pausedAt ? Math.max(0, now.getTime() - running.pausedAt.getTime()) : 0;
+    const activeMs = Math.max(0, now.getTime() - startedAt.getTime() - running.pausedMs - openPauseMs);
+    const elapsedMinutes = Math.max(1, Math.round(activeMs / 60000));
+    const segments = splitAcrossLocalDays(startedAt, now, await this.officeTimezone());
+    const parts = apportionMinutes(elapsedMinutes, segments);
 
     return await this.db.transaction(async (tx) => {
+      // The original row keeps the first day's slice; later days get their own rows.
+      const first = segments[0] ?? { workDate: running.workDate, startedAt, endedAt: now };
       const [updated] = await tx
         .update(taskTimeEntries)
         .set({
-          durationMinutes: elapsedMinutes,
-          endedAt: now,
+          workDate: first.workDate,
+          durationMinutes: parts[0] ?? elapsedMinutes,
+          startedAt: first.startedAt,
+          endedAt: first.endedAt,
           isPaused: false,
+          pausedAt: null,
           updatedAt: now,
         })
         .where(eq(taskTimeEntries.id, running.id))
         .returning();
+      const extra = segments.slice(1);
+      if (extra.length) {
+        await tx.insert(taskTimeEntries).values(
+          extra.map((seg, i) => ({
+            taskId,
+            userId: actor.id,
+            workDate: seg.workDate,
+            durationMinutes: parts[i + 1]!,
+            category: running.category,
+            note: running.note,
+            startedAt: seg.startedAt,
+            endedAt: seg.endedAt,
+          })),
+        );
+      }
 
       if (task.remainingEstimateMinutes !== null) {
         const nextRemaining = Math.max(0, task.remainingEstimateMinutes - elapsedMinutes);
@@ -1594,7 +1694,7 @@ export class TasksService {
           taskId,
           userId: actor.id,
           action: AuditAction.TIME_ENTRY_CREATED,
-          afterValue: { entryId: running.id, durationMinutes: elapsedMinutes },
+          afterValue: { entryId: running.id, durationMinutes: elapsedMinutes, days: segments.length },
         },
         tx,
       );
@@ -1617,6 +1717,8 @@ export class TasksService {
         startedAt: taskTimeEntries.startedAt,
         endedAt: taskTimeEntries.endedAt,
         isPaused: taskTimeEntries.isPaused,
+        pausedAt: taskTimeEntries.pausedAt,
+        pausedMs: taskTimeEntries.pausedMs,
         userId: taskTimeEntries.userId,
         userName: users.name,
       })
