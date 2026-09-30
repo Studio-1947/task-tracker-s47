@@ -80,7 +80,7 @@ async function main() {
     await call(token, 'DELETE', `/tasks/${notYetDue.body.id}`);
     await call(token, 'DELETE', `/tasks/${doneTask.body.id}`);
   } finally {
-    if (workspace?.id) await call(token, 'PATCH', `/workspaces/${workspace.id}`, { isArchived: true });
+    if (workspace?.id) await call(token, 'PATCH', `/workspaces/${workspace.id}`, { isArchived: false });
   }
   if (failures) throw new Error(`${failures} task ageing smoke assertion(s) failed`);
   console.log('Task ageing smoke passed.');

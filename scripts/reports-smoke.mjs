@@ -48,7 +48,7 @@ async function main() {
     assert(friRes.status === 200, 'friday outcomes draft report fetched', JSON.stringify(friRes.body));
     assert(friRes.body.reportType === 'FRIDAY_OUTCOMES', 'report type is FRIDAY_OUTCOMES');
   } finally {
-    if (workspace?.id) await call(token, 'PATCH', `/workspaces/${workspace.id}`, { isArchived: true });
+    if (workspace?.id) await call(token, 'PATCH', `/workspaces/${workspace.id}`, { isArchived: false });
   }
   if (failures) throw new Error(`${failures} reports smoke assertion(s) failed`);
   console.log('Reports smoke passed.');

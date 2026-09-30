@@ -106,7 +106,7 @@ async function main() {
     assert(asMember.status === 200, 'workspace member can read unallocated work', String(asMember.status));
   } finally {
     for (const id of created) await call(other.accessToken, 'DELETE', `/reserved-time/${id}`);
-    if (ws.body?.id) await call(t, 'PATCH', `/workspaces/${ws.body.id}`, { isArchived: true });
+    if (ws.body?.id) await call(t, 'PATCH', `/workspaces/${ws.body.id}`, { isArchived: false });
   }
   if (failures) throw new Error(`${failures} reserved-time smoke assertion(s) failed`);
   console.log('Reserved time smoke passed.');

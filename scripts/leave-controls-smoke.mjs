@@ -150,7 +150,7 @@ async function main() {
       unresolvedCorrectionTreatment: original.unresolvedCorrectionTreatment,
       maxConcurrentLeavePercent: original.maxConcurrentLeavePercent ?? 100, effectiveFrom: original.effectiveFrom,
     });
-    if (ws.body?.id) await call(t, 'PATCH', `/workspaces/${ws.body.id}`, { isArchived: true });
+    if (ws.body?.id) await call(t, 'PATCH', `/workspaces/${ws.body.id}`, { isArchived: false });
   }
   if (failures) throw new Error(`${failures} leave-controls smoke assertion(s) failed`);
   console.log('Leave controls smoke passed.');

@@ -129,7 +129,7 @@ async function main() {
 
     await call(token, 'DELETE', `/tasks/${task.id}`);
   } finally {
-    if (workspace?.id) await call(token, 'PATCH', `/workspaces/${workspace.id}`, { isArchived: true });
+    if (workspace?.id) await call(token, 'PATCH', `/workspaces/${workspace.id}`, { isArchived: false });
   }
   if (failures) throw new Error(`${failures} time entry smoke assertion(s) failed`);
   console.log('Time entry smoke passed.');

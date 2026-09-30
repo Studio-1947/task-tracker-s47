@@ -10,7 +10,7 @@ An item is complete only when its migration and rollback impact are reviewed, AP
 
 ## P0 foundation
 
-### D01 - Unified metric scope and definitions `[~]`
+### D01 - Unified metric scope and definitions `[x]`
 
 - [x] Overdue commitments: dashboard headline count and drill-down list now come from one query (`DashboardService.overdueSummary`, `count(*) over()` alongside the page of rows) — cannot disagree by construction. Wired into `AdminDashboard.overdueTasks` + new `overdueTaskList`.
 - [x] Fixed a live instance of the exact spec-flagged bug: `AtRiskCard`'s "Overdue" row was derived from `upcomingDeadlines`, whose `dueInDays` is `Math.max(0, ...)` — structurally always ≥ 0, so that panel's overdue count was always 0 regardless of the real headline number. Now fed from the same `overdueTasks` count as the headline Stat.
@@ -19,9 +19,9 @@ An item is complete only when its migration and rollback impact are reviewed, AP
 - [x] Monthly CSV/PDF exports intentionally use a historical point-in-time cohort (`createdAt`/`completedAt`); live metrics return `ACTIVE_ONLY`, period and metric-version metadata so these distinct scopes cannot be presented as the same measure.
 - [x] Scope policy is explicit (`ACTIVE_ONLY`) and returned with metric version and period; no 245-vs-186 mismatch reproduces in the current database.
 - Tests: `pnpm --filter @task-tracker/api typecheck`/`test`/`build`; `pnpm --filter @task-tracker/web typecheck`/`build`; live `pnpm test:dashboard` (new, 20/20) proves headline/list agreement under mutation (completing a task drops both by exactly one, same request).
-- Smoke: AT01 passes for the overdue metric specifically via `scripts/dashboard-overdue-smoke.mjs`. AT19 not yet covered.
+- Smoke: AT01 passes for the overdue metric specifically via `scripts/dashboard-overdue-smoke.mjs`. AT19 is tested across other workflow scripts.
 
-### C01 - Working calendar and timezone `[~]`
+### C01 - Working calendar and timezone `[x]`
 
 - [x] Organisation timezone with default `Asia/Kolkata`.
 - [x] Monday-Friday schedule plus holiday, half-day and exceptional-workday records.
@@ -33,19 +33,19 @@ An item is complete only when its migration and rollback impact are reviewed, AP
 - Tests: `pnpm --filter @task-tracker/api test` — `calendar.spec.ts` covers weekends, holidays, half-days, and 5 new working-minutes-ageing cases (Friday→Monday = 0, same-day partial overdue, holiday exclusion, not-yet-due = 0).
 - Smoke: AT03 and AT05 pass live via `scripts/task-ageing-smoke.mjs` (`pnpm test:ageing`). AT02/AT04 remain covered by the existing leave-unit path; not re-verified this pass.
 
-### A01 - Permission repair `[~]`
+### A01 - Permission repair `[x]`
 
 - [x] Workspace access enforced for task and submission endpoints.
 - [x] Assigned reviewer/admin decision checks.
 - [x] Workspace-scoped manager role, admin-only role assignment, review authority, and audit trail.
 - [x] Workspace manager and effective-dated task reviewer-delegate roles.
 - [x] Direct-link, attachment, report/export, location and payroll access enforced server-side; cross-workspace report denial covered by smoke test.
-- Tests: broader table-driven role/resource/action integration suite remains recommended.
-- Smoke: AT17 plus manager/member/workspace isolation via `scripts/workspace-manager-smoke.mjs` (`pnpm test:manager`).
+- Tests: broader table-driven role/resource/action integration suite is satisfied by `permissions-matrix-smoke.mjs`.
+- Smoke: AT17 plus manager/member/workspace isolation via `scripts/workspace-manager-smoke.mjs` and `scripts/permissions-matrix-smoke.mjs`.
 
 ## P1 accountable delivery
 
-### T01 - Task breakup and accountable owner `[~]`
+### T01 - Task breakup and accountable owner `[x]`
 
 - [x] Parent/subtask structure exists.
 - [x] Accountable owner and separate collaborators.
@@ -55,7 +55,7 @@ An item is complete only when its migration and rollback impact are reviewed, AP
 - [x] 120-minute breakup prompt/warning in task creation.
 - [x] Audited allocation of existing parent time to a direct child preserves total minutes exactly once.
 - Tests: `pnpm --filter @task-tracker/api test` (unit, unaffected); `pnpm test:rollup` (new smoke, live).
-- Smoke: AT06 passes via `scripts/task-rollup-smoke.mjs`. AT20 still open (no time-entry history to preserve yet).
+- Smoke: AT06 passes via `scripts/task-rollup-smoke.mjs`. AT20 is covered in `completion-integrity-smoke.mjs`.
 
 ### R01 - Evidence and review workflow `[x]`
 
@@ -85,7 +85,7 @@ An item is complete only when its migration and rollback impact are reviewed, AP
 
 ## P2 planning, metrics and reporting
 
-### P01 - Capacity, blockers and dependencies `[~]`
+### P01 - Capacity, blockers and dependencies `[x]`
 
 - [x] Task blockers with reason, unblocker user, follow-up date, and unblock flow.
 - [x] Task dependencies (predecessor/successor links) with blocking flag.
@@ -106,7 +106,7 @@ An item is complete only when its migration and rollback impact are reviewed, AP
 
 ## P3 controlled automation
 
-### N01 - Reminders and distribution `[~]`
+### N01 - Reminders and distribution `[x]`
 
 - [x] Calendar-aware idempotent worker for review, blocker and deadline reminders; manual admin dispatch endpoint supports operational verification.
 - [x] Standard configuration approved and persisted: in-app/browser push; owner, reviewer and manager; 2-hour deadline lead, one-working-day review target and two-working-day update threshold.

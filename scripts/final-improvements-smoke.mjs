@@ -34,7 +34,7 @@ async function main(){
   const outsider=await call(a.accessToken,'POST','/users',{name:'Restricted Outsider',email:`outside_${Date.now()}@example.com`,role:'MEMBER'}); const o=await login(outsider.body.email,outsider.body.tempPassword);
   const denied=await call(o.accessToken,'GET',`/reports/wednesday?workspaceId=${ws.body.id}`); ok(denied.status===403,'restricted report direct URL returns no cross-workspace data',JSON.stringify(denied.body));
   await call(a.accessToken,'DELETE',`/calendar/schedule-groups/assignments/${assignment.body.id}`); await call(a.accessToken,'DELETE',`/calendar/schedule-groups/${group.body.id}`);
- }finally{await call(a.accessToken,'PATCH',`/workspaces/${ws.body.id}`,{isArchived:true})}
+ }finally{await call(a.accessToken,'PATCH',`/workspaces/${ws.body.id}`,{isArchived: false})}
  if(failures)throw new Error(`${failures} final assertion(s) failed`);console.log('Final improvements smoke passed.');
 }
 main().catch(e=>{console.error(e);process.exit(1)});

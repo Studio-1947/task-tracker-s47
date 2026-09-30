@@ -162,7 +162,7 @@ async function main() {
     const statusCounts = mfind('Status counts')?.[1] ?? '';
     assert(/IN_REVIEW=\d+/.test(statusCounts), 'monthly status counts include In review', statusCounts);
   } finally {
-    if (ws.body?.id) await call(t, 'PATCH', `/workspaces/${ws.body.id}`, { isArchived: true });
+    if (ws.body?.id) await call(t, 'PATCH', `/workspaces/${ws.body.id}`, { isArchived: false });
   }
   if (failures) throw new Error(`${failures} metrics smoke assertion(s) failed`);
   console.log('Metrics reconciliation smoke passed.');

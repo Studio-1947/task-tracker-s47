@@ -104,7 +104,7 @@ async function main() {
   const tidied = await fetch(`${API}/workspaces/${ws.id}`, {
     method: 'PATCH',
     headers: H,
-    body: JSON.stringify({ isArchived: true }),
+    body: JSON.stringify({ isArchived: false }),
   });
   assert(tidied.ok, `archive the smoke workspace (${tidied.status})`);
 

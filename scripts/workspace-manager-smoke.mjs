@@ -121,8 +121,8 @@ async function main() {
     await call(admin, 'DELETE', `/tasks/${taskA.body.id}`).catch(() => {});
     await call(admin, 'DELETE', `/tasks/${taskB.body.id}`).catch(() => {});
   } finally {
-    if (workspaceA?.id) await call(admin, 'PATCH', `/workspaces/${workspaceA.id}`, { isArchived: true });
-    if (workspaceB?.id) await call(admin, 'PATCH', `/workspaces/${workspaceB.id}`, { isArchived: true });
+    if (workspaceA?.id) await call(admin, 'PATCH', `/workspaces/${workspaceA.id}`, { isArchived: false });
+    if (workspaceB?.id) await call(admin, 'PATCH', `/workspaces/${workspaceB.id}`, { isArchived: false });
   }
   if (failures) throw new Error(`${failures} workspace manager smoke assertion(s) failed`);
   console.log('Workspace manager smoke passed.');

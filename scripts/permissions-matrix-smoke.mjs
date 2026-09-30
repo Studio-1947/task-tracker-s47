@@ -81,7 +81,7 @@ async function main() {
     ok(notifications.body?.items?.some((item) => item.type === 'REPORT_SHARED' && item.data?.reportId === draft.body.id), 'recipient receives report notification');
     ok((await call(outsider, 'POST', `/reports/${draft.body.id}/approve`, {})).status === 403, 'outsider cannot approve report by direct URL');
   } finally {
-    await call(admin, 'PATCH', `/workspaces/${workspace.id}`, { isArchived: true });
+    await call(admin, 'PATCH', `/workspaces/${workspace.id}`, { isArchived: false });
   }
 
   if (failures) throw new Error(`${failures} permission matrix assertion(s) failed`);
