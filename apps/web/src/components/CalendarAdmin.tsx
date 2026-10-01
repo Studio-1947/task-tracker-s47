@@ -15,6 +15,16 @@ const fromTime = (v: string) => {
   const [h, m] = v.split(':').map(Number);
   return (h ?? 0) * 60 + (m ?? 0);
 };
+const MONTHS: Record<string, string> = { January:'01', February:'02', March:'03', April:'04', May:'05', June:'06', July:'07', August:'08', September:'09', October:'10', November:'11', December:'12' };
+const WEEKDAYS = '(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)';
+/** Converts text extracted from a common month/year holiday-table PDF into the same editable CSV preview. */
+function holidayRowsFromPdf(text: string): string {
+  const compact = text.replace(/\s+/g, ' ').trim(); const out: string[] = [];
+  const headings = /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(20\d{2})\b/g;
+  const found = [...compact.matchAll(headings)];
+  for (let i = 0; i < found.length; i++) { const heading = found[i]!; const month = heading[1]!; const year = heading[2]!; const body = compact.slice((heading.index ?? 0) + heading[0].length, found[i + 1]?.index ?? compact.length); const row = new RegExp(`\\b(\\d{1,2})\\s+[A-Za-z]{3}\\s+${WEEKDAYS}\\s+(.+?)(?=\\s+\\d{1,2}\\s+[A-Za-z]{3}\\s+${WEEKDAYS}|$)`, 'g'); for (const m of body.matchAll(row)) { const name = m[2]!.replace(/\s+(?:Office trip|Holiday|Type|Yearly|Monthly).*$/i, '').trim(); if (name) out.push(`${year}-${MONTHS[month]!}-${m[1]!.padStart(2,'0')}, ${name}, HOLIDAY`); } }
+  return [...new Set(out)].join('\n');
+}
 const hoursLabel = (start: number, end: number, brk: number) => {
   const mins = end - start - brk;
   return `${Math.floor(mins / 60)}h${mins % 60 ? ` ${mins % 60}m` : ''} of working time`;
@@ -81,7 +91,7 @@ export function OrganisationCalendarCard() {
   });
   const removeEx = useMutation({ mutationFn: (id: string) => http.del(`/calendar/exceptions/${id}`), onSuccess: refresh });
   const bulk = useMutation({ mutationFn: () => http.post('/calendar/exceptions/bulk', { mode: bulkMode, exceptions: bulkRows }), onSuccess: () => { setBulkText(''); refresh(); } });
-  const pdfImport = useMutation({ mutationFn: async (file: File) => { const form = new FormData(); form.append('file', file); return http.upload<{ text: string }>('/calendar/exceptions/import-pdf', form); }, onSuccess: (r) => setBulkText(r.text) });
+  const pdfImport = useMutation({ mutationFn: async (file: File) => { const form = new FormData(); form.append('file', file); return http.upload<{ text: string }>('/calendar/exceptions/import-pdf', form); }, onSuccess: (r) => setBulkText(holidayRowsFromPdf(r.text)) });
 
   const dirty = useMemo(() => !!draft && !!data && JSON.stringify(draft) !== JSON.stringify(data.settings), [draft, data]);
   if (!data || !draft) return <Card className="p-6"><p className="text-sm text-slate-500">Loading organisation calendar…</p></Card>;
