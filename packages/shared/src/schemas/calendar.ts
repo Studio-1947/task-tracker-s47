@@ -38,6 +38,12 @@ export const calendarExceptionSchema = z.object({
   workingMinutes: z.number().int().min(1).max(1440).nullable().optional(),
 });
 export type CalendarExceptionInput = z.infer<typeof calendarExceptionSchema>;
+/** Parsed/imported rows are previewed client-side, then confirmed in one idempotent request. */
+export const bulkCalendarExceptionsSchema = z.object({
+  mode: z.enum(['ADD_ONLY', 'REPLACE_MATCHING']).default('ADD_ONLY'),
+  exceptions: z.array(calendarExceptionSchema).min(1).max(500),
+}).refine(v => new Set(v.exceptions.map(x => x.date)).size === v.exceptions.length, { message: 'Each date may appear only once in an import' });
+export type BulkCalendarExceptionsInput = z.infer<typeof bulkCalendarExceptionsSchema>;
 
 export interface CalendarSettings extends CalendarSettingsInput { id: number; updatedAt: string }
 export interface CalendarException extends CalendarExceptionInput { id: string; createdAt: string }

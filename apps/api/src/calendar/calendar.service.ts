@@ -3,6 +3,7 @@ import { and, asc, eq, gte, lte } from 'drizzle-orm';
 import {
   workingDayUnits,
   type CalendarExceptionInput,
+  type BulkCalendarExceptionsInput,
   type UpdateCalendarSettingsInput,
   type ScheduleGroupInput,
   type ScheduleGroupAssignmentInput,
@@ -88,6 +89,14 @@ export class CalendarService {
   async addException(input: CalendarExceptionInput) {
     const [row] = await this.db.insert(calendarExceptions).values({ ...input, workingMinutes: input.workingMinutes ?? null }).onConflictDoUpdate({ target: calendarExceptions.date, set: { name: input.name, kind: input.kind, workingMinutes: input.workingMinutes ?? null } }).returning();
     return row;
+  }
+
+  async bulkExceptions(input: BulkCalendarExceptionsInput) {
+    const existing = await this.db.select({ date: calendarExceptions.date }).from(calendarExceptions);
+    const known = new Set(existing.map(x => x.date));
+    const rows = input.mode === 'ADD_ONLY' ? input.exceptions.filter(x => !known.has(x.date)) : input.exceptions;
+    if (rows.length) await this.db.transaction(async tx => { for (const row of rows) await tx.insert(calendarExceptions).values({ ...row, workingMinutes: row.workingMinutes ?? null }).onConflictDoUpdate({ target: calendarExceptions.date, set: { name: row.name, kind: row.kind, workingMinutes: row.workingMinutes ?? null } }); });
+    return { imported: rows.length, skipped: input.exceptions.length - rows.length, conflicts: input.exceptions.filter(x => known.has(x.date)).map(x => x.date) };
   }
 
   async removeException(id: string) {
