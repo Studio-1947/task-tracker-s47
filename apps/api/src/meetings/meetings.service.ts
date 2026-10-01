@@ -58,7 +58,14 @@ import { WorkspacesService } from '../workspaces/workspaces.service';
 type Actor = { id: string; role: string };
 
 /** The live state of a card's mirror task, read back alongside the board. */
-type MirrorTask = { id: string; ref: string; status: TaskStatus; assigneeIds: string[] };
+type MirrorTask = {
+  id: string;
+  ref: string;
+  status: TaskStatus;
+  title: string;
+  description: string | null;
+  assigneeIds: string[];
+};
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const ymd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -170,6 +177,8 @@ export class MeetingsService {
         id: tasks.id,
         number: tasks.number,
         status: tasks.status,
+        title: tasks.title,
+        description: tasks.description,
         prefix: projects.taskPrefix,
       })
       .from(tasks)
@@ -186,6 +195,8 @@ export class MeetingsService {
         id: r.id,
         ref: `${r.prefix}-${r.number}`,
         status: r.status as TaskStatus,
+        title: r.title,
+        description: r.description,
         assigneeIds: assigneeIds.get(r.id) ?? [],
       });
     }
@@ -405,7 +416,12 @@ export class MeetingsService {
   ): Promise<MeetingBoardItemRow[]> {
     const drifted = rows.filter((row) => {
       const mirror = row.taskId ? mirrors.get(row.taskId) : undefined;
-      return mirror && TASK_STATUS_TO_BOARD_STATUS[mirror.status] !== row.status;
+      return (
+        mirror &&
+        (TASK_STATUS_TO_BOARD_STATUS[mirror.status] !== row.status ||
+          mirror.title !== row.title ||
+          mirror.description !== row.note)
+      );
     });
     if (drifted.length === 0) return rows;
 
@@ -413,13 +429,27 @@ export class MeetingsService {
     const patched = new Map<string, MeetingBoardItemRow>();
     await this.db.transaction(async (tx) => {
       for (const row of drifted) {
-        const status = TASK_STATUS_TO_BOARD_STATUS[mirrors.get(row.taskId as string)!.status];
+        const mirror = mirrors.get(row.taskId as string)!;
+        const status = TASK_STATUS_TO_BOARD_STATUS[mirror.status];
         const completedAt = status === 'DONE' ? (row.completedAt ?? now) : null;
         await tx
           .update(meetingBoardItems)
-          .set({ status, completedAt, updatedAt: now })
+          .set({
+            status,
+            title: mirror.title,
+            note: mirror.description,
+            completedAt,
+            updatedAt: now,
+          })
           .where(eq(meetingBoardItems.id, row.id));
-        patched.set(row.id, { ...row, status, completedAt, updatedAt: now });
+        patched.set(row.id, {
+          ...row,
+          status,
+          title: mirror.title,
+          note: mirror.description,
+          completedAt,
+          updatedAt: now,
+        });
       }
     });
     return rows.map((row) => patched.get(row.id) ?? row);

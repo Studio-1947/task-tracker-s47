@@ -35,6 +35,7 @@ import { BoardCardComposer } from '../components/BoardCardComposer';
 import { BoardItemCard } from '../components/BoardItemCard';
 import { BoardProjectChip } from '../components/BoardProjectChip';
 import { MeetingItemDrawer } from '../components/MeetingItemDrawer';
+import { MeetingTaskDrawer } from '../components/MeetingTaskDrawer';
 import { MemberSwimlanes } from '../components/MemberSwimlanes';
 import { ProgressBar } from '../components/ProgressBar';
 import { ProjectLanes } from '../components/ProjectLanes';
@@ -92,6 +93,7 @@ export function MeetingBoardPage() {
   const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
   const [tab, setTab] = useState<Tab>('board');
   const [openItemId, setOpenItemId] = useState<string | null>(null);
+  const [openTask, setOpenTask] = useState<{ taskId: string; workspaceId: string } | null>(null);
   const [ownerFilter, setOwnerFilter] = useState<'all' | 'mine' | 'selected'>('all');
   const [watchedMemberIds, setWatchedMemberIds] = useState<string[]>([]);
   const [projectFilter, setProjectFilter] = useState<ProjectFilter>('all');
@@ -564,6 +566,15 @@ export function MeetingBoardPage() {
           board={board}
           members={allUsers ?? []}
           onClose={() => setOpenItemId(null)}
+          onOpenTaskDetail={(taskId, workspaceId) => setOpenTask({ taskId, workspaceId })}
+        />
+      ) : null}
+      {openTask ? (
+        <MeetingTaskDrawer
+          workspaceId={openTask.workspaceId}
+          taskId={openTask.taskId}
+          onClose={() => setOpenTask(null)}
+          onOpenTask={(taskId) => setOpenTask((current) => (current ? { ...current, taskId } : null))}
         />
       ) : null}
     </div>
