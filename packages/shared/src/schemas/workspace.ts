@@ -51,4 +51,5 @@ export type UpdateWorkspaceMembersInput = z.infer<typeof updateWorkspaceMembersS
 export const setWorkspaceMemberRoleSchema = z.object({
   role: z.enum(WORKSPACE_ROLES as [WorkspaceRole, ...WorkspaceRole[]]),
 });
+export const workspaceTeamsSchema = z.object({ teamIds: z.array(z.string().uuid()) });
 export type SetWorkspaceMemberRoleInput = z.infer<typeof setWorkspaceMemberRoleSchema>;
