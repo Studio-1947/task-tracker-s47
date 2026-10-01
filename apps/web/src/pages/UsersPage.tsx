@@ -7,6 +7,7 @@ import {
   type Role,
   type UserProjectTag,
   type UserStatus,
+  type GenderType,
   type UserSummary,
 } from '@task-tracker/shared';
 import { ApiRequestError } from '../lib/api';
@@ -174,6 +175,7 @@ function UserTable({
   busy,
   onRole,
   onDesignation,
+  onGender,
   onReset,
   onDeactivate,
   onReactivate,
@@ -184,6 +186,7 @@ function UserTable({
   busy: boolean;
   onRole: (u: UserSummary, role: Role) => void;
   onDesignation: (u: UserSummary, designation: string | null) => void;
+  onGender: (u: UserSummary, gender: GenderType) => void;
   onReset: (u: UserSummary) => void;
   onDeactivate: (u: UserSummary) => void;
   onReactivate: (u: UserSummary) => void;
@@ -198,6 +201,7 @@ function UserTable({
             <th className="px-4 py-3 font-semibold">Email</th>
             <th className="px-4 py-3 font-semibold">Role</th>
             <th className="px-4 py-3 font-semibold">Designation</th>
+            <th className="px-4 py-3 font-semibold">Gender</th>
             <th className="px-4 py-3 font-semibold">Projects</th>
             <th className="px-4 py-3 font-semibold">Workspaces</th>
             <th className="px-4 py-3 font-semibold">Status</th>
@@ -243,6 +247,20 @@ function UserTable({
                     disabled={busy || status === 'REMOVED'}
                     onCommit={(next) => onDesignation(u, next)}
                   />
+                </td>
+                <td className="px-4 py-3">
+                  <select
+                    aria-label={`Gender for ${u.name}`}
+                    className="rounded-lg border border-slate-200 dark:border-slate-850 px-2 py-1 text-xs text-slate-700 dark:text-white bg-white dark:bg-[#1a1a1a] outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all font-semibold disabled:opacity-60"
+                    value={u.gender ?? 'UNSPECIFIED'}
+                    onChange={(e) => onGender(u, e.target.value as GenderType)}
+                    disabled={busy || status === 'REMOVED'}
+                  >
+                    <option value="UNSPECIFIED">Unspecified</option>
+                    <option value="MALE">Male</option>
+                    <option value="FEMALE">Female</option>
+                    <option value="OTHER">Other</option>
+                  </select>
                 </td>
                 <td className="px-4 py-3">
                   <ProjectTags projects={u.projects ?? []} />
@@ -337,6 +355,7 @@ export function UsersPage() {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>('MEMBER');
   const [designation, setDesignation] = useState('');
+  const [gender, setGender] = useState<GenderType>('UNSPECIFIED');
   const [formError, setFormError] = useState<string | null>(null);
   const [tempPassword, setTempPassword] = useState<{ email: string; password: string } | null>(null);
   /** The row action awaiting confirmation — both are destructive and irreversible. */
@@ -366,12 +385,14 @@ export function UsersPage() {
         email,
         role,
         designation: designation.trim() || undefined,
+        gender,
       });
       setTempPassword({ email: created.email, password: created.tempPassword });
       setName('');
       setEmail('');
       setRole('MEMBER');
       setDesignation('');
+      setGender('UNSPECIFIED');
     } catch (err) {
       setFormError(err instanceof ApiRequestError ? err.message : 'Failed to create user');
     }
@@ -399,6 +420,7 @@ export function UsersPage() {
     busy: updateUser.isPending || resetPassword.isPending || removeUser.isPending,
     onRole: (u: UserSummary, role: Role) => patchUser(u, { role }),
     onDesignation: (u: UserSummary, designation: string | null) => patchUser(u, { designation }),
+    onGender: (u: UserSummary, gender: GenderType) => patchUser(u, { gender }),
     onReset: (u: UserSummary) => {
       setActionError(null);
       setPending({ kind: 'reset', user: u });
@@ -477,7 +499,7 @@ export function UsersPage() {
       {activeTab === 'directory' ? (
         <>
           <Card className="mt-6 p-6 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
-            <form className="grid grid-cols-1 gap-4 sm:grid-cols-5 sm:items-end" onSubmit={onCreate}>
+            <form className="grid grid-cols-1 gap-4 sm:grid-cols-6 sm:items-end" onSubmit={onCreate}>
               <div className="sm:col-span-1">
                 <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">Name</label>
                 <Input value={name} onChange={(e) => setName(e.target.value)} required />
@@ -489,6 +511,20 @@ export function UsersPage() {
               <div className="sm:col-span-1">
                 <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">Designation</label>
                 <Input placeholder="Director, Analyst…" value={designation} onChange={(e) => setDesignation(e.target.value)} />
+              </div>
+              <div className="sm:col-span-1">
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">Gender</label>
+                <select
+                  aria-label="New user gender"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1a1a1a] px-3.5 py-2.5 text-sm text-slate-700 dark:text-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all font-semibold"
+                  value={gender}
+                  onChange={(e) => setGender(e.target.value as GenderType)}
+                >
+                  <option value="UNSPECIFIED">Unspecified</option>
+                  <option value="MALE">Male</option>
+                  <option value="FEMALE">Female</option>
+                  <option value="OTHER">Other</option>
+                </select>
               </div>
               <div className="sm:col-span-1">
                 <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">Role</label>

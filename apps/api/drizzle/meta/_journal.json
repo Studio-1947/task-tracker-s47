@@ -233,7 +233,26 @@
       "tag": "0032_organisation_delivery_model",
       "breakpoints": true
     },
-    { "idx": 33, "version": "7", "when": 1792022400000, "tag": "0033_leave_policy_matrix", "breakpoints": true
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792022400000,
+      "tag": "0033_leave_policy_matrix",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792108800000,
+      "tag": "0034_leave_types_extended_policy",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792195200000,
+      "tag": "0035_small_vindicator",
+      "breakpoints": true
     }
   ]
 }

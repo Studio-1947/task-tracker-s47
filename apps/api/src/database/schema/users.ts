@@ -11,6 +11,7 @@ export const users = pgTable('users', {
   avatarKey: varchar('avatar_key', { length: 255 }),
   /** Job title shown under the name (e.g. "Executive Director"); admin-settable. */
   designation: varchar('designation', { length: 120 }),
+  gender: varchar('gender', { length: 32 }).notNull().default('UNSPECIFIED'),
   isActive: boolean('is_active').notNull().default(true),
   /**
    * Stamped when an admin *removes* the person rather than merely deactivating

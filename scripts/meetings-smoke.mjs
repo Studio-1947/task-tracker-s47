@@ -8,11 +8,19 @@
 //   node scripts/meetings-smoke.mjs      (defaults to http://localhost:3000/api)
 //   API_URL=... MEETING_SMOKE_DATE=YYYY-MM-DD node scripts/meetings-smoke.mjs
 //
+// Runs on an isolated past week and always unlocks and clears it afterwards, even if an assertion throws.
 // Requires the seeded admin (pnpm db:seed creates admin@). Creates one throwaway
 // member for the permission checks and deactivates it afterwards.
 
 const API = process.env.API_URL ?? 'http://localhost:3000/api';
-const TEST_DATE = process.env.MEETING_SMOKE_DATE;
+// The suite locks the week, adds and deletes cards and notes, so it must never run against a week real people use.
+// Default to a dedicated week 40 weeks back; MEETING_SMOKE_DATE can point elsewhere deliberately.
+function isolatedWeek() {
+  const d = new Date();
+  d.setDate(d.getDate() - 40 * 7);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+const TEST_DATE = process.env.MEETING_SMOKE_DATE ?? isolatedWeek();
 
 const ADMIN = {
   email: process.env.SEED_ADMIN_EMAIL ?? 'admin@example.com',
@@ -63,13 +71,16 @@ const plusDays = (dateStr, n) => {
   return ymd(d);
 };
 
-async function main() {
+async function body(state) {
   const admin = await login(ADMIN.email, ADMIN.password);
+  state.admin = admin;
 
   console.log('\n── board & week normalisation ──');
-  const first = await call(admin, 'GET', `/meeting-boards?date=${TEST_DATE ?? ymd(new Date())}`);
+  const first = await call(admin, 'GET', `/meeting-boards?date=${TEST_DATE}`);
   assert(first.status === 200, 'board loads for the current week', JSON.stringify(first.body));
   const board = first.body;
+  state.boardId = board.id;
+  state.boardWeek = board.weekStart;
   assert(new Date(`${board.weekStart}T00:00:00`).getDay() === 1, 'weekStart is a Monday', board.weekStart);
   assert(board.days?.length === 5, 'board spans 5 working days (Mon-Fri)', JSON.stringify(board.days));
   assert(board.weekEnd === board.days[4], 'weekEnd is the Friday');
@@ -171,7 +182,7 @@ async function main() {
   assert(offWeek.status === 400, 'a move outside the week is rejected', `status ${offWeek.status}`);
 
   console.log('\n── week history ──');
-  const weeks = await call(admin, 'GET', '/meeting-boards/weeks?limit=5');
+  const weeks = await call(admin, 'GET', '/meeting-boards/weeks?limit=100');
   const row = weeks.body?.find((w) => w.id === board.id);
   assert(weeks.status === 200 && Boolean(row), 'the current week appears in the history list');
   assert(row?.progress?.total === 3 && row?.memberCount === 1, 'history rows carry progress and member counts');
@@ -179,7 +190,7 @@ async function main() {
   // Opening a week creates its board, so an untouched week must not litter the history.
   const future = await call(admin, 'GET', `/meeting-boards?date=${plusDays(board.weekStart, 70)}`);
   assert(future.status === 200 && future.body.items.length === 0, 'a far-future week opens empty');
-  const afterBrowse = await call(admin, 'GET', '/meeting-boards/weeks?limit=20');
+  const afterBrowse = await call(admin, 'GET', '/meeting-boards/weeks?limit=100');
   assert(
     !afterBrowse.body?.some((w) => w.id === future.body.id),
     'merely browsing to an empty week keeps it out of the history',
@@ -337,6 +348,8 @@ async function main() {
   const pastWeek = plusDays(board.weekStart, -14);
   const past = (await call(admin, 'GET', `/meeting-boards?date=${pastWeek}`)).body;
   const [pastMon, pastTue] = past.days;
+  state.pastId = past.id;
+  state.pastWeek = pastWeek;
   const stale = await call(admin, 'POST', `/meeting-boards/${past.id}/items`, {
     dayDate: pastMon,
     slot: 'FIRST',
@@ -525,19 +538,38 @@ async function main() {
   assert(!pruned.items.some((i) => i.id === c3.body.id), 'a deleted card disappears');
   assert(!pruned.notes.some((n) => n.itemId === c3.body.id), "a deleted card's comments cascade away");
 
-  // Leave the board and the user directory as we found them.
-  for (const item of pruned.items) await call(admin, 'DELETE', `/meeting-boards/items/${item.id}`);
-  for (const n of pruned.notes) await call(admin, 'DELETE', `/meeting-boards/notes/${n.id}`);
-  // The account is deliberately left in place for the next run to reuse.
-
+  // Cleanup runs in main()'s finally so it also happens when an assertion or request throws part-way.
   if (failures > 0) {
     console.error(`\n✗ Meeting board smoke failed — ${failures} assertion(s)`);
-    process.exit(1);
+    return false;
   }
   console.log(
     '\n✓ Meeting board smoke passed — calendar, halves, progress, mood, notes, carry-forward, projects & mirror tasks, permissions, locking',
   );
-  process.exit(0);
+  return true;
+}
+
+/** Leave the isolated boards unlocked and empty so every run starts from the same state. */
+async function cleanup(state) {
+  if (!state.admin) return;
+  for (const [id, week] of [[state.boardId, state.boardWeek], [state.pastId, state.pastWeek]]) {
+    if (!id || !week) continue;
+    await call(state.admin, 'PATCH', `/meeting-boards/${id}`, { isLocked: false, title: null }).catch(() => null);
+    const b = (await call(state.admin, 'GET', `/meeting-boards?date=${week}`)).body;
+    for (const item of b?.items ?? []) await call(state.admin, 'DELETE', `/meeting-boards/items/${item.id}`).catch(() => null);
+    for (const n of b?.notes ?? []) await call(state.admin, 'DELETE', `/meeting-boards/notes/${n.id}`).catch(() => null);
+  }
+}
+
+async function main() {
+  const state = {};
+  let ok = false;
+  try {
+    ok = await body(state);
+  } finally {
+    await cleanup(state);
+  }
+  process.exit(ok ? 0 : 1);
 }
 
 main().catch((err) => {

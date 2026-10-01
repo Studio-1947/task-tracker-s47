@@ -156,8 +156,8 @@ export function OrganisationCalendarCard() {
       <ul className="mt-3 space-y-2">
         {data.exceptions.length === 0 ? <li className="text-sm text-slate-400">No holidays or exceptions recorded.</li> : null}
         {data.exceptions.map((x) => (
-          <li key={x.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 p-2 text-sm dark:bg-slate-850">
-            <span><b>{x.date}</b> · {x.name} <span className="text-slate-400">({x.kind.toLowerCase().replace('_', ' ')})</span></span>
+          <li key={x.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-100 p-2 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100">
+            <span><b>{x.date}</b> · {x.name} <span className="text-slate-500 dark:text-slate-400">({x.kind.toLowerCase().replace('_', ' ')})</span></span>
             <Button variant="danger" className="px-2 py-1 text-xs" onClick={() => removeEx.mutate(x.id)}>Remove</Button>
           </li>
         ))}

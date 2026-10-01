@@ -66,7 +66,12 @@ export class AttendanceService {
       accrualPerMonth: Number(t.accrualPerMonth),
       carryForwardMax: Number(t.carryForwardMax),
       carryForwardExpiryMonths: t.carryForwardExpiryMonths,
-      approvalRequired: t.approvalRequired, entitlementUnit: t.entitlementUnit as 'DAYS' | 'MONTHS', wfhEntitlementDays: t.wfhEntitlementDays, policyNotes: t.policyNotes,
+      carryForwardPolicy: (t.carryForwardPolicy as any) ?? 'LAPSE_AFTER_YEAR',
+      approvalRequired: (t.approvalRequired as any) ?? 'MANAGER_APPROVAL',
+      entitlementUnit: (t.entitlementUnit as 'DAYS' | 'MONTHS') ?? 'DAYS',
+      wfhEntitlementDays: t.wfhEntitlementDays ?? 0,
+      policyNotes: t.policyNotes ?? null,
+      applicableGender: (t.applicableGender as any) ?? 'ALL',
       isActive: t.isActive,
     };
   }
@@ -107,7 +112,12 @@ export class AttendanceService {
         accrualPerMonth: String(input.accrualPerMonth),
         carryForwardMax: String(input.carryForwardMax),
         carryForwardExpiryMonths: input.carryForwardExpiryMonths,
-        approvalRequired: input.approvalRequired, entitlementUnit: input.entitlementUnit, wfhEntitlementDays: input.wfhEntitlementDays, policyNotes: input.policyNotes ?? null,
+        carryForwardPolicy: input.carryForwardPolicy ?? 'LAPSE_AFTER_YEAR',
+        approvalRequired: input.approvalRequired ?? 'MANAGER_APPROVAL',
+        entitlementUnit: input.entitlementUnit ?? 'DAYS',
+        wfhEntitlementDays: input.wfhEntitlementDays ?? 0,
+        policyNotes: input.policyNotes ?? null,
+        applicableGender: input.applicableGender ?? 'ALL',
       })
       .returning();
     return this.toLeaveType(t!);
@@ -137,6 +147,65 @@ export class AttendanceService {
       .returning();
     if (!t) throw new NotFoundException('Leave type not found');
     return { ok: true };
+  }
+
+  /**
+   * Reads leave types out of policy text, line by line. It is deliberately conservative: a line only
+   * counts when it names a leave type as a whole word AND states a number (the entitlement), and nothing
+   * is guessed when a figure is missing. Abbreviations such as EL or CL only match as upper-case tokens,
+   * so ordinary words ("welcome", "company") can never be mistaken for a leave type.
+   */
+  parseLeavePolicyPdfText(text: string): CreateLeaveTypeInput[] {
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const results: CreateLeaveTypeInput[] = [];
+    const knownTypes: Array<{ words: RegExp; abbreviations?: RegExp; name: string; color: string }> = [
+      { words: /\b(earned|privilege)\s+leave\b/i, abbreviations: /\b(EL|PL)\b/, name: 'Earned Leave', color: '#3b82f6' },
+      { words: /\bcasual\s+leave\b/i, abbreviations: /\bCL\b/, name: 'Casual Leave', color: '#10b981' },
+      { words: /\b(sick|medical)\s+leave\b/i, abbreviations: /\bSL\b/, name: 'Sick Leave', color: '#ef4444' },
+      { words: /\b(wfh|work\s+from\s+home)\b/i, name: 'Work From Home', color: '#8b5cf6' },
+      { words: /\bmaternity\b/i, name: 'Maternity Leave', color: '#ec4899' },
+      { words: /\bpaternity\b/i, name: 'Paternity Leave', color: '#06b6d4' },
+      { words: /\b(bereavement|compassionate)\b/i, name: 'Bereavement Leave', color: '#64748b' },
+      { words: /\b(unpaid\s+leave|loss\s+of\s+pay)\b/i, abbreviations: /\bLOP\b/, name: 'Loss of Pay', color: '#f59e0b' },
+    ];
+
+    for (const line of lines) {
+      const known = knownTypes.find((t) => t.words.test(line) || t.abbreviations?.test(line));
+      // A custom type must read like a name: "Marriage Leave", "Study Leave".
+      const custom = known ? null : line.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\s+Leave\b/)?.[1];
+      const typeName = known ? known.name : custom ? `${custom} Leave` : null;
+      if (!typeName) continue;
+      if (results.some((r) => r.name.toLowerCase() === typeName.toLowerCase())) continue;
+
+      // Strip the type name so a figure in it ("Type 2 leave") is not read as the entitlement.
+      const numbers = line.match(/\b\d+(?:\.\d+)?\b/g)?.map(Number) ?? [];
+      if (numbers.length === 0) continue; // no stated entitlement: nothing to record, and nothing to invent
+
+      const lower = line.toLowerCase();
+      const isMonthUnit = /\bmonths?\b/.test(lower) && !/\bper\s+month\b/.test(lower);
+      const isNoApproval = /\bno\s+approval\b|\bauto[- ]?approv|\bintimation\s+only\b/.test(lower);
+      const isPriorApproval = /\bprior\s+(approval|permission)\b|\bin\s+advance\b|\bpre-?approv/.test(lower);
+      const isNoCarry = /\bno\s+carry|\bnot\s+(be\s+)?carried|\blapse|\bexpire/.test(lower);
+
+      results.push({
+        name: typeName,
+        color: known?.color ?? '#6366f1',
+        defaultBalance: Math.round(numbers[0]!),
+        accrualPerMonth: /\baccru/.test(lower) && numbers[1] !== undefined ? numbers[1] : 0,
+        carryForwardMax: isNoCarry ? 0 : numbers[2] ?? 0,
+        carryForwardExpiryMonths: null,
+        carryForwardPolicy: isNoCarry ? 'NO_CARRY_FORWARD' : 'LAPSE_AFTER_YEAR',
+        approvalRequired: isNoApproval ? 'NO_APPROVAL' : isPriorApproval ? 'PRIOR_APPROVAL' : 'MANAGER_APPROVAL',
+        entitlementUnit: isMonthUnit ? 'MONTHS' : 'DAYS',
+        wfhEntitlementDays: known?.name === 'Work From Home' ? Math.round(numbers[0]!) : 0,
+        policyNotes: line.slice(0, 200),
+        applicableGender: known?.name === 'Maternity Leave' ? 'FEMALE' : known?.name === 'Paternity Leave' ? 'MALE' : 'ALL',
+      });
+    }
+
+    // Nothing recognisable in the text means nothing is returned: inventing leave types and labelling them
+    // "extracted" would look like policy that was never in the document.
+    return results;
   }
 
   /* ── attendance ── */
@@ -264,6 +333,10 @@ export class AttendanceService {
       .where(and(eq(leaveTypes.id, input.leaveTypeId), eq(leaveTypes.isActive, true)))
       .limit(1);
     if (!type) throw new NotFoundException('Leave type not found');
+    if (type.applicableGender !== 'ALL') {
+      const [person] = await this.db.select({ gender: users.gender }).from(users).where(eq(users.id, userId)).limit(1);
+      if (person?.gender !== type.applicableGender) throw new ForbiddenException(`${type.name} does not apply to you`);
+    }
 
     // Reject dates that overlap an existing pending/approved request (no double-booking).
     // Two ranges overlap when start <= otherEnd AND end >= otherStart.
@@ -287,6 +360,19 @@ export class AttendanceService {
 
     const days = await this.calendar.leaveUnits(input.startDate, input.endDate, input.halfDay);
     if (days === 0) throw new BadRequestException('The selected range contains no scheduled working days');
+
+    // How the type is approved decides what a request may look like (leave policy matrix).
+    if (type.approvalRequired === 'PRIOR_APPROVAL' && input.startDate <= localDateStr()) {
+      throw new BadRequestException(`${type.name} must be requested and approved before it starts; choose a start date after today`);
+    }
+    const autoApprove = type.approvalRequired === 'NO_APPROVAL';
+    if (autoApprove && (type.defaultBalance > 0 || Number(type.accrualPerMonth) > 0)) {
+      // Nobody reviews this request, so the balance check that normally happens at approval happens here.
+      const balance = (await this.balancesFor(userId, input.startDate)).find((b) => b.leaveTypeId === type.id);
+      if (balance && days > balance.remaining) {
+        throw new BadRequestException(`Insufficient ${type.name} balance: ${balance.remaining} day(s) available, ${days} requested`);
+      }
+    }
     const [created] = await this.db
       .insert(leaveRequests)
       .values({
@@ -297,6 +383,9 @@ export class AttendanceService {
         halfDay: input.halfDay,
         days: String(days),
         reason: input.reason ?? null,
+        ...(autoApprove
+          ? { status: 'APPROVED' as const, reviewedAt: new Date(), reviewNote: `Recorded automatically: ${type.name} needs no approval` }
+          : {}),
       })
       .returning({ id: leaveRequests.id });
     const [item] = await this.leaveQuery(eq(leaveRequests.id, created!.id));
@@ -380,11 +469,12 @@ export class AttendanceService {
         .select({ leaveTypeId: leaveRequests.leaveTypeId, startDate: leaveRequests.startDate, days: leaveRequests.days })
         .from(leaveRequests)
         .where(and(eq(leaveRequests.userId, userId), eq(leaveRequests.status, 'APPROVED'))),
-      this.db.select({ createdAt: users.createdAt }).from(users).where(eq(users.id, userId)).limit(1),
+      this.db.select({ createdAt: users.createdAt, gender: users.gender }).from(users).where(eq(users.id, userId)).limit(1),
     ]);
     const overrideBy = new Map(overrides.map((o) => [o.leaveTypeId, o.allotted]));
     const joinedOn = localDateStr(person?.createdAt ?? new Date());
-    return types.map((t) => {
+    const validTypes = types.filter(t => t.applicableGender === 'ALL' || t.applicableGender === person?.gender);
+    return validTypes.map((t) => {
       const r = computeLeaveBalance(
         {
           annualAllotment: overrideBy.get(t.id) ?? t.defaultBalance,

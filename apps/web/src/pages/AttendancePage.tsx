@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type {
-  AttendanceDayState, AttendancePunchInput, LeaveBalance, LeaveRequestItem } from '@task-tracker/shared';
+  AttendanceDayState, AttendancePunchInput, LeaveBalance, LeaveRequestItem, CarryForwardPolicyType, ApprovalRequiredType, EntitlementUnitType, ApplicableGenderType } from '@task-tracker/shared';
 import { useAuth } from '../stores/auth';
 import { ApiRequestError } from '../lib/api';
 import { useUsers } from '../hooks/useUsers';
@@ -34,6 +34,7 @@ import {
   useListCorrections,
   useRequestCorrection,
   useReviewCorrection,
+  useImportLeavePolicyPdf,
   type AttendanceCorrectionItem,
 } from '../hooks/useAttendance';
 
@@ -776,54 +777,151 @@ function LeaveTypesTab() {
   const create = useCreateLeaveType();
   const update = useUpdateLeaveType();
   const del = useDeleteLeaveType();
+  const importPdf = useImportLeavePolicyPdf();
+
   const [name, setName] = useState('');
   const [color, setColor] = useState('#6366f1');
   const [defaultBalance, setDefaultBalance] = useState(12);
   const [accrualPerMonth, setAccrualPerMonth] = useState(0);
   const [carryForwardMax, setCarryForwardMax] = useState(0);
   const [expiryMonths, setExpiryMonths] = useState('');
+  const [carryForwardPolicy, setCarryForwardPolicy] = useState<CarryForwardPolicyType>('LAPSE_AFTER_YEAR' as CarryForwardPolicyType);
+  const [approvalRequired, setApprovalRequired] = useState<ApprovalRequiredType>('MANAGER_APPROVAL' as ApprovalRequiredType);
+  const [entitlementUnit, setEntitlementUnit] = useState<EntitlementUnitType>('DAYS' as EntitlementUnitType);
+  const [wfhEntitlementDays, setWfhEntitlementDays] = useState<number | ''>('');
+  const [applicableGender, setApplicableGender] = useState<ApplicableGenderType>('ALL' as ApplicableGenderType);
+  const [policyNotes, setPolicyNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     try {
-      await create.mutateAsync({ name, color, defaultBalance, accrualPerMonth, carryForwardMax, carryForwardExpiryMonths: expiryMonths ? Number(expiryMonths) : null });
+      await create.mutateAsync({ name, color, defaultBalance, accrualPerMonth, carryForwardMax, carryForwardExpiryMonths: expiryMonths ? Number(expiryMonths) : null, carryForwardPolicy, approvalRequired, entitlementUnit, wfhEntitlementDays: wfhEntitlementDays === '' ? 0 : Number(wfhEntitlementDays), applicableGender, policyNotes: policyNotes || undefined });
       setName('');
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Failed to create type');
     }
   };
 
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const parsed = (await importPdf.mutateAsync(file)).filter((p) => p.name);
+      if (parsed.length === 0) {
+        setError('No leave types could be read from that PDF. Add them manually instead.');
+        return;
+      }
+      // The text is read heuristically, so show what was found before creating anything.
+      if (!window.confirm(`Create ${parsed.length} leave type(s) from this PDF?\n\n${parsed.map((p) => `- ${p.name}`).join('\n')}\n\nCheck each one afterwards: the policy text is read automatically and may be wrong.`)) return;
+      setError(null);
+      for (const p of parsed) {
+        if (!p.name) continue;
+        await create.mutateAsync({
+          name: p.name,
+          color: p.color ?? '#6366f1',
+          defaultBalance: p.defaultBalance ?? 0,
+          accrualPerMonth: p.accrualPerMonth ?? 0,
+          carryForwardMax: p.carryForwardMax ?? 0,
+          carryForwardExpiryMonths: p.carryForwardExpiryMonths ?? null,
+          carryForwardPolicy: (p.carryForwardPolicy as CarryForwardPolicyType) ?? 'LAPSE_AFTER_YEAR',
+          approvalRequired: (p.approvalRequired as ApprovalRequiredType) ?? 'MANAGER_APPROVAL',
+          entitlementUnit: (p.entitlementUnit as EntitlementUnitType) ?? 'DAYS',
+          wfhEntitlementDays: p.wfhEntitlementDays ?? 0,
+          applicableGender: (p as { applicableGender?: ApplicableGenderType }).applicableGender ?? 'ALL',
+          policyNotes: p.policyNotes ?? undefined,
+        });
+      }
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Failed to import PDF');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
   return (
     <div className="space-y-5">
+      <div className="flex justify-between items-center">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Leave Types</h2>
+        <div>
+          <label className="cursor-pointer rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 inline-block">
+            {importPdf.isPending ? 'Importing…' : 'Import from PDF'}
+            <input type="file" className="hidden" accept="application/pdf" onChange={handleImport} disabled={importPdf.isPending} />
+          </label>
+        </div>
+      </div>
       <Card className="p-5 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
-        <form className="flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={add}>
-          <div className="flex-1">
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">New leave type</label>
-            <Input placeholder="e.g. Casual" value={name} onChange={(e) => setName(e.target.value)} required />
+        <form className="flex flex-col gap-4" onSubmit={add}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">New leave type</label>
+              <Input placeholder="e.g. Casual" value={name} onChange={(e) => setName(e.target.value)} required />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Color</label>
+              <input aria-label="Color" type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-10 w-14 cursor-pointer rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#252525]" />
+            </div>
+            <div className="w-24">
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Default</label>
+              <Input type="number" min={0} max={365} value={defaultBalance} onChange={(e) => setDefaultBalance(Number(e.target.value))} />
+            </div>
+            <div className="w-24">
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Accrual</label>
+              <Input type="number" min={0} max={31} step="0.25" value={accrualPerMonth} onChange={(e) => setAccrualPerMonth(Number(e.target.value))} />
+            </div>
+            <div className="w-24">
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Carry max</label>
+              <Input type="number" min={0} max={365} step="0.5" value={carryForwardMax} onChange={(e) => setCarryForwardMax(Number(e.target.value))} />
+            </div>
+            <div className="w-24">
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Expire(mo)</label>
+              <Input type="number" min={1} max={24} placeholder="never" value={expiryMonths} onChange={(e) => setExpiryMonths(e.target.value)} />
+            </div>
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Color</label>
-            <input aria-label="Color" type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-10 w-14 cursor-pointer rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#252525]" />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="w-32">
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Carry Policy</label>
+              <select className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-3 py-2.5 text-sm bg-white dark:bg-[#252525] dark:text-white" value={carryForwardPolicy} onChange={(e) => setCarryForwardPolicy(e.target.value as CarryForwardPolicyType)}>
+                <option value="LAPSE_AFTER_YEAR">Lapse</option>
+                <option value="NO_CARRY_FORWARD">No Carry</option>
+                <option value="CARRY_FORWARD">Carry All</option>
+              </select>
+            </div>
+            <div className="w-32">
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Approval</label>
+              <select className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-3 py-2.5 text-sm bg-white dark:bg-[#252525] dark:text-white" value={approvalRequired} onChange={(e) => setApprovalRequired(e.target.value as ApprovalRequiredType)}>
+                <option value="MANAGER_APPROVAL">Manager</option>
+                <option value="NO_APPROVAL">None</option>
+                <option value="PRIOR_APPROVAL">Prior</option>
+              </select>
+            </div>
+            <div className="w-28">
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Unit</label>
+              <select className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-3 py-2.5 text-sm bg-white dark:bg-[#252525] dark:text-white" value={entitlementUnit} onChange={(e) => setEntitlementUnit(e.target.value as EntitlementUnitType)}>
+                <option value="DAYS">Days</option>
+                <option value="MONTHS">Months</option>
+              </select>
+            </div>
+            <div className="w-24">
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">WFH Days</label>
+              <Input type="number" min={0} max={365} value={wfhEntitlementDays} onChange={(e) => setWfhEntitlementDays(e.target.value === '' ? '' : Number(e.target.value))} />
+            </div>
+            <div className="w-36">
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Applies to</label>
+              <select aria-label="Applies to" className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-3 py-2.5 text-sm bg-white dark:bg-[#252525] dark:text-white" value={applicableGender} onChange={(e) => setApplicableGender(e.target.value as ApplicableGenderType)}>
+                <option value="ALL">Everyone</option>
+                <option value="FEMALE">Women only</option>
+                <option value="MALE">Men only</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Policy Notes</label>
+              <Input placeholder="Notes..." value={policyNotes} onChange={(e) => setPolicyNotes(e.target.value)} />
+            </div>
+            <Button type="submit" disabled={create.isPending || !name} className="py-2.5 px-6 ml-auto h-[42px]">Add</Button>
           </div>
-          <div className="w-28">
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Default days</label>
-            <Input type="number" min={0} max={365} value={defaultBalance} onChange={(e) => setDefaultBalance(Number(e.target.value))} />
-          </div>
-          <div className="w-28">
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400" title="Days credited each month. 0 = fixed yearly days.">Accrual / mo</label>
-            <Input type="number" min={0} max={31} step="0.25" value={accrualPerMonth} onChange={(e) => setAccrualPerMonth(Number(e.target.value))} />
-          </div>
-          <div className="w-28">
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400" title="Most unused days carried into next year.">Carry max</label>
-            <Input type="number" min={0} max={365} step="0.5" value={carryForwardMax} onChange={(e) => setCarryForwardMax(Number(e.target.value))} />
-          </div>
-          <div className="w-28">
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400" title="Carried days lapse this many months into the year. Blank = never.">Expire (mo)</label>
-            <Input type="number" min={1} max={24} placeholder="never" value={expiryMonths} onChange={(e) => setExpiryMonths(e.target.value)} />
-          </div>
-          <Button type="submit" disabled={create.isPending || !name} className="py-3 px-5">Add</Button>
         </form>
         {error ? <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p> : null}
       </Card>
@@ -835,12 +933,17 @@ function LeaveTypesTab() {
       ) : (
         <div className="space-y-2.5">
           {data.map((t) => (
-            <Card key={t.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="h-3 w-3 rounded-full" style={{ backgroundColor: t.color ?? '#6366f1' }} />
-                <span className="font-semibold text-slate-800 dark:text-slate-100">{t.name}</span>
+            <Card key={t.id} className="flex flex-col gap-3 p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <span className="h-3 w-3 rounded-full" style={{ backgroundColor: t.color ?? '#6366f1' }} />
+                  <span className="font-semibold text-slate-800 dark:text-slate-100">{t.name}</span>
+                </div>
+                <Button variant="danger" className="py-1.5 px-3 text-xs" disabled={del.isPending} onClick={() => del.mutate(t.id)}>
+                  Remove
+                </Button>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3 mt-1">
                 <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
                   Default
                   <input
@@ -872,8 +975,20 @@ function LeaveTypesTab() {
                   />
                   /mo
                 </label>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Policy
+                  <select
+                    className="w-28 rounded-md border border-slate-300 dark:border-slate-700 px-2 py-1 text-sm bg-white dark:bg-[#252525] dark:text-white"
+                    defaultValue={t.carryForwardPolicy ?? 'LAPSE_AFTER_YEAR'}
+                    onChange={(e) => update.mutate({ id: t.id, patch: { carryForwardPolicy: e.target.value as CarryForwardPolicyType } })}
+                  >
+                    <option value="LAPSE_AFTER_YEAR">Lapse</option>
+                    <option value="NO_CARRY_FORWARD">No Carry</option>
+                    <option value="CARRY_FORWARD">Carry All</option>
+                  </select>
+                </label>
                 <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400" title="Most unused days carried into next year">
-                  Carry
+                  Carry max
                   <input
                     type="number"
                     min={0}
@@ -903,9 +1018,69 @@ function LeaveTypesTab() {
                   />
                   mo
                 </label>
-                <Button variant="danger" className="py-1.5 px-3 text-xs" disabled={del.isPending} onClick={() => del.mutate(t.id)}>
-                  Remove
-                </Button>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Approval
+                  <select
+                    className="w-28 rounded-md border border-slate-300 dark:border-slate-700 px-2 py-1 text-sm bg-white dark:bg-[#252525] dark:text-white"
+                    defaultValue={t.approvalRequired ?? 'MANAGER_APPROVAL'}
+                    onChange={(e) => update.mutate({ id: t.id, patch: { approvalRequired: e.target.value as ApprovalRequiredType } })}
+                  >
+                    <option value="MANAGER_APPROVAL">Manager</option>
+                    <option value="NO_APPROVAL">None</option>
+                    <option value="PRIOR_APPROVAL">Prior</option>
+                  </select>
+                </label>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Unit
+                  <select
+                    className="w-20 rounded-md border border-slate-300 dark:border-slate-700 px-2 py-1 text-sm bg-white dark:bg-[#252525] dark:text-white"
+                    defaultValue={t.entitlementUnit ?? 'DAYS'}
+                    onChange={(e) => update.mutate({ id: t.id, patch: { entitlementUnit: e.target.value as EntitlementUnitType } })}
+                  >
+                    <option value="DAYS">Days</option>
+                    <option value="MONTHS">Months</option>
+                  </select>
+                </label>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Gender
+                  <select
+                    className="w-24 rounded-md border border-slate-300 dark:border-slate-700 px-2 py-1 text-sm bg-white dark:bg-[#252525] dark:text-white"
+                    defaultValue={t.applicableGender ?? 'ALL'}
+                    onChange={(e) => update.mutate({ id: t.id, patch: { applicableGender: e.target.value as ApplicableGenderType } })}
+                  >
+                    <option value="ALL">All</option>
+                    <option value="MALE">Male</option>
+                    <option value="FEMALE">Female</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </label>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                  WFH Days
+                  <input
+                    type="number"
+                    min={0}
+                    max={365}
+                    placeholder="none"
+                    defaultValue={t.wfhEntitlementDays ?? ''}
+                    className="w-16 rounded-md border border-slate-300 dark:border-slate-700 px-2 py-1 text-sm bg-white dark:bg-[#252525] dark:text-white"
+                    onBlur={(e) => {
+                      const v = e.target.value === '' ? null : Number(e.target.value);
+                      if ((v ?? 0) !== t.wfhEntitlementDays) update.mutate({ id: t.id, patch: { wfhEntitlementDays: v ?? 0 } });
+                    }}
+                  />
+                </label>
+              </div>
+              <div className="mt-2">
+                <input
+                  type="text"
+                  placeholder="Policy notes..."
+                  defaultValue={t.policyNotes ?? ''}
+                  className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-sm bg-white dark:bg-[#252525] dark:text-white"
+                  onBlur={(e) => {
+                    const v = e.target.value || null;
+                    if (v !== (t.policyNotes ?? null)) update.mutate({ id: t.id, patch: { policyNotes: v } });
+                  }}
+                />
               </div>
             </Card>
           ))}
@@ -914,6 +1089,8 @@ function LeaveTypesTab() {
     </div>
   );
 }
+
+
 
 /* ── Admin: Allotments ── */
 function AllotmentsTab() {

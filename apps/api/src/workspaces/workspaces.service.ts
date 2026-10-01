@@ -1,4 +1,4 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, count, eq, inArray } from 'drizzle-orm';
 import {
   AuditAction,
@@ -10,7 +10,7 @@ import {
   type WorkspaceSummary,
 } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
-import { auditLogs, projects, users, workspaceMembers, workspaces, type WorkspaceRow } from '../database/schema';
+import { auditLogs, clients, offices, projects, users, workspaceMembers, workspaces, type WorkspaceRow } from '../database/schema';
 import { UsersService } from '../users/users.service';
 import { FilesService } from '../files/files.service';
 
@@ -160,7 +160,20 @@ export class WorkspacesService {
     return this.toSummary(w, Number(memberCount), Number(projectCount));
   }
 
+  /** An office or client id that does not exist is the caller's mistake (400), not a database foreign-key 500. */
+  private async assertOfficeAndClientExist(officeId?: string | null, clientId?: string | null): Promise<void> {
+    if (officeId) {
+      const [o] = await this.db.select({ id: offices.id }).from(offices).where(eq(offices.id, officeId)).limit(1);
+      if (!o) throw new BadRequestException('That office does not exist');
+    }
+    if (clientId) {
+      const [c] = await this.db.select({ id: clients.id }).from(clients).where(eq(clients.id, clientId)).limit(1);
+      if (!c) throw new BadRequestException('That client does not exist');
+    }
+  }
+
   async create(input: CreateWorkspaceInput, createdById: string): Promise<WorkspaceSummary> {
+    await this.assertOfficeAndClientExist(input.officeId, input.clientId);
     const w = await this.db.transaction(async (tx) => {
       const [workspace] = await tx
         .insert(workspaces)
@@ -192,6 +205,7 @@ export class WorkspacesService {
   async update(id: string, input: UpdateWorkspaceInput): Promise<WorkspaceSummary> {
     const [current] = await this.db.select({ id: workspaces.id }).from(workspaces).where(eq(workspaces.id, id)).limit(1);
     if (!current) throw new NotFoundException('Workspace not found');
+    await this.assertOfficeAndClientExist(input.officeId, input.clientId);
     // Treat an empty subtitle as "cleared" so the card doesn't render a blank line.
     const patch = { ...input };
     if (patch.subtitle !== undefined) patch.subtitle = patch.subtitle?.trim() || null;

@@ -49,6 +49,16 @@ export function useDeleteLeaveType() {
   });
 }
 
+export function useImportLeavePolicyPdf() {
+  return useMutation({
+    mutationFn: (file: File) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      return http.upload<Partial<LeaveType>[]>('/leave-types/import-pdf', fd);
+    },
+  });
+}
+
 /* ── attendance ── */
 export function useAttendanceToday() {
   return useQuery({

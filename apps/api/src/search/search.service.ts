@@ -126,6 +126,7 @@ export class SearchService {
       role: u.role as NonNullable<SearchResults['users']>[number]['role'],
       avatarKey: u.avatarKey,
       designation: u.designation,
+      gender: u.gender as NonNullable<SearchResults['users']>[number]['gender'],
       isActive: u.isActive,
       removedAt: u.removedAt ? u.removedAt.toISOString() : null,
       createdAt: u.createdAt.toISOString(),

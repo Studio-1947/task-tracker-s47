@@ -56,6 +56,7 @@ export class UsersService {
       role: u.role as UserSummary['role'],
       avatarKey: u.avatarKey,
       designation: u.designation,
+      gender: u.gender as UserSummary['gender'],
       isActive: u.isActive,
       removedAt: u.removedAt ? u.removedAt.toISOString() : null,
       createdAt: u.createdAt.toISOString(),
@@ -146,6 +147,7 @@ export class UsersService {
           passwordHash,
           role: input.role,
           designation: input.designation ?? null,
+          gender: input.gender ?? 'UNSPECIFIED',
           mustChangePassword: true,
         })
         .returning();
@@ -186,6 +188,7 @@ export class UsersService {
     if (input.name !== undefined) patch.name = input.name;
     if (input.role !== undefined) patch.role = input.role;
     if (input.designation !== undefined) patch.designation = input.designation;
+    if (input.gender !== undefined) patch.gender = input.gender;
 
     const deactivating = input.isActive === false && current.isActive === true;
     if (input.isActive !== undefined) {
@@ -288,6 +291,7 @@ export class UsersService {
       role: u.role as AuthUser['role'],
       avatarKey: u.avatarKey,
       designation: u.designation,
+      gender: u.gender as AuthUser['gender'],
       isActive: u.isActive,
       mustChangePassword: u.mustChangePassword,
     };

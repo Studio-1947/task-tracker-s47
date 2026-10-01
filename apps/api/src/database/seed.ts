@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema';
-import { users } from './schema';
+import { users, leaveTypes } from './schema';
 
 // Standalone seed — run with `pnpm db:seed` after migrations.
 // Load the repo-root .env regardless of where the script is launched from.
@@ -64,6 +64,89 @@ async function main(): Promise<void> {
         mustChangePassword: false,
       });
       console.log(`✓ Seeded admin: ${admin.email} (password from ${admin.envVar})`);
+    }
+
+    const defaultLeaveTypes = [
+      {
+        name: 'Earned Leave',
+        defaultBalance: 6,
+        accrualPerMonth: '0.5',
+        carryForwardPolicy: 'LAPSE_AFTER_YEAR' as const,
+        approvalRequired: 'MANAGER_APPROVAL' as const,
+        entitlementUnit: 'DAYS' as const,
+        wfhEntitlementDays: 0,
+      },
+      {
+        name: 'Casual Leave',
+        defaultBalance: 6,
+        accrualPerMonth: '0.5',
+        carryForwardPolicy: 'LAPSE_AFTER_YEAR' as const,
+        approvalRequired: 'MANAGER_APPROVAL' as const,
+        entitlementUnit: 'DAYS' as const,
+        wfhEntitlementDays: 0,
+      },
+      {
+        name: 'Sick Leave',
+        defaultBalance: 6,
+        accrualPerMonth: '0.5',
+        carryForwardPolicy: 'LAPSE_AFTER_YEAR' as const,
+        approvalRequired: 'NO_APPROVAL' as const,
+        entitlementUnit: 'DAYS' as const,
+        wfhEntitlementDays: 0,
+      },
+      {
+        name: 'Bereavement Leave',
+        defaultBalance: 3,
+        accrualPerMonth: '0',
+        carryForwardPolicy: 'NO_CARRY_FORWARD' as const,
+        approvalRequired: 'NO_APPROVAL' as const,
+        entitlementUnit: 'DAYS' as const,
+        wfhEntitlementDays: 0,
+      },
+      {
+        name: 'Maternity Leave',
+        defaultBalance: 3,
+        accrualPerMonth: '0',
+        carryForwardPolicy: 'NO_CARRY_FORWARD' as const,
+        approvalRequired: 'PRIOR_APPROVAL' as const,
+        entitlementUnit: 'MONTHS' as const,
+        wfhEntitlementDays: 90,
+        applicableGender: 'FEMALE' as const,
+      },
+      {
+        name: 'Paternity Leave',
+        defaultBalance: 15,
+        accrualPerMonth: '0',
+        carryForwardPolicy: 'NO_CARRY_FORWARD' as const,
+        approvalRequired: 'PRIOR_APPROVAL' as const,
+        entitlementUnit: 'DAYS' as const,
+        wfhEntitlementDays: 15,
+        applicableGender: 'MALE' as const,
+      },
+      {
+        name: 'Marriage Leave',
+        defaultBalance: 15,
+        accrualPerMonth: '0',
+        carryForwardPolicy: 'NO_CARRY_FORWARD' as const,
+        approvalRequired: 'PRIOR_APPROVAL' as const,
+        entitlementUnit: 'DAYS' as const,
+        wfhEntitlementDays: 0,
+      },
+    ];
+
+    for (const lt of defaultLeaveTypes) {
+      const [existing] = await db.select({ id: leaveTypes.id }).from(leaveTypes).where(eq(leaveTypes.name, lt.name)).limit(1);
+      if (existing) {
+        console.log(`✓ Leave type ${lt.name} already exists.`);
+        continue;
+      }
+      await db.insert(leaveTypes).values({
+        ...lt,
+        color: null,
+        carryForwardMax: '0',
+        carryForwardExpiryMonths: null,
+      });
+      console.log(`✓ Seeded leave type: ${lt.name}`);
     }
   } finally {
     await pool.end();

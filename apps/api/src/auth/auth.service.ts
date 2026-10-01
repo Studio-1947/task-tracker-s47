@@ -24,6 +24,7 @@ export class AuthService {
       role: u.role as AuthUser['role'],
       avatarKey: u.avatarKey,
       designation: u.designation,
+      gender: u.gender as AuthUser['gender'],
       isActive: u.isActive,
       mustChangePassword: u.mustChangePassword,
     };

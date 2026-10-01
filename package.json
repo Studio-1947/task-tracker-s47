@@ -36,6 +36,8 @@
     "test:stress": "node scripts/stress-test.mjs",
     "test:permissions": "node scripts/permissions-matrix-smoke.mjs",
     "test:specui": "node scripts/spec-ui-support-smoke.mjs",
+    "test:org": "node scripts/org-leave-policy-smoke.mjs",
+    "test:all": "node scripts/run-all-smokes.mjs",
     "verify:improvements": "pnpm typecheck && pnpm test && pnpm build",
     "typecheck": "turbo run typecheck",
     "db:up": "docker compose up -d postgres",

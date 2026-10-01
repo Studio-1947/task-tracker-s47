@@ -12,6 +12,12 @@ import type {
   NotificationType,
 } from './enums';
 
+export type GenderType = 'MALE' | 'FEMALE' | 'OTHER' | 'UNSPECIFIED';
+export type ApplicableGenderType = 'ALL' | 'MALE' | 'FEMALE' | 'OTHER';
+export type CarryForwardPolicyType = 'LAPSE_AFTER_YEAR' | 'NO_CARRY_FORWARD' | 'CARRY_FORWARD';
+export type ApprovalRequiredType = 'MANAGER_APPROVAL' | 'PRIOR_APPROVAL' | 'NO_APPROVAL';
+export type EntitlementUnitType = 'DAYS' | 'MONTHS';
+
 /** Shape of the authenticated user echoed by the API (never includes passwordHash). */
 export interface AuthUser {
   id: string;
@@ -22,6 +28,7 @@ export interface AuthUser {
   avatarKey: string | null;
   /** Job title shown under the name (e.g. "Executive Director"). */
   designation: string | null;
+  gender: GenderType;
   isActive: boolean;
   mustChangePassword: boolean;
 }
@@ -77,6 +84,7 @@ export interface UserSummary {
   role: Role;
   avatarKey: string | null;
   designation: string | null;
+  gender: GenderType;
   isActive: boolean;
   /**
    * When the person was removed rather than merely deactivated. Both states are
@@ -457,10 +465,12 @@ export interface LeaveType {
   accrualPerMonth: number;
   carryForwardMax: number;
   carryForwardExpiryMonths: number | null;
-  approvalRequired: boolean;
+  carryForwardPolicy: 'LAPSE_AFTER_YEAR' | 'NO_CARRY_FORWARD' | 'CARRY_FORWARD';
+  approvalRequired: 'MANAGER_APPROVAL' | 'PRIOR_APPROVAL' | 'NO_APPROVAL';
   entitlementUnit: 'DAYS' | 'MONTHS';
   wfhEntitlementDays: number;
   policyNotes: string | null;
+  applicableGender: ApplicableGenderType;
   isActive: boolean;
 }
 

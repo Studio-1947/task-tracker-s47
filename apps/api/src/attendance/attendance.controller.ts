@@ -10,8 +10,13 @@ import {
   Post,
   Put,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import { PDFParse } from 'pdf-parse';
 import {
   Role,
   attendancePunchSchema,
@@ -57,6 +62,17 @@ export class AttendanceController {
   @Roles(Role.ADMIN)
   createType(@Body(new ZodValidationPipe(createLeaveTypeSchema)) body: CreateLeaveTypeInput) {
     return this.attendance.createLeaveType(body);
+  }
+
+  @Post('leave-types/import-pdf')
+  @Roles(Role.ADMIN)
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }))
+  async importLeavePolicyPdf(@UploadedFile() file?: Express.Multer.File) {
+    if (!file || file.mimetype !== 'application/pdf') throw new BadRequestException('Upload a PDF up to 5 MB');
+    const parser = new PDFParse({ data: file.buffer });
+    const result = await parser.getText();
+    await parser.destroy();
+    return this.attendance.parseLeavePolicyPdfText(result.text);
   }
 
   @Patch('leave-types/:id')
