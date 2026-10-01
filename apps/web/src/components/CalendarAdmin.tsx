@@ -81,6 +81,7 @@ export function OrganisationCalendarCard() {
   });
   const removeEx = useMutation({ mutationFn: (id: string) => http.del(`/calendar/exceptions/${id}`), onSuccess: refresh });
   const bulk = useMutation({ mutationFn: () => http.post('/calendar/exceptions/bulk', { mode: bulkMode, exceptions: bulkRows }), onSuccess: () => { setBulkText(''); refresh(); } });
+  const pdfImport = useMutation({ mutationFn: async (file: File) => { const form = new FormData(); form.append('file', file); return http.upload<{ text: string }>('/calendar/exceptions/import-pdf', form); }, onSuccess: (r) => setBulkText(r.text) });
 
   const dirty = useMemo(() => !!draft && !!data && JSON.stringify(draft) !== JSON.stringify(data.settings), [draft, data]);
   if (!data || !draft) return <Card className="p-6"><p className="text-sm text-slate-500">Loading organisation calendar…</p></Card>;
@@ -134,7 +135,9 @@ export function OrganisationCalendarCard() {
       {addEx.error ? <p className="mt-2 text-sm text-red-600">{errMsg(addEx.error)}</p> : null}
       <div className="mt-4 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
         <h4 className="text-sm font-semibold">Bulk import holidays</h4>
-        <p className="mt-1 text-xs text-slate-500">Paste CSV rows as <code>YYYY-MM-DD, Holiday name, HOLIDAY</code>. Review the parsed rows before importing; a PDF should first be converted to this preview rather than imported blindly.</p>
+        <p className="mt-1 text-xs text-slate-500">Upload a text-based PDF or paste CSV rows as <code>YYYY-MM-DD, Holiday name, HOLIDAY</code>. Review and correct extracted rows before importing.</p>
+        <label className="mt-3 inline-flex cursor-pointer items-center rounded-lg border px-3 py-2 text-sm font-medium dark:border-slate-700">{pdfImport.isPending ? 'Extracting PDF…' : 'Upload holiday PDF'}<input type="file" accept="application/pdf" className="sr-only" disabled={pdfImport.isPending} onChange={e=>{const f=e.target.files?.[0];if(f)pdfImport.mutate(f);e.currentTarget.value='';}} /></label>
+        {pdfImport.error ? <p className="mt-2 text-sm text-red-600">{errMsg(pdfImport.error)}</p> : null}
         <textarea className={`${input} min-h-28`} value={bulkText} onChange={e=>setBulkText(e.target.value)} placeholder={'2026-10-20, Durga Puja, HOLIDAY\n2026-10-21, Vijaya Dashami, HOLIDAY'} />
         {bulkText && <p className="mt-2 text-xs text-slate-500">Preview: {bulkRows.length} valid row(s). Invalid lines are excluded.</p>}
         <div className="mt-2 flex flex-wrap items-center gap-2"><select className="rounded border p-2 text-sm dark:bg-[#252525]" value={bulkMode} onChange={e=>setBulkMode(e.target.value as typeof bulkMode)}><option value="ADD_ONLY">Add only (skip existing dates)</option><option value="REPLACE_MATCHING">Replace matching dates</option></select><Button disabled={!bulkRows.length || bulk.isPending} onClick={()=>bulk.mutate()}>Import {bulkRows.length || ''} rows</Button></div>
