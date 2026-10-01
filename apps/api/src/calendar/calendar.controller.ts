@@ -1,4 +1,7 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Put, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Put, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import { PDFParse } from 'pdf-parse';
 import { Role, calendarExceptionSchema, bulkCalendarExceptionsSchema, updateCalendarSettingsSchema, scheduleGroupSchema, scheduleGroupAssignmentSchema, type CalendarExceptionInput, type BulkCalendarExceptionsInput, type UpdateCalendarSettingsInput, type ScheduleGroupInput, type ScheduleGroupAssignmentInput } from '@task-tracker/shared';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -23,5 +26,7 @@ export class CalendarController {
   @Delete('schedule-groups/assignments/:id') @Roles(Role.ADMIN) removeAssignment(@Param('id', ParseUUIDPipe) id: string) { return this.calendar.removeAssignment(id); }
   @Post('exceptions') @Roles(Role.ADMIN) add(@Body(new ZodValidationPipe(calendarExceptionSchema)) body: CalendarExceptionInput) { return this.calendar.addException(body); }
   @Post('exceptions/bulk') @Roles(Role.ADMIN) bulk(@Body(new ZodValidationPipe(bulkCalendarExceptionsSchema)) body: BulkCalendarExceptionsInput) { return this.calendar.bulkExceptions(body); }
+  @Post('exceptions/import-pdf') @Roles(Role.ADMIN) @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }))
+  async importPdf(@UploadedFile() file?: Express.Multer.File) { if (!file || file.mimetype !== 'application/pdf') throw new BadRequestException('Upload a PDF up to 5 MB'); const parser = new PDFParse({ data: file.buffer }); const result = await parser.getText(); await parser.destroy(); return { text: result.text }; }
   @Delete('exceptions/:id') @Roles(Role.ADMIN) remove(@Param('id', ParseUUIDPipe) id: string) { return this.calendar.removeException(id); }
 }
