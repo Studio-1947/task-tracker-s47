@@ -111,7 +111,7 @@ async function main() {
 
     await call(ownerToken, 'DELETE', `/tasks/${task.id}`);
   } finally {
-    if (workspace?.id) await call(ownerToken, 'PATCH', `/workspaces/${workspace.id}`, { isArchived: false });
+    if (workspace?.id) await call(ownerToken, 'PATCH', `/workspaces/${workspace.id}`, { isArchived: true });
   }
   if (failures) throw new Error(`${failures} review smoke assertion(s) failed`);
   console.log('Review workflow smoke passed.');

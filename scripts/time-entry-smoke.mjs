@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Smoke test against a RUNNING, migrated and seeded API.
-// Covers time entries, timers, actual effort sum, remaining estimate deduction, and forecast calculations (E01).
+// Covers time entries, timers, actual effort sum, owner-managed remaining effort, and forecast calculations (E01).
 
 const API = process.env.API_URL ?? 'http://localhost:3000/api';
 const OWNER = {
@@ -63,7 +63,10 @@ async function main() {
     });
     assert(logRes.status === 201, 'time entry logged', JSON.stringify(logRes.body));
 
-    // Manually set remaining estimate to 30 for AT08 scenario verification
+    const afterLog = await call(token, 'GET', `/tasks/${task.id}/time-entries`);
+    assert(afterLog.body.remainingEstimateMinutes === 60, 'logging time does not silently change the owner\'s remaining forecast', String(afterLog.body.remainingEstimateMinutes));
+
+    // The owner revises remaining estimate to 30 for AT08 scenario verification.
     await call(token, 'PATCH', `/tasks/${task.id}`, { remainingEstimateMinutes: 30 });
 
     const summary = await call(token, 'GET', `/tasks/${task.id}/time-entries`);
@@ -129,7 +132,7 @@ async function main() {
 
     await call(token, 'DELETE', `/tasks/${task.id}`);
   } finally {
-    if (workspace?.id) await call(token, 'PATCH', `/workspaces/${workspace.id}`, { isArchived: false });
+    if (workspace?.id) await call(token, 'PATCH', `/workspaces/${workspace.id}`, { isArchived: true });
   }
   if (failures) throw new Error(`${failures} time entry smoke assertion(s) failed`);
   console.log('Time entry smoke passed.');

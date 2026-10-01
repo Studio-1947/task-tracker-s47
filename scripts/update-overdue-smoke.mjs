@@ -105,7 +105,7 @@ async function main() {
     }
   } finally {
     await putPolicy(original.updateThresholdMinutes);
-    if (ws.body?.id) await call(t, 'PATCH', `/workspaces/${ws.body.id}`, { isArchived: false });
+    if (ws.body?.id) await call(t, 'PATCH', `/workspaces/${ws.body.id}`, { isArchived: true });
   }
   if (failures) throw new Error(`${failures} update-overdue smoke assertion(s) failed`);
   console.log('Update overdue smoke passed.');

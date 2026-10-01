@@ -74,7 +74,7 @@ async function main() {
     await call(token, 'DELETE', `/tasks/${t1.body.id}`);
     await call(token, 'DELETE', `/tasks/${t2.body.id}`);
   } finally {
-    if (workspace?.id) await call(token, 'PATCH', `/workspaces/${workspace.id}`, { isArchived: false });
+    if (workspace?.id) await call(token, 'PATCH', `/workspaces/${workspace.id}`, { isArchived: true });
   }
   if (failures) throw new Error(`${failures} capacity smoke assertion(s) failed`);
   console.log('Capacity smoke passed.');

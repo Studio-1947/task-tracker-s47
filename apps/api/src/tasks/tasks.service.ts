@@ -1620,14 +1620,8 @@ export class TasksService {
         .values(rows.map((r) => ({ taskId, userId: actor.id, workDate: r.workDate, durationMinutes: r.durationMinutes, category, note: input.note ?? null, startedAt: r.startedAt, endedAt: r.endedAt })))
         .returning();
 
-      // Deduct from remaining estimate if set
-      if (task.remainingEstimateMinutes !== null) {
-        const nextRemaining = Math.max(0, task.remainingEstimateMinutes - input.durationMinutes);
-        await tx.update(tasks).set({ remainingEstimateMinutes: nextRemaining, updatedAt: new Date() }).where(eq(tasks.id, taskId));
-        if (task.parentTaskId) {
-          await this.recalcParentRollup(task.parentTaskId, actor.id, tx);
-        }
-      }
+      // Remaining effort is the owner's explicit forecast. Logged time is actual
+      // effort, not a progress signal, so it must never silently lower that forecast.
 
       await this.audit.record(
         {
@@ -1762,13 +1756,8 @@ export class TasksService {
         );
       }
 
-      if (task.remainingEstimateMinutes !== null) {
-        const nextRemaining = Math.max(0, task.remainingEstimateMinutes - elapsedMinutes);
-        await tx.update(tasks).set({ remainingEstimateMinutes: nextRemaining, updatedAt: now }).where(eq(tasks.id, taskId));
-        if (task.parentTaskId) {
-          await this.recalcParentRollup(task.parentTaskId, actor.id, tx);
-        }
-      }
+      // As with manual entries, stopping a timer records actual effort only.
+      // The owner updates remaining effort explicitly when their forecast changes.
 
       await this.audit.record(
         {

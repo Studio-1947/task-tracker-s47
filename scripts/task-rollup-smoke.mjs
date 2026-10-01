@@ -87,7 +87,7 @@ async function main() {
     for (const s of afterChildren.body.subtasks) await call(token, 'DELETE', `/tasks/${s.id}`).catch(() => {});
     await call(token, 'DELETE', `/tasks/${parent.id}`);
   } finally {
-    if (workspace?.id) await call(token, 'PATCH', `/workspaces/${workspace.id}`, { isArchived: false });
+    if (workspace?.id) await call(token, 'PATCH', `/workspaces/${workspace.id}`, { isArchived: true });
   }
   if (failures) throw new Error(`${failures} task rollup smoke assertion(s) failed`);
   console.log('Task rollup smoke passed.');

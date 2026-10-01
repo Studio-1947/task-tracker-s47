@@ -73,7 +73,7 @@ An item is complete only when its migration and rollback impact are reviewed, AP
 - [x] Immutable baseline, current and remaining forecast fields.
 - [x] Manual time entries and live timer with categories (EXECUTION, REVIEW, REWORK).
 - [x] Duplicate timer prevention and single active timer enforcement per user.
-- [x] Actual effort sum, remaining estimate deduction, and forecast total/variance calculations.
+- [x] Actual effort sum, owner-managed remaining forecast, and forecast total/variance calculations. Logging time never silently changes remaining effort.
 - [x] Smoke test: `scripts/time-entry-smoke.mjs` (`pnpm test:time`).
 
 ### H01 - Attendance corrections and day states `[x]`

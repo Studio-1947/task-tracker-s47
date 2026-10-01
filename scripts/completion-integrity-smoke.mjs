@@ -31,7 +31,7 @@ async function main() {
     ok(reopened.status === 201 && reopened.body.reason, 'accepted task reopening is reasoned and recorded');
     const history = await call(token, 'GET', `/tasks/${parent.body.id}/history`);
     ok(history.body.some((row) => row.action === 'TIME_ENTRY_UPDATED'), 'time allocation is present in audit history');
-  } finally { await call(token, 'PATCH', `/workspaces/${ws.body.id}`, { isArchived: false }); }
+  } finally { await call(token, 'PATCH', `/workspaces/${ws.body.id}`, { isArchived: true }); }
   if (failures) throw new Error(`${failures} completion-integrity assertion(s) failed`);
   console.log('Completion integrity smoke passed.');
 }
