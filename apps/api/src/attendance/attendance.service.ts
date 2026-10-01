@@ -66,6 +66,7 @@ export class AttendanceService {
       accrualPerMonth: Number(t.accrualPerMonth),
       carryForwardMax: Number(t.carryForwardMax),
       carryForwardExpiryMonths: t.carryForwardExpiryMonths,
+      approvalRequired: t.approvalRequired, entitlementUnit: t.entitlementUnit as 'DAYS' | 'MONTHS', wfhEntitlementDays: t.wfhEntitlementDays, policyNotes: t.policyNotes,
       isActive: t.isActive,
     };
   }
@@ -106,6 +107,7 @@ export class AttendanceService {
         accrualPerMonth: String(input.accrualPerMonth),
         carryForwardMax: String(input.carryForwardMax),
         carryForwardExpiryMonths: input.carryForwardExpiryMonths,
+        approvalRequired: input.approvalRequired, entitlementUnit: input.entitlementUnit, wfhEntitlementDays: input.wfhEntitlementDays, policyNotes: input.policyNotes ?? null,
       })
       .returning();
     return this.toLeaveType(t!);

@@ -36,6 +36,10 @@ export const leaveTypes = pgTable('leave_types', {
   carryForwardMax: numeric('carry_forward_max', { precision: 5, scale: 2 }).notNull().default('0'),
   /** Carried-forward days lapse this many months into the year; null = never. */
   carryForwardExpiryMonths: integer('carry_forward_expiry_months'),
+  approvalRequired: boolean('approval_required').notNull().default(true),
+  entitlementUnit: varchar('entitlement_unit', { length: 8 }).notNull().default('DAYS'),
+  wfhEntitlementDays: integer('wfh_entitlement_days').notNull().default(0),
+  policyNotes: text('policy_notes'),
   isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

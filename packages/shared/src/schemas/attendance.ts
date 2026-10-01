@@ -10,6 +10,7 @@ export const createLeaveTypeSchema = z.object({
   accrualPerMonth: z.number().min(0).max(31).default(0),
   carryForwardMax: z.number().min(0).max(365).default(0),
   carryForwardExpiryMonths: z.number().int().min(1).max(24).nullable().default(null),
+  approvalRequired: z.boolean().default(true), entitlementUnit: z.enum(['DAYS','MONTHS']).default('DAYS'), wfhEntitlementDays: z.number().int().min(0).max(365).default(0), policyNotes: z.string().max(1000).nullable().optional(),
 });
 export type CreateLeaveTypeInput = z.infer<typeof createLeaveTypeSchema>;
 
@@ -21,6 +22,7 @@ export const updateLeaveTypeSchema = z
     accrualPerMonth: z.number().min(0).max(31).optional(),
     carryForwardMax: z.number().min(0).max(365).optional(),
     carryForwardExpiryMonths: z.number().int().min(1).max(24).nullable().optional(),
+    approvalRequired: z.boolean().optional(), entitlementUnit: z.enum(['DAYS','MONTHS']).optional(), wfhEntitlementDays: z.number().int().min(0).max(365).optional(), policyNotes: z.string().max(1000).nullable().optional(),
     isActive: z.boolean().optional(),
   })
   .strict();

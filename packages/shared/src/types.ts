@@ -457,6 +457,10 @@ export interface LeaveType {
   accrualPerMonth: number;
   carryForwardMax: number;
   carryForwardExpiryMonths: number | null;
+  approvalRequired: boolean;
+  entitlementUnit: 'DAYS' | 'MONTHS';
+  wfhEntitlementDays: number;
+  policyNotes: string | null;
   isActive: boolean;
 }
 
