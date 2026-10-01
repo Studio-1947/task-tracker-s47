@@ -118,6 +118,38 @@ An item is complete only when its migration and rollback impact are reviewed, AP
 - [x] Policy-neutral payable indicator calculation with zero-denominator handling; never used as a salary/performance multiplier.
 - [x] Draft, second-admin review, approval snapshot and reasoned reopening workflow.
 
+## UI conformance audit (2026-10-01)
+
+The `[x]` marks above record that an API and a smoke test exist. They did not mean the screen exposed the behaviour. This audit compares the specification with the web app. Verified by typecheck, production build, and `pnpm test:specui` (56 server assertions) plus the full smoke regression; **not verified in a browser** (no browser tooling was available), so layout and mobile behaviour still need a manual pass.
+
+| Spec item | UI status | Where |
+|---|---|---|
+| §2 deadline weekend/holiday warning, office cutoff, reason for changing a commitment | [x] | `DueDateEditor`, server rejects a change without `dueDateReason`, reason stored in audit |
+| §2 organisation calendar as a reasoned, versioned save (was autosaving every keystroke with a fixed reason) | [x] | `CalendarAdmin.tsx` |
+| §2 schedule groups: create, assign people with effective dates | [x] | `CalendarAdmin.tsx` |
+| §3 acceptance criteria, child scope, one accountable owner prompt | [x] | `CreateTaskModal`, `AcceptanceCriteriaSection` |
+| §3 dependencies (list, add, remove, "waits on unfinished predecessor") | [x] | `DependenciesSection`, `GET /tasks/:id/dependencies` |
+| §3/§4 derived size label with original vs current, >120 min breakup prompt | [x] | `SizeChip`, `BreakupPrompt`, shared `taskSizeLabel` |
+| §3 blocker reason, unblocker, follow-up, interval, mark unblocked (was no way to resolve; stale "blocked" banner) | [x] | `BlockerSection`, `GET /tasks/:id/blockers` |
+| §3/AT20 move logged minutes from a parent to a subtask | [x] | `MoveTimeEntry` |
+| §5/§6 estimate revision with classification and reason (the "Current" field used to overwrite silently) | [x] | `EstimateRevisionForm`; field is now read-only |
+| §5 reopen accepted work with reason | [x] | `ReopenSection` |
+| §5 review queue: deadline, evidence, delivery note, prior return reasons, accept/return inline | [x] | `ReviewQueuePage`, queue API enriched |
+| §8 per-day states, weekly off/holiday labels, missing check-out, monthly explanation | [x] | `MonthCalendar`, `GET /attendance/day-states` |
+| §8/Y01 payroll inputs: draft, second-admin review, approval, reopen | [x] | `PayrollTab` |
+| §10 shared filters at top, exceptions first, clickable stat cards, org-wide scope captions | [x] | `DashboardPage`, `MetricFilterBar` |
+| §10 replace "Idle" with Active / Awaiting review / Blocked / Update overdue / No active work / Weekly off | [x] | Workspace table uses one shared update-overdue definition with the reminder worker (`RemindersService.findUpdateOverdueTasks`). Member view shows its own count |
+| §11 task list filters (no owner, no deadline, blocked, review overdue, missing estimate, overdue) and filters kept in the URL | [x] | `WorkspaceTasksPage`, `attention` query |
+| §11 forecast beside deadline | [x] | Remaining-effort / no-owner / no-deadline chips on list, Kanban and table (remaining effort, not forecast total: actual effort is not on the list row) |
+| §11 team availability on the attendance page | [x] | `TeamAvailabilityTab`, admin only, `GET /attendance/team-availability` |
+| §10 member dashboard follows the same scope/drill-down rules | [x] | Needs-attention row (overdue, updates due, reviews waiting, blocked on me), scope captions, tasks open directly |
+| §1/§5 Done without evidence on a task with **no reviewer** | [x] | Policy-controlled (migration 0031): Allow / Small tasks only / Always require a reviewer. **Default is Allow (legacy behaviour); an admin must choose the rule** |
+| §9 office vs workspace vs client vs team data relationship | [?] | Table relabelled "Workspace delivery state"; the underlying data model decision is still open |
+
+Also added: searchable project picker (`SearchableSelect`, used on the meeting board), project search and **Edit project** on the workspace page (editing/archiving is now admin or workspace manager only on the server).
+
+New smoke suite: `pnpm test:specui` (76 assertions).
+
 ## Acceptance scenario register
 
 - [x] AT01 metric card/list/export reconciliation — overdue count/list reconciled
@@ -160,6 +192,7 @@ pnpm test:integrity
 pnpm test:calendar
 pnpm test:payroll
 pnpm test:final
+pnpm test:specui
 ```
 
 Running-API smoke prerequisites: Postgres is available, migrations `0016`, `0017`, `0018`, `0019`, and `0020` are applied, seed accounts exist, API is listening at `API_URL`, and a disposable/staging database is used. Smoke scripts create data and clean up where the current API permits; never run them against production without explicit approval.
@@ -174,3 +207,5 @@ Running-API smoke prerequisites: Postgres is available, migrations `0016`, `0017
 - 2026-09-28: Added migration `0021_completion_integrity.sql`: task acceptance criteria and child scope, classified estimate revisions, reasoned authorised reopening, and audited historical-time allocation to child work. Added shared capacity/payable calculations and AT07/AT14/AT15/AT16 unit coverage. Verified 23/23 unit tests, production builds, and `test:integrity` plus core review/rollup/permission regressions.
 - 2026-09-28: Added migration `0022_calendar_versions_groups.sql`, mandatory-reason calendar snapshots, effective-dated schedule-group definitions, and calendar-derived attendance day states. Verified AT02 and calendar history/group APIs with `pnpm test:calendar`; full static verification remained green.
 - 2026-09-28: WhatsApp removed from scope by product direction. Added migration `0023_standard_policy_payroll.sql`, versioned standard reminder/leave settings, attendance-derived payable-input drafts, unresolved-correction blocking, second-admin review/approval, immutable approval metadata and reasoned reopening. Verified with `pnpm test:payroll`; no salary or performance multiplier is calculated.
+- 2026-10-01: UI conformance pass against the specification (see the audit table). Server support added: dependency and blocker listing, `dueDateReason` on deadline changes (stored in the audit entry), `attention` task filters, `GET /attendance/day-states`, calendar-aware workspace work state on the dashboard, review-queue enrichment. Verified: shared/API/web typecheck, API 51/51 unit tests, web production build, 56/56 `test:specui`, and the 18 existing running-API suites green against a freshly built API (the stale API on :3000 was replaced first). Not verified: any browser rendering or mobile layout.
+- 2026-10-01 (second pass): member dashboard, team availability, update-overdue state, kanban/table chips, simplified-review policy (migration `0031_simplified_review_policy`), searchable project picker, project search/edit. **Environment finding:** the API and every smoke run use the Postgres reachable at `::1`/localhost:5432, which is *not* the `task_tracker_pg` Docker container (psql inside the container shows a different database). That DB had migration 0030's objects but no bookkeeping row, so `migrate` failed; the missing 0030 row was inserted and 0031 applied there. Verified: API 51/51, `test:specui` 76/76, 21 existing suites green, web build. Not browser-verified.

@@ -26,6 +26,7 @@ export interface TaskFilters {
   assigneeId?: string;
   labelId?: string;
   search?: string;
+  attention?: string;
   sort?: string;
   order?: 'asc' | 'desc';
   page?: number;
@@ -351,12 +352,30 @@ export function useStopTimer(taskId: string, workspaceId: string) {
 }
 
 /* ── Blockers & Dependencies (P01) ── */
+export interface TaskBlockerRow {
+  id: string;
+  reason: string;
+  unblocker: UserRef | null;
+  blockedAt: string;
+  unblockedAt: string | null;
+  nextFollowUpAt: string | null;
+}
+
+export function useTaskBlockers(taskId: string | null) {
+  return useQuery({
+    queryKey: ['task', taskId, 'blockers'],
+    queryFn: () => http.get<TaskBlockerRow[]>(`/tasks/${taskId}/blockers`),
+    enabled: !!taskId,
+  });
+}
+
 export function useAddBlocker(taskId: string, workspaceId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { reason: string; unblockerUserId: string; nextFollowUpAt?: string }) =>
       http.post(`/tasks/${taskId}/blockers`, input),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'blockers'] });
       qc.invalidateQueries({ queryKey: ['task', taskId] });
       qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });
       qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
@@ -369,6 +388,7 @@ export function useUnblockTask(taskId: string, workspaceId: string) {
   return useMutation({
     mutationFn: (blockerId: string) => http.post(`/tasks/blockers/${blockerId}/unblock`, {}),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'blockers'] });
       qc.invalidateQueries({ queryKey: ['task', taskId] });
       qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });
       qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
@@ -392,6 +412,89 @@ export function useRemoveDependency(workspaceId: string) {
   return useMutation({
     mutationFn: (dependencyId: string) => http.del(`/tasks/dependencies/${dependencyId}`),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
+    },
+  });
+}
+
+/* ── Dependencies list, reopen (spec §3, §5) ── */
+export interface TaskDependencyRow {
+  id: string;
+  /** WAITS_ON: this task is the successor; BLOCKS: this task is the predecessor. */
+  direction: 'WAITS_ON' | 'BLOCKS';
+  isBlocking: boolean;
+  task: { id: string; ref: string; title: string; status: string };
+}
+
+export function useTaskDependencies(taskId: string | null) {
+  return useQuery({
+    queryKey: ['task', taskId, 'dependencies'],
+    queryFn: () => http.get<TaskDependencyRow[]>(`/tasks/${taskId}/dependencies`),
+    enabled: !!taskId,
+  });
+}
+
+export function useAddTaskDependency(taskId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { predecessorTaskId: string; successorTaskId: string; isBlocking: boolean }) =>
+      http.post('/tasks/dependencies', input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'dependencies'] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });
+    },
+  });
+}
+
+export function useRemoveTaskDependency(taskId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dependencyId: string) => http.del(`/tasks/dependencies/${dependencyId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'dependencies'] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });
+    },
+  });
+}
+
+export function useReopenTask(taskId: string, workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (reason: string) => http.post(`/tasks/${taskId}/reopen`, { reason }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'submissions'] });
+      qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
+    },
+  });
+}
+
+export type EstimateClassification = 'SCOPE_CHANGE' | 'PLANNING_CORRECTION' | 'CLIENT_CHANGE' | 'INTERNAL_CHANGE';
+
+export function useReviseEstimate(taskId: string, workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { revisedEstimateMinutes: number; reason: string; classification: EstimateClassification }) =>
+      http.post(`/tasks/${taskId}/estimate-revisions`, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'time-entries'] });
+      qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
+    },
+  });
+}
+
+export function useAllocateTimeEntry(taskId: string, workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entryId, ...input }: { entryId: string; targetTaskId: string; durationMinutes: number; reason: string }) =>
+      http.post(`/tasks/${taskId}/time-entries/${entryId}/allocate`, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'time-entries'] });
+      qc.invalidateQueries({ queryKey: ['task', taskId, 'history'] });
       qc.invalidateQueries({ queryKey: ['tasks', workspaceId] });
     },
   });

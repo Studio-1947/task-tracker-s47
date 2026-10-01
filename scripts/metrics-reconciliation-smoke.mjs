@@ -113,7 +113,7 @@ async function main() {
     assert(m.reconciliation.consistent && m.reconciliation.statusBreakdown.DONE === 3, 'status breakdown reconciles to the top-level total', JSON.stringify(m.reconciliation));
 
     // Original vs revised commitment: moving the date must not erase the missed promise.
-    const moved = await call(t, 'PATCH', `/tasks/${t3.body.id}`, { dueDate: iso(now + 2 * 86400000) });
+    const moved = await call(t, 'PATCH', `/tasks/${t3.body.id}`, { dueDate: iso(now + 2 * 86400000), dueDateReason: 'Smoke: client moved the date' });
     assert(moved.status === 200, 'due date revised', JSON.stringify(moved.body));
     const original = (await call(t, 'GET', `/metrics/workspace?${q}&basis=ORIGINAL`)).body;
     const revised = (await call(t, 'GET', `/metrics/workspace?${q}&basis=REVISED`)).body;

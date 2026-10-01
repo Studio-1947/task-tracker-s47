@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  AttendanceDayStateItem,
   AttendancePunchInput,
   AttendanceRecordItem,
   AttendanceToday,
@@ -210,4 +211,26 @@ export function useReviewCorrection() {
 function invalidateLeave(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['leaves'] });
   qc.invalidateQueries({ queryKey: ['leave-types'] });
+}
+
+export function useMyDayStates(month: string) {
+  return useQuery({
+    queryKey: ['attendance', 'day-states', month],
+    queryFn: () => http.get<AttendanceDayStateItem[]>(`/attendance/day-states?month=${month}`),
+  });
+}
+
+export interface TeamAvailability {
+  from: string;
+  to: string;
+  dates: string[];
+  people: Array<{ user: { id: string; name: string; email: string; avatarKey: string | null }; days: AttendanceDayStateItem[] }>;
+}
+
+export function useTeamAvailability(from: string, to: string) {
+  return useQuery({
+    queryKey: ['attendance', 'team-availability', from, to],
+    queryFn: () => http.get<TeamAvailability>(`/attendance/team-availability?from=${from}&to=${to}`),
+    enabled: !!from && !!to,
+  });
 }

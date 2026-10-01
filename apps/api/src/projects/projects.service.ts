@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, asc, count, eq } from 'drizzle-orm';
 import type { CreateProjectInput, ProjectSummary, UpdateProjectInput } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
@@ -91,7 +91,11 @@ export class ProjectsService {
   }
 
   async update(projectId: string, actor: Actor, input: UpdateProjectInput): Promise<ProjectSummary> {
-    await this.assertCanAccess(projectId, actor);
+    const project = await this.assertCanAccess(projectId, actor);
+    // Renaming or archiving a project changes what everyone in the workspace sees (spec section 9).
+    if (actor.role !== 'ADMIN' && !(await this.workspaces.isManager(project.workspaceId, actor))) {
+      throw new ForbiddenException('Only an administrator or workspace manager can edit a project');
+    }
     const [p] = await this.db
       .update(projects)
       .set({

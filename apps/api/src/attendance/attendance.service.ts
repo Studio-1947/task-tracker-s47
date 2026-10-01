@@ -8,6 +8,7 @@ import {
 import { and, desc, eq, gte, inArray, lt, lte, ne, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type {
+  AttendanceDayStateItem,
   AttendancePunchInput,
   AttendanceRecordItem,
   AttendanceToday,
@@ -24,7 +25,7 @@ import type {
   UpdateLeaveTypeInput,
   OrganisationPolicyInput,
 } from '@task-tracker/shared';
-import { calculatePayableIndicator, computeLeaveBalance, staffingBreaches, workingDayUnits } from '@task-tracker/shared';
+import { calculatePayableIndicator, computeLeaveBalance, dateRange, staffingBreaches, workingDayUnits } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
 import { CalendarService } from '../calendar/calendar.service';
 import {
@@ -577,6 +578,67 @@ export class AttendanceService {
 
     const [updated] = await this.listCorrections(undefined, undefined);
     return updated;
+  }
+
+  /**
+   * Every day of a month classified in one pass (spec section 8): worked, paid or
+   * unpaid leave, absence, holiday, weekly off, pending correction or upcoming.
+   * Weekends and holidays are never "absence", and absence is only ever a past
+   * scheduled working day with no record and no approved leave.
+   */
+  async monthDayStates(userId: string, month: string): Promise<AttendanceDayStateItem[]> {
+    const { start, end } = monthRange(month);
+    return this.dayStatesBetween(userId, start, end);
+  }
+
+  /**
+   * Who is in, on leave, or off, for every active person across a short range
+   * (spec section 11 "team availability"). `to` is inclusive; capped at 31 days.
+   */
+  async teamAvailability(from: string, to: string) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || to < from) throw new BadRequestException('from and to must be YYYY-MM-DD with to on or after from');
+    const days = dateRange(from, to);
+    if (days.length > 31) throw new BadRequestException('Choose a range of at most 31 days');
+    const end = new Date(new Date(`${to}T00:00:00Z`).getTime() + 86_400_000).toISOString().slice(0, 10);
+    const people = await this.db.select({ id: users.id, name: users.name, email: users.email, avatarKey: users.avatarKey }).from(users).where(eq(users.isActive, true)).orderBy(users.name);
+    const rows = [] as Array<{ user: (typeof people)[number]; days: AttendanceDayStateItem[] }>;
+    for (const person of people) rows.push({ user: person, days: await this.dayStatesBetween(person.id, from, end) });
+    return { from, to, dates: days, people: rows };
+  }
+
+  private async dayStatesBetween(userId: string, start: string, end: string): Promise<AttendanceDayStateItem[]> {
+    const [policy, calendar, records, leaves, pending] = await Promise.all([
+      this.getOrganisationPolicy(),
+      this.calendar.get(),
+      this.db.select().from(attendanceRecords).where(and(eq(attendanceRecords.userId, userId), gte(attendanceRecords.workDate, start), lt(attendanceRecords.workDate, end))),
+      this.db.select({ request: leaveRequests, type: leaveTypes }).from(leaveRequests).innerJoin(leaveTypes, eq(leaveTypes.id, leaveRequests.leaveTypeId))
+        .where(and(eq(leaveRequests.userId, userId), eq(leaveRequests.status, 'APPROVED'), lt(leaveRequests.startDate, end), gte(leaveRequests.endDate, start))),
+      this.db.select({ workDate: attendanceCorrections.workDate }).from(attendanceCorrections)
+        .where(and(eq(attendanceCorrections.userId, userId), eq(attendanceCorrections.status, 'PENDING'), gte(attendanceCorrections.workDate, start), lt(attendanceCorrections.workDate, end))),
+    ]);
+    const workdays = calendar.settings?.workdays ?? [1, 2, 3, 4, 5];
+    const paidNames = new Set(policy?.paidLeaveNames ?? []);
+    const byDate = new Map(records.map((r) => [r.workDate, r]));
+    const pendingDates = new Set(pending.map((r) => r.workDate));
+    const today = localDateStr();
+    const out: AttendanceDayStateItem[] = [];
+    for (const date of dateRange(start, new Date(new Date(`${end}T00:00:00Z`).getTime() - 86_400_000).toISOString().slice(0, 10))) {
+      const exception = calendar.exceptions.find((e) => e.date === date);
+      const leave = leaves.find((l) => l.request.startDate <= date && l.request.endDate >= date);
+      const rec = byDate.get(date);
+      const base = { date, missingCheckout: false, halfDay: !!leave?.request.halfDay };
+      if (exception?.kind === 'HOLIDAY') { out.push({ ...base, state: 'HOLIDAY', detail: (exception as { name?: string }).name ?? null }); continue; }
+      const scheduled = exception?.kind === 'WORKING_DAY' || exception?.kind === 'HALF_DAY' || workdays.includes(new Date(`${date}T00:00:00Z`).getUTCDay());
+      if (!scheduled) { out.push({ ...base, state: 'WEEKLY_OFF', detail: null }); continue; }
+      if (pendingDates.has(date)) { out.push({ ...base, state: 'PENDING_CORRECTION', detail: 'Awaiting a decision', missingCheckout: !!rec && !rec.checkOutAt }); continue; }
+      if (rec) {
+        out.push({ ...base, state: 'WORKED', detail: null, missingCheckout: date < today && !rec.checkOutAt });
+        continue;
+      }
+      if (leave) { out.push({ ...base, state: paidNames.has(leave.type.name) ? 'PAID_LEAVE' : 'UNPAID_LEAVE', detail: leave.type.name }); continue; }
+      out.push({ ...base, state: date < today ? 'ABSENCE' : 'UPCOMING', detail: null });
+    }
+    return out;
   }
 
   async getDailyAttendanceState(userId: string, dateStr: string): Promise<string> {

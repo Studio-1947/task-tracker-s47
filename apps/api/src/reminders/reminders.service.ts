@@ -30,6 +30,17 @@ const DISPATCH_INTERVAL_MS = 5 * 60 * 1000;
  * duplicate tick (or two overlapping workers) can never send the same
  * reminder twice — the second insert simply no-ops.
  */
+export interface UpdateOverdueTask {
+  id: string;
+  ref: string;
+  title: string;
+  ownerId: string;
+  workspaceId: string;
+  lastUpdateAt: Date;
+  /** Eligible working minutes since the last real update (blocked, in-review and leave time removed). */
+  eligibleMinutes: number;
+}
+
 @Injectable()
 export class RemindersService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RemindersService.name);
@@ -167,17 +178,17 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
    * owner's to act on, so they are excluded. One reminder per stale stretch:
    * the key embeds the last-update instant, so any genuine update resets it.
    */
-  private async dispatchUpdateOverdueReminders(thresholdMinutes: number, calendar: Awaited<ReturnType<CalendarService['get']>>): Promise<number> {
-    if (!calendar.settings) return 0;
+  async findUpdateOverdueTasks(thresholdMinutes: number, calendar: Awaited<ReturnType<CalendarService['get']>>): Promise<UpdateOverdueTask[]> {
+    if (!calendar.settings) return [];
     const settings = calendar.settings;
     const now = new Date();
     const candidates = await this.db
-      .select({ id: tasks.id, number: tasks.number, title: tasks.title, ownerId: tasks.ownerId, createdAt: tasks.createdAt, prefix: projects.taskPrefix })
+      .select({ id: tasks.id, number: tasks.number, title: tasks.title, ownerId: tasks.ownerId, workspaceId: tasks.workspaceId, createdAt: tasks.createdAt, prefix: projects.taskPrefix })
       .from(tasks)
       .innerJoin(projects, eq(projects.id, tasks.projectId))
       .innerJoin(users, eq(users.id, tasks.ownerId))
       .where(and(eq(tasks.isArchived, false), eq(tasks.status, 'IN_PROGRESS'), eq(users.isActive, true)));
-    if (!candidates.length) return 0;
+    if (!candidates.length) return [];
     const ids = candidates.map((c) => c.id);
     const ownerIds = [...new Set(candidates.map((c) => c.ownerId!))];
 
@@ -195,7 +206,7 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
       this.db.select().from(leaveRequests).where(and(inArray(leaveRequests.userId, ownerIds), eq(leaveRequests.status, 'APPROVED'))),
     ]);
 
-    let count = 0;
+    const stale: UpdateOverdueTask[] = [];
     for (const c of candidates) {
       // Waiting on a blocker or on review is not an update the owner can give.
       if (blockers.some((b) => b.taskId === c.id && !b.to)) continue;
@@ -217,17 +228,32 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
       ];
       const eligible = eligibleWorkingMinutes(start, now, settings, calendar.exceptions, nonActionable);
       if (eligible < thresholdMinutes) continue;
+      stale.push({ id: c.id, ref: `${c.prefix}-${c.number}`, title: c.title, ownerId: c.ownerId!, workspaceId: c.workspaceId, lastUpdateAt: start, eligibleMinutes: eligible });
+    }
+    return stale;
+  }
+
+  private async dispatchUpdateOverdueReminders(thresholdMinutes: number, calendar: Awaited<ReturnType<CalendarService['get']>>): Promise<number> {
+    let count = 0;
+    for (const t of await this.findUpdateOverdueTasks(thresholdMinutes, calendar)) {
       const sent = await this.tryDispatch(
-        c.ownerId!,
-        c.id,
+        t.ownerId,
+        t.id,
         NotificationType.UPDATE_OVERDUE,
-        `UPDATE_OVERDUE:${c.id}:${start.toISOString()}:${c.ownerId}`,
+        `UPDATE_OVERDUE:${t.id}:${t.lastUpdateAt.toISOString()}:${t.ownerId}`,
         'Progress update overdue',
-        `Task ${c.prefix}-${c.number} "${c.title}" has had no progress update for ${Math.round(eligible / 60)} working hours.`,
+        `Task ${t.ref} "${t.title}" has had no progress update for ${Math.round(t.eligibleMinutes / 60)} working hours.`,
       );
       if (sent) count += 1;
     }
     return count;
+  }
+
+  /** Update-overdue tasks using the stored policy threshold (the dashboard and the reminder worker share this definition). */
+  async currentUpdateOverdue(): Promise<UpdateOverdueTask[]> {
+    const [policy] = await this.db.select().from(organisationPolicies).where(eq(organisationPolicies.id, 1));
+    if (!policy) return [];
+    return this.findUpdateOverdueTasks(policy.updateThresholdMinutes, await this.calendar.get());
   }
 
   /** Blocked-task follow-up reminder — the designated unblocker, once per follow-up date. */

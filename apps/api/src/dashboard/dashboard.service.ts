@@ -1,7 +1,8 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, lt, ne, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, sql } from 'drizzle-orm';
 import {
   TASK_STATUSES,
+  workingDayUnits,
   workingMinutesElapsed,
   type AdminDashboard,
   type MemberDashboard,
@@ -15,11 +16,12 @@ import {
   type WorkspacePerformance,
 } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
-import { auditLogs, projects, reportSnapshots, taskAssignees, taskSubmissions, tasks, users, workspaceMembers, workspaces } from '../database/schema';
+import { auditLogs, projects, reportSnapshots, taskAssignees, taskBlockers, taskSubmissions, tasks, users, workspaceMembers, workspaces } from '../database/schema';
 import { AuditService } from '../audit/audit.service';
 import { CalendarService } from '../calendar/calendar.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { RemindersService } from '../reminders/reminders.service';
 
 /** Overdue-tasks scope shared by the headline count, the drill-down list and (eventually) exports — PRD §10/§12 D01. */
 const OVERDUE_LIST_LIMIT = 20;
@@ -32,6 +34,7 @@ export class DashboardService {
     private readonly workspaces: WorkspacesService,
     private readonly calendar: CalendarService,
     private readonly notifications: NotificationsService,
+    private readonly reminders: RemindersService,
   ) {}
 
   private async assertReportManager(workspaceId: string, actor: { id: string; role: string }) {
@@ -188,7 +191,7 @@ export class DashboardService {
 
   /** Per-workspace task totals + completion %, with a recent-activity flag. */
   private async workspacePerformance(): Promise<WorkspacePerformance[]> {
-    const [rows, activeRows] = await Promise.all([
+    const [rows, activeRows, blockedRows, reviewRows, calendar, staleUpdates] = await Promise.all([
       this.db
         .select({
           id: workspaces.id,
@@ -196,6 +199,8 @@ export class DashboardService {
           color: workspaces.color,
           total: sql<number>`count(${tasks.id}) filter (where ${tasks.isArchived} = false)`,
           completed: sql<number>`count(${tasks.id}) filter (where ${tasks.isArchived} = false and ${tasks.status} = 'DONE')`,
+          open: sql<number>`count(${tasks.id}) filter (where ${tasks.isArchived} = false and ${tasks.status} <> 'DONE')`,
+          inProgress: sql<number>`count(${tasks.id}) filter (where ${tasks.isArchived} = false and ${tasks.status} = 'IN_PROGRESS')`,
         })
         .from(workspaces)
         .leftJoin(tasks, eq(tasks.workspaceId, workspaces.id))
@@ -207,11 +212,51 @@ export class DashboardService {
         .from(auditLogs)
         .where(sql`${auditLogs.createdAt} > now() - interval '7 days'`)
         .groupBy(auditLogs.workspaceId),
+      this.db
+        .select({ workspaceId: tasks.workspaceId, c: sql<number>`count(distinct ${tasks.id})` })
+        .from(taskBlockers)
+        .innerJoin(tasks, eq(tasks.id, taskBlockers.taskId))
+        .where(and(isNull(taskBlockers.unblockedAt), eq(tasks.isArchived, false), ne(tasks.status, 'DONE')))
+        .groupBy(tasks.workspaceId),
+      this.db
+        .select({ workspaceId: tasks.workspaceId, c: sql<number>`count(distinct ${tasks.id})` })
+        .from(taskSubmissions)
+        .innerJoin(tasks, eq(tasks.id, taskSubmissions.taskId))
+        .where(and(eq(taskSubmissions.status, 'PENDING'), eq(tasks.isArchived, false)))
+        .groupBy(tasks.workspaceId),
+      this.calendar.get(),
+      this.reminders.currentUpdateOverdue(),
     ]);
+    const staleByWorkspace = new Map<string, number>();
+    for (const t of staleUpdates) staleByWorkspace.set(t.workspaceId, (staleByWorkspace.get(t.workspaceId) ?? 0) + 1);
     const activeIds = new Set(activeRows.map((r) => r.workspaceId));
+    const blocked = new Map(blockedRows.map((r) => [r.workspaceId, Number(r.c)]));
+    const review = new Map(reviewRows.map((r) => [r.workspaceId, Number(r.c)]));
+
+    // Today's date in the office timezone; a non-working day is "Weekly off" rather than "Idle".
+    let weeklyOff = false;
+    if (calendar.settings) {
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: calendar.settings.timezone }).format(new Date());
+      weeklyOff = workingDayUnits(today, today, calendar.settings.workdays, calendar.exceptions) === 0;
+    }
+
     return rows.map((r) => {
       const total = Number(r.total);
       const completed = Number(r.completed);
+      const blockedTasks = blocked.get(r.id) ?? 0;
+      const awaitingReviewTasks = review.get(r.id) ?? 0;
+      const inProgressTasks = Number(r.inProgress);
+      const state: WorkspacePerformance['state'] = weeklyOff
+        ? 'WEEKLY_OFF'
+        : blockedTasks > 0
+          ? 'BLOCKED'
+          : awaitingReviewTasks > 0
+            ? 'AWAITING_REVIEW'
+            : (staleByWorkspace.get(r.id) ?? 0) > 0
+              ? 'UPDATE_OVERDUE'
+              : inProgressTasks === 0
+                ? 'NO_ACTIVE_WORK'
+                : 'ACTIVE';
       return {
         id: r.id,
         name: r.name,
@@ -220,6 +265,12 @@ export class DashboardService {
         completedTasks: completed,
         completionPct: total > 0 ? Math.round((completed / total) * 100) : 0,
         isActive: activeIds.has(r.id),
+        openTasks: Number(r.open),
+        inProgressTasks,
+        awaitingReviewTasks,
+        blockedTasks,
+        updateOverdueTasks: staleByWorkspace.get(r.id) ?? 0,
+        state,
       };
     });
   }
@@ -369,6 +420,20 @@ export class DashboardService {
             workspaceName: r.workspaceName,
           }));
 
+    const [reviewRow, blockedRow, stale] = await Promise.all([
+      this.db
+        .select({ c: sql<number>`count(distinct ${taskSubmissions.id})` })
+        .from(taskSubmissions)
+        .innerJoin(tasks, eq(tasks.id, taskSubmissions.taskId))
+        .where(and(eq(taskSubmissions.status, 'PENDING'), eq(tasks.reviewerId, userId), eq(tasks.isArchived, false))),
+      this.db
+        .select({ c: sql<number>`count(distinct ${taskBlockers.id})` })
+        .from(taskBlockers)
+        .innerJoin(tasks, eq(tasks.id, taskBlockers.taskId))
+        .where(and(isNull(taskBlockers.unblockedAt), eq(taskBlockers.unblockerUserId, userId), eq(tasks.isArchived, false), ne(tasks.status, 'DONE'))),
+      this.reminders.currentUpdateOverdue(),
+    ]);
+
     const [tasksByStatus, workspaceTaskCount, recentActivity] = await Promise.all([
       this.statusCounts(workspaceIds),
       workspaceIds.length === 0
@@ -382,6 +447,9 @@ export class DashboardService {
     ]);
 
     return {
+      reviewsWaiting: Number(reviewRow[0]?.c ?? 0),
+      blockedOnMe: Number(blockedRow[0]?.c ?? 0),
+      updateOverdueTaskIds: stale.filter((t) => t.ownerId === userId).map((t) => t.id),
       myTasks,
       myWorkspaceCount: workspaceIds.length,
       myWorkspaceTaskCount: workspaceTaskCount,

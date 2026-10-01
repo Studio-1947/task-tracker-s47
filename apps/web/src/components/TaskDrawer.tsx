@@ -33,10 +33,12 @@ import {
   useStopTimer,
   usePauseResumeTimer,
   useAddBlocker,
+  useTaskBlockers,
+  useUnblockTask,
 } from '../hooks/useTasks';
 import { useCreateLabel } from '../hooks/useLabels';
 import { useAuth } from '../stores/auth';
-import { describeAudit, formatDate, formatDateTime, formatWorkingDuration, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
+import { describeAudit, formatDate, formatDateTime, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
 import { ApiRequestError } from '../lib/api';
 import { linkify } from '../lib/linkify';
 import { AssigneePicker } from './AssigneePicker';
@@ -44,6 +46,8 @@ import { Attachments } from './Attachments';
 import { Avatar } from './Avatar';
 import { Button, Spinner } from './ui';
 import { TextLinkButton } from './TextLinkButton';
+import { DueDateEditor } from './DueDateEditor';
+import { AcceptanceCriteriaSection, BreakupPrompt, DependenciesSection, EstimateRevisionForm, MoveTimeEntry, ReopenSection, SizeChip } from './TaskPlanningSections';
 
 interface Props {
   workspaceId: string;
@@ -133,6 +137,7 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-850 px-2 py-0.5 rounded text-center">{task.ref}</span>
                   <span className="truncate text-xs font-semibold text-slate-500 dark:text-slate-400">{task.projectName}</span>
+                  <SizeChip baseline={task.baselineEstimateMinutes} current={task.currentEstimateMinutes} />
                   {task.isArchived ? (
                     <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
                       Archived
@@ -176,6 +181,12 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
               ) : null}
             </div>
 
+            {update.error ? (
+              <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm font-medium text-red-700 dark:bg-red-950/30 dark:text-red-300">
+                {update.error instanceof ApiRequestError ? update.error.message : 'Could not save that change.'}
+              </p>
+            ) : null}
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
                 <span className="mb-1.5 block">Status</span>
@@ -191,6 +202,11 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                     </option>
                   ))}
                 </select>
+                {!task.reviewer && !task.parentTaskId ? (
+                  <p className="mt-1.5 text-[11px] font-medium normal-case tracking-normal text-amber-600 dark:text-amber-400">
+                    No reviewer: whether this can be marked Done without evidence depends on the organisation policy. Assign a reviewer for deliverables.
+                  </p>
+                ) : null}
               </label>
               <label className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
                 <span className="mb-1.5 block">Priority</span>
@@ -207,23 +223,15 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                   ))}
                 </select>
               </label>
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
                 <span className="mb-1.5 block">Due date</span>
-                <input
-                  aria-label="Due date"
-                  type="date"
-                  className="w-full rounded-lg border border-slate-200 dark:border-slate-800 px-3 py-2 bg-white dark:bg-[#252525] dark:text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all font-semibold text-sm"
-                  value={task.dueDate ? task.dueDate.slice(0, 10) : ''}
-                  onChange={(e) =>
-                    patch({ dueDate: e.target.value ? new Date(e.target.value).toISOString() : null })
-                  }
+                <DueDateEditor
+                  value={task.dueDate}
+                  originalValue={task.originalDueDate}
+                  overdueWorkingMinutes={task.overdueWorkingMinutes}
+                  onCommit={(dueDate, dueDateReason) => patch({ dueDate, ...(dueDateReason ? { dueDateReason } : {}) })}
                 />
-                {task.overdueWorkingMinutes !== null ? (
-                  <p className="mt-1.5 text-[11px] font-semibold normal-case tracking-normal text-red-600 dark:text-red-400">
-                    {formatWorkingDuration(task.overdueWorkingMinutes)} overdue (scheduled working time)
-                  </p>
-                ) : null}
-              </label>
+              </div>
               {/* A task can have any number of assignees (task_assignees is M2M). */}
               <div className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
                 <span className="mb-1.5 block">Tag people</span>
@@ -246,16 +254,25 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <MinuteField label="Baseline" value={task.baselineEstimateMinutes} disabled />
-                <MinuteField label="Current" value={task.currentEstimateMinutes} onChange={(currentEstimateMinutes) => patch({ currentEstimateMinutes })} />
+                <MinuteField label="Approved" value={task.currentEstimateMinutes} disabled />
                 <MinuteField label="Remaining" value={task.remainingEstimateMinutes} onChange={(remainingEstimateMinutes) => patch({ remainingEstimateMinutes })} />
               </div>
               {task.originalDueDate && task.dueDate !== task.originalDueDate ? (
                 <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">Original commitment: {formatDate(task.originalDueDate)}</p>
               ) : null}
+              <EstimateRevisionForm task={task} workspaceId={workspaceId} />
             </section>
 
-            <TimeTrackingSection taskId={taskId} workspaceId={workspaceId} />
+            <BreakupPrompt task={task} />
+            <AcceptanceCriteriaSection
+              task={task}
+              onSave={(acceptanceCriteria) => patch({ acceptanceCriteria })}
+              onScopeChange={(childScope) => patch({ childScope })}
+            />
+
+            <TimeTrackingSection taskId={taskId} workspaceId={workspaceId} subtasks={task.subtasks} />
             <BlockerSection taskId={taskId} workspaceId={workspaceId} members={members} />
+            <DependenciesSection task={task} workspaceId={workspaceId} />
 
             <div>
               <div className="mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">Description</div>
@@ -309,6 +326,15 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
             ) : null}
 
             <Attachments taskId={taskId} workspaceId={workspaceId} />
+            <ReopenSection
+              task={task}
+              workspaceId={workspaceId}
+              canReopen={
+                isAdmin ||
+                task.reviewer?.id === user?.id ||
+                (members as Array<UserRef & { workspaceRole?: string }>).find((m) => m.id === user?.id)?.workspaceRole === 'MANAGER'
+              }
+            />
             <ReviewWorkflow taskId={taskId} workspaceId={workspaceId} reviewerId={task.reviewer?.id ?? null} status={task.status} members={members} />
 
             <section>
@@ -709,9 +735,12 @@ function SubtaskRow({
               type="date"
               className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
               value={subtask.dueDate ? subtask.dueDate.slice(0, 10) : ''}
-              onChange={(e) =>
-                onPatch({ dueDate: e.target.value ? new Date(e.target.value).toISOString() : null })
-              }
+              onChange={(e) => {
+                const dueDate = e.target.value ? new Date(e.target.value).toISOString() : null;
+                if (!subtask.dueDate) return onPatch({ dueDate });
+                const dueDateReason = window.prompt('Why is this deadline changing?')?.trim();
+                if (dueDateReason) onPatch({ dueDate, dueDateReason });
+              }}
             />
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={subtask.dueDate ? "text-indigo-500 dark:text-indigo-400" : "text-slate-400 dark:text-slate-500"}>
               <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -1157,7 +1186,7 @@ function DescriptionEditor({ value, onSave }: { value: string; onSave: (v: strin
   );
 }
 
-function TimeTrackingSection({ taskId, workspaceId }: { taskId: string; workspaceId: string }) {
+function TimeTrackingSection({ taskId, workspaceId, subtasks }: { taskId: string; workspaceId: string; subtasks: SubtaskRef[] }) {
   const { data: summary } = useTimeSummary(taskId);
   const logTime = useLogTimeEntry(taskId, workspaceId);
   const startTimer = useStartTimer(taskId, workspaceId);
@@ -1331,15 +1360,16 @@ function TimeTrackingSection({ taskId, workspaceId }: { taskId: string; workspac
       </div>
 
       {summary?.entries?.length ? (
-        <div className="space-y-1.5 max-h-36 overflow-y-auto">
+        <div className="space-y-1.5 max-h-64 overflow-y-auto">
           {summary.entries.map((e) => (
-            <div key={e.id} className="flex items-center justify-between text-xs py-1 px-2 rounded bg-slate-50/70 dark:bg-[#222]/70 border border-slate-100 dark:border-slate-800/50">
+            <div key={e.id} className="flex flex-wrap items-center justify-between gap-x-2 text-xs py-1 px-2 rounded bg-slate-50/70 dark:bg-[#222]/70 border border-slate-100 dark:border-slate-800/50">
               <div className="min-w-0 flex-1 truncate pr-2">
                 <span className="font-semibold text-slate-700 dark:text-slate-300">{e.userName}</span>
                 <span className="ml-1.5 text-[10px] font-bold uppercase px-1 py-0.2 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">{e.category}</span>
                 {e.note ? <span className="ml-1.5 text-slate-500 dark:text-slate-400 truncate">({e.note})</span> : null}
               </div>
               <span className="font-mono font-bold text-slate-700 dark:text-slate-300 shrink-0">{e.durationMinutes}m</span>
+              <MoveTimeEntry taskId={taskId} workspaceId={workspaceId} entryId={e.id} entryMinutes={e.durationMinutes} subtasks={subtasks} />
             </div>
           ))}
         </div>
@@ -1352,87 +1382,87 @@ function TimeTrackingSection({ taskId, workspaceId }: { taskId: string; workspac
 
 function BlockerSection({ taskId, workspaceId, members }: { taskId: string; workspaceId: string; members: UserRef[] }) {
   const addBlocker = useAddBlocker(taskId, workspaceId);
-  const { data: history } = useTaskHistory(taskId);
+  const unblock = useUnblockTask(taskId, workspaceId);
+  const { data: blockers = [] } = useTaskBlockers(taskId);
 
   const [showForm, setShowForm] = useState(false);
   const [reason, setReason] = useState('');
   const [unblockerUserId, setUnblockerUserId] = useState(members[0]?.id ?? '');
+  const [followUp, setFollowUp] = useState('');
 
-  const activeBlockerAudit = history?.find((h) => h.action === 'TASK_BLOCKED');
+  const active = blockers.filter((b) => !b.unblockedAt);
+  const resolved = blockers.filter((b) => b.unblockedAt);
+  const field = 'w-full rounded border border-amber-300 dark:border-amber-800 p-1.5 text-xs bg-white dark:bg-[#222] dark:text-white';
 
   const handleBlockSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reason.trim()) return;
+    if (!reason.trim() || !unblockerUserId) return;
     addBlocker.mutate(
-      { reason: reason.trim(), unblockerUserId },
-      {
-        onSuccess: () => {
-          setShowForm(false);
-          setReason('');
-        },
-      },
+      { reason: reason.trim(), unblockerUserId, ...(followUp ? { nextFollowUpAt: new Date(followUp).toISOString() } : {}) },
+      { onSuccess: () => { setShowForm(false); setReason(''); setFollowUp(''); } },
     );
   };
 
   return (
     <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800 bg-white dark:bg-[#1a1a1a]">
       <div className="flex items-center justify-between gap-2 mb-2">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400 flex items-center gap-1.5">
-          <span>🚫 Task Blockers</span>
-        </h3>
-        <Button
-          variant="ghost"
-          className="py-1 px-2.5 text-xs font-semibold text-amber-600 dark:text-amber-400"
-          onClick={() => setShowForm(!showForm)}
-        >
-          {showForm ? 'Cancel' : '+ Mark as Blocked'}
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">Blockers</h3>
+        <Button variant="ghost" className="py-1 px-2.5 text-xs font-semibold text-amber-600 dark:text-amber-400" onClick={() => setShowForm(!showForm)}>
+          {showForm ? 'Cancel' : '+ Mark as blocked'}
         </Button>
       </div>
 
       {showForm ? (
         <form onSubmit={handleBlockSubmit} className="mb-3 space-y-2 rounded-lg bg-amber-50/60 dark:bg-amber-950/20 p-3 border border-amber-200 dark:border-amber-900/30 text-xs">
-          <div>
-            <label className="mb-1 block font-semibold text-amber-800 dark:text-amber-300">Blocker Reason</label>
-            <textarea
-              required
-              rows={2}
-              placeholder="State what is blocking this task..."
-              className="w-full rounded border border-amber-300 dark:border-amber-800 p-1.5 text-xs bg-white dark:bg-[#222] dark:text-white"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block font-semibold text-amber-800 dark:text-amber-300">Responsible Unblocker</label>
-            <select
-              className="w-full rounded border border-amber-300 dark:border-amber-800 p-1.5 text-xs bg-white dark:bg-[#222] dark:text-white"
-              value={unblockerUserId}
-              onChange={(e) => setUnblockerUserId(e.target.value)}
-            >
-              {members.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
+          <label className="block font-semibold text-amber-800 dark:text-amber-300">
+            What is blocking this?
+            <textarea required rows={2} placeholder="State what is blocking this task…" className={`${field} mt-1 font-normal`} value={reason} onChange={(e) => setReason(e.target.value)} />
+          </label>
+          <label className="block font-semibold text-amber-800 dark:text-amber-300">
+            Who is responsible for unblocking it?
+            <select aria-label="Responsible unblocker" className={`${field} mt-1 font-normal`} value={unblockerUserId} onChange={(e) => setUnblockerUserId(e.target.value)}>
+              {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
-          </div>
-          <Button type="submit" variant="danger" className="w-full py-1.5 text-xs" disabled={addBlocker.isPending}>
-            Log Task Blocker
-          </Button>
+          </label>
+          <label className="block font-semibold text-amber-800 dark:text-amber-300">
+            Next follow-up
+            <input aria-label="Next follow-up" type="datetime-local" className={`${field} mt-1 font-normal`} value={followUp} onChange={(e) => setFollowUp(e.target.value)} />
+          </label>
+          <Button type="submit" variant="danger" className="w-full py-1.5 text-xs" disabled={addBlocker.isPending}>Record blocker</Button>
+          {addBlocker.error ? <p className="text-red-600">{addBlocker.error instanceof ApiRequestError ? addBlocker.error.message : 'Could not record the blocker'}</p> : null}
         </form>
       ) : null}
 
-      {activeBlockerAudit ? (
-        <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 p-2.5 text-xs border border-amber-200 dark:border-amber-900/40 flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <span className="font-bold text-amber-800 dark:text-amber-300 block mb-0.5">Task is Blocked</span>
-            <p className="text-amber-700 dark:text-amber-400 break-words">{describeAudit(activeBlockerAudit)}</p>
-          </div>
-        </div>
-      ) : (
-        <p className="text-xs text-slate-400 dark:text-slate-500 py-1">No active blockers for this task.</p>
-      )}
+      {active.length === 0 ? <p className="text-xs text-slate-400 dark:text-slate-500 py-1">No active blockers for this task.</p> : null}
+      <ul className="space-y-2">
+        {active.map((b) => (
+          <li key={b.id} className="rounded-lg bg-amber-50 dark:bg-amber-950/30 p-2.5 text-xs border border-amber-200 dark:border-amber-900/40">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <span className="font-bold text-amber-800 dark:text-amber-300 block mb-0.5">Blocked since {formatDateTime(b.blockedAt)}</span>
+                <p className="text-amber-700 dark:text-amber-400 break-words">{b.reason}</p>
+                <p className="mt-1 text-amber-700/80 dark:text-amber-400/80">
+                  Unblocker: {b.unblocker?.name ?? 'unknown'}{b.nextFollowUpAt ? ` · follow-up ${formatDateTime(b.nextFollowUpAt)}` : ' · no follow-up set'}
+                </p>
+              </div>
+              <Button variant="ghost" className="shrink-0 py-1 px-2.5 text-xs font-semibold" disabled={unblock.isPending} onClick={() => unblock.mutate(b.id)}>
+                Mark unblocked
+              </Button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {unblock.error ? <p className="mt-2 text-xs text-red-600">{unblock.error instanceof ApiRequestError ? unblock.error.message : 'Could not unblock'}</p> : null}
+      {resolved.length ? (
+        <details className="mt-2 text-xs text-slate-500">
+          <summary className="cursor-pointer font-semibold">{resolved.length} resolved blocker{resolved.length === 1 ? '' : 's'}</summary>
+          <ul className="mt-1 space-y-1">
+            {resolved.map((b) => (
+              <li key={b.id}>{formatDateTime(b.blockedAt)} → {formatDateTime(b.unblockedAt!)}: {b.reason}</li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
     </section>
   );
 }
-

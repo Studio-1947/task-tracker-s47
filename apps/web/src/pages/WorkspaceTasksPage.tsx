@@ -24,6 +24,8 @@ import { formatDate, isOverdue, priorityClasses, statusClasses, statusLabel } fr
 import { ApiRequestError } from '../lib/api';
 import { Button, Card, EmptyState, ErrorState, Input, LabelChip, Spinner } from '../components/ui';
 import { AvatarStack } from '../components/AvatarStack';
+import { EditProjectModal } from '../components/EditProjectModal';
+import { PlanningFlags } from '../components/TaskPlanningSections';
 import { TaskDrawer } from '../components/TaskDrawer';
 import { KanbanView } from '../components/KanbanView';
 import { PlanningPanel } from '../components/PlanningPanel';
@@ -43,14 +45,30 @@ export function WorkspaceTasksPage() {
   return <Board key={id} workspaceId={id} />;
 }
 
-function loadFilters(workspaceId: string): TaskFilters {
+/** Filters that live in the URL, so a filtered view can be shared, bookmarked and survives opening a task. */
+const URL_FILTERS = [
+  ['status', 'status'],
+  ['assigneeId', 'assignee'],
+  ['labelId', 'label'],
+  ['search', 'q'],
+  ['attention', 'attention'],
+] as const;
+
+function loadFilters(workspaceId: string, params: URLSearchParams): TaskFilters {
+  let base: TaskFilters = DEFAULT_FILTERS;
   try {
     const raw = localStorage.getItem(`tt.filters.${workspaceId}`);
-    if (raw) return { ...DEFAULT_FILTERS, ...(JSON.parse(raw) as TaskFilters) };
+    if (raw) base = { ...DEFAULT_FILTERS, ...(JSON.parse(raw) as TaskFilters) };
   } catch {
     /* ignore malformed storage */
   }
-  return DEFAULT_FILTERS;
+  const fromUrl: Record<string, string> = {};
+  for (const [key, param] of URL_FILTERS) {
+    const v = params.get(param);
+    if (v) fromUrl[key] = v;
+  }
+  // Explicit URL filters win over the remembered ones; with none in the URL, fall back to the remembered set.
+  return Object.keys(fromUrl).length ? { ...DEFAULT_FILTERS, ...fromUrl, includeArchived: base.includeArchived } : base;
 }
 
 function Board({ workspaceId }: { workspaceId: string }) {
@@ -61,14 +79,16 @@ function Board({ workspaceId }: { workspaceId: string }) {
   const { data: labels } = useLabels(workspaceId);
   const { data: projects } = useProjects(workspaceId);
   const [view, setView] = useState<View>('list');
-  const [filters, setFilters] = useState<TaskFilters>(() => loadFilters(workspaceId));
   const [page, setPage] = useState(1);
   // Deep-link support (?task=<id>) so search results and dashboard widgets can
   // open the drawer directly. ?project=<id> scopes the board to one project.
   const [searchParams, setSearchParams] = useSearchParams();
+  const [filters, setFilters] = useState<TaskFilters>(() => loadFilters(workspaceId, searchParams));
   const [openTaskId, setOpenTaskId] = useState<string | null>(() => searchParams.get('task'));
   const [showCreate, setShowCreate] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
+  const [showEditProject, setShowEditProject] = useState(false);
+  const [projectQuery, setProjectQuery] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showPlanning, setShowPlanning] = useState(false);
   const navigate = useNavigate();
@@ -81,6 +101,14 @@ function Board({ workspaceId }: { workspaceId: string }) {
   // Project scope is navigational (?project=), not a persisted filter.
   const selectedProjectId = searchParams.get('project') ?? '';
   const activeProjects = useMemo(() => (projects ?? []).filter((p) => !p.isArchived), [projects]);
+  const selectedProject = activeProjects.find((p) => p.id === selectedProjectId) ?? null;
+  const visibleProjects = useMemo(() => {
+    const q = projectQuery.trim().toLowerCase();
+    if (!q) return activeProjects;
+    // The open project stays visible while searching so the current scope is never hidden.
+    return activeProjects.filter((p) => p.id === selectedProjectId || `${p.name} ${p.taskPrefix}`.toLowerCase().includes(q));
+  }, [activeProjects, projectQuery, selectedProjectId]);
+  const canManageProjects = isAdmin || (members ?? []).find((m) => m.id === user?.id)?.workspaceRole === 'MANAGER';
   const selectProject = (id: string) => {
     const next = new URLSearchParams(searchParams);
     if (id) next.set('project', id);
@@ -126,9 +154,17 @@ function Board({ workspaceId }: { workspaceId: string }) {
     }
   };
 
-  // Persist filters per workspace (saved filters).
+  // Persist filters per workspace (saved filters) and mirror them into the URL.
   useEffect(() => {
     localStorage.setItem(`tt.filters.${workspaceId}`, JSON.stringify(filters));
+    const next = new URLSearchParams(searchParams);
+    for (const [key, param] of URL_FILTERS) {
+      const v = filters[key];
+      if (v) next.set(param, String(v));
+      else next.delete(param);
+    }
+    if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters, workspaceId]);
 
   // Reset to page 1 whenever a filter changes.
@@ -139,6 +175,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
     filters.assigneeId,
     filters.labelId,
     filters.search,
+    filters.attention,
     filters.sort,
     filters.order,
     filters.pageSize,
@@ -159,7 +196,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
   );
 
   const filtersActive =
-    !!filters.search || !!filters.status || !!filters.assigneeId || !!filters.labelId || !!filters.includeArchived;
+    !!filters.search || !!filters.status || !!filters.assigneeId || !!filters.labelId || !!filters.attention || !!filters.includeArchived;
 
   const pageSize = data?.pageSize ?? 15;
   const totalPages = data ? Math.max(1, Math.ceil(data.total / pageSize)) : 1;
@@ -217,8 +254,22 @@ function Board({ workspaceId }: { workspaceId: string }) {
 
         {/* Project scope selector */}
         <div className="mt-5 flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+          <div className="relative shrink-0">
+            <svg className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3.2-3.2" />
+            </svg>
+            <input
+              type="search"
+              aria-label="Search projects"
+              placeholder="Search projects…"
+              value={projectQuery}
+              onChange={(e) => setProjectQuery(e.target.value)}
+              className="w-40 rounded-full border border-slate-200 bg-white/60 py-1.5 pl-8 pr-3 text-xs text-slate-700 outline-none focus:border-indigo-500 sm:w-52 dark:border-slate-800 dark:bg-slate-900/40 dark:text-white"
+            />
+          </div>
           <ProjectPill active={!selectedProjectId} onClick={() => selectProject('')} label="All projects" />
-          {activeProjects.map((p) => (
+          {visibleProjects.map((p) => (
             <ProjectPill
               key={p.id}
               active={selectedProjectId === p.id}
@@ -228,6 +279,18 @@ function Board({ workspaceId }: { workspaceId: string }) {
               count={p.taskCount}
             />
           ))}
+          {projectQuery && visibleProjects.length === 0 ? (
+            <span className="shrink-0 text-xs text-slate-400">No project matches “{projectQuery}”.</span>
+          ) : null}
+          {selectedProject && canManageProjects ? (
+            <button
+              type="button"
+              onClick={() => setShowEditProject(true)}
+              className="shrink-0 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:border-indigo-500 hover:text-indigo-600 dark:border-slate-800 dark:text-slate-300 dark:hover:text-indigo-400"
+            >
+              Edit project
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setShowCreateProject(true)}
@@ -328,6 +391,20 @@ function Board({ workspaceId }: { workspaceId: string }) {
                   {l.name}
                 </option>
               ))}
+            </select>
+            <select
+              aria-label="Needs attention"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 px-3 py-2 text-xs text-slate-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all lg:w-auto"
+              value={filters.attention ?? ''}
+              onChange={(e) => setFilters((f) => ({ ...f, attention: e.target.value || undefined }))}
+            >
+              <option value="">Any planning state</option>
+              <option value="OVERDUE">Overdue</option>
+              <option value="NO_OWNER">No accountable owner</option>
+              <option value="NO_DEADLINE">No deadline</option>
+              <option value="MISSING_ESTIMATE">Missing estimate</option>
+              <option value="BLOCKED">Blocked</option>
+              <option value="REVIEW_OVERDUE">Review overdue</option>
             </select>
             <label className="flex w-full items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 lg:w-auto cursor-pointer">
               <input
@@ -449,6 +526,14 @@ function Board({ workspaceId }: { workspaceId: string }) {
           projects={activeProjects}
           defaultProjectId={selectedProjectId || undefined}
           onClose={() => void setShowCreate(false)}
+        />
+      ) : null}
+      {showEditProject && selectedProject ? (
+        <EditProjectModal
+          workspaceId={workspaceId}
+          project={selectedProject}
+          onClose={() => setShowEditProject(false)}
+          onArchived={() => selectProject('')}
         />
       ) : null}
       {showCreateProject ? (
@@ -618,6 +703,7 @@ function ListView({
             {/* Metadata Row: project, labels, assignee, due date, priority, status */}
             <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:shrink-0 sm:gap-4">
               {showProject ? <ProjectTag name={t.projectName} /> : null}
+              <PlanningFlags task={t} />
               {t.isArchived ? (
                 <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
                   Archived
@@ -690,6 +776,7 @@ function TableView({
             }),
           ]
         : []),
+      columnHelper.display({ id: 'plan', header: 'Plan', cell: (c) => <div className="flex flex-wrap gap-1"><PlanningFlags task={c.row.original} /></div> }),
       columnHelper.accessor('status', { header: 'Status', cell: (c) => <StatusBadge t={c.row.original} /> }),
       columnHelper.accessor('priority', { header: 'Priority', cell: (c) => <PriorityBadge t={c.row.original} /> }),
       columnHelper.accessor((r) => r.assignees, {

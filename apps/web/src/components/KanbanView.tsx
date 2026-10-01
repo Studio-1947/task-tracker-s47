@@ -17,6 +17,7 @@ import { formatDate, isOverdue, priorityClasses, statusClasses, statusLabel } fr
 import { AvatarStack } from './AvatarStack';
 import { LabelChip } from './ui';
 import { DueDateProgress } from './DueDateProgress';
+import { PlanningFlags } from './TaskPlanningSections';
 
 interface Props {
   workspaceId: string;
@@ -191,6 +192,7 @@ function Card({ task, overlay = false, showProject, workspaceId }: { task: TaskL
           </span>
         ) : null}
       </div>
+      <div className="mt-1.5 flex flex-wrap gap-1"><PlanningFlags task={task} /></div>
       <DueDateProgress t={task} workspaceId={workspaceId} />
     </div>
   );

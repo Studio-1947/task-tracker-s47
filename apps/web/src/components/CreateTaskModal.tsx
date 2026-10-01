@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { PRIORITIES, TASK_STATUSES, type LabelRef, type Priority, type ProjectSummary, type TaskStatus, type UserRef } from '@task-tracker/shared';
+import { taskSizeLabel, TASK_SIZE_LABELS, PRIORITIES, TASK_STATUSES, type LabelRef, type Priority, type ProjectSummary, type TaskStatus, type UserRef } from '@task-tracker/shared';
 import { useCreateTask } from '../hooks/useTasks';
+import { nonWorkingReason, useCalendar } from '../hooks/useCalendar';
 import { ApiRequestError } from '../lib/api';
 import { statusLabel } from '../lib/format';
 import { AssigneePicker } from './AssigneePicker';
@@ -29,6 +30,10 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
   const [estimateHours, setEstimateHours] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [labelIds, setLabelIds] = useState<string[]>([]);
+  const [acceptanceCriteria, setAcceptanceCriteria] = useState('');
+  const { data: calendar } = useCalendar();
+  const offDayReason = dueDate ? nonWorkingReason(dueDate, calendar) : null;
+  const sizeLabel = taskSizeLabel(estimateHours ? Math.round(Number(estimateHours) * 60) : null);
   const [error, setError] = useState<string | null>(null);
 
   const toggleLabel = (id: string) =>
@@ -51,6 +56,7 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
         projectId,
         title: title.trim(),
         description: description.trim() || undefined,
+        acceptanceCriteria: acceptanceCriteria.trim() || undefined,
         status,
         priority,
         dueDate: dueDate ? new Date(dueDate).toISOString() : null,
@@ -122,6 +128,17 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
               onChange={(e) => setDescription(e.target.value)}
             />
             <div className="mt-2"><TextLinkButton value={description} onChange={setDescription} /></div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Acceptance criteria</label>
+            <textarea
+              aria-label="Acceptance criteria"
+              rows={2}
+              className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-[#252525] dark:text-white"
+              placeholder="How will the reviewer decide this is complete?"
+              value={acceptanceCriteria}
+              onChange={(e) => setAcceptanceCriteria(e.target.value)}
+            />
+          </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -172,6 +189,9 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
                 <option value="">Not assigned</option>
                 {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
+              {!ownerId && assigneeIds.length > 0 ? (
+                <span className="mt-1 block text-[11px] font-medium text-amber-600 dark:text-amber-400">Tagged people are collaborators. Pick one accountable owner.</span>
+              ) : null}
             </label>
             <label className="text-sm">
               <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Reviewer</span>
@@ -181,7 +201,10 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
               </select>
             </label>
             <label className="text-sm">
-              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Baseline estimate (hours)</span>
+              <span className="mb-1 flex items-center justify-between font-medium text-slate-600 dark:text-slate-300">
+                Baseline estimate (hours)
+                {sizeLabel ? <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">{TASK_SIZE_LABELS[sizeLabel]}</span> : null}
+              </span>
               <input type="number" min="0" step="0.25" className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white" value={estimateHours} onChange={(e) => setEstimateHours(e.target.value)} />
             </label>
             <label className="text-sm">
@@ -197,6 +220,11 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
               />
+              {offDayReason ? (
+                <span role="alert" className="mt-1 block text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                  This date is {offDayReason}. Prefer a working day, or note why in the description.
+                </span>
+              ) : null}
             </label>
           </div>
 

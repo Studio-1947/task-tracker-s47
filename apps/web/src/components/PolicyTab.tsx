@@ -11,12 +11,13 @@ type StoredPolicy = Omit<OrganisationPolicyInput, 'earnedLeaveMonthly' | 'casual
   casualLeaveMonthly: string | number;
 };
 
-const FIELDS: Array<{ key: 'deadlineLeadMinutes' | 'reviewTargetMinutes' | 'updateThresholdMinutes' | 'lateGraceMinutes' | 'maxConcurrentLeavePercent'; label: string; hint: string; min: number; max: number }> = [
+const FIELDS: Array<{ key: 'deadlineLeadMinutes' | 'reviewTargetMinutes' | 'updateThresholdMinutes' | 'lateGraceMinutes' | 'maxConcurrentLeavePercent' | 'simplifiedReviewMaxMinutes'; label: string; hint: string; min: number; max: number }> = [
   { key: 'deadlineLeadMinutes', label: 'Deadline reminder lead (minutes)', hint: 'How long before a due date the owner and reviewer are reminded.', min: 0, max: 10080 },
   { key: 'reviewTargetMinutes', label: 'Review target (working minutes)', hint: 'A pending review older than this triggers a review-overdue reminder. 480 = one working day.', min: 1, max: 10080 },
   { key: 'updateThresholdMinutes', label: 'Update threshold (working minutes)', hint: 'An in-progress task with no progress update for this long triggers an update-overdue reminder. 960 = two working days; leave, blocked and awaiting-review time is excluded.', min: 1, max: 20160 },
   { key: 'lateGraceMinutes', label: 'Late check-in grace (minutes)', hint: 'Check-ins within this many minutes of the start are not late.', min: 0, max: 240 },
   { key: 'maxConcurrentLeavePercent', label: 'Most of a team on leave at once (%)', hint: '100 turns the staffing check off. Below that, approving leave that would exceed it needs an explained override.', min: 1, max: 100 },
+  { key: 'simplifiedReviewMaxMinutes', label: 'Largest task that may skip review (minutes)', hint: 'Used only when the rule below is "Small tasks only".', min: 1, max: 1440 },
 ];
 
 /** Admin: the organisation-wide reminder, attendance and leave thresholds. */
@@ -25,8 +26,10 @@ export function PolicyTab() {
   const { data, isLoading, error } = useQuery({ queryKey: ['organisation-policy'], queryFn: () => http.get<StoredPolicy>('/admin/organisation-policy') });
   const [draft, setDraft] = useState<Record<string, number>>({});
   const [saved, setSaved] = useState(false);
+  const [doneRule, setDoneRule] = useState<'ALLOW' | 'SMALL_ONLY' | 'REQUIRE_REVIEWER'>('ALLOW');
 
   useEffect(() => {
+    if (data) setDoneRule(data.noReviewerDonePolicy ?? 'ALLOW');
     if (data) setDraft(Object.fromEntries(FIELDS.map((f) => [f.key, (data as unknown as Record<string, number>)[f.key] ?? 0])));
   }, [data]);
 
@@ -46,6 +49,8 @@ export function PolicyTab() {
         halfDayEnabled: p.halfDayEnabled,
         lateGraceMinutes: draft.lateGraceMinutes!,
         maxConcurrentLeavePercent: draft.maxConcurrentLeavePercent!,
+        noReviewerDonePolicy: doneRule,
+        simplifiedReviewMaxMinutes: draft.simplifiedReviewMaxMinutes!,
         unresolvedCorrectionTreatment: p.unresolvedCorrectionTreatment,
         effectiveFrom: p.effectiveFrom,
       };
@@ -76,6 +81,20 @@ export function PolicyTab() {
           <span className="mt-1 block text-xs text-slate-400 dark:text-slate-500">{f.hint}</span>
         </label>
       ))}
+      <label className="block">
+        <span className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Marking a task Done with no reviewer</span>
+        <select
+          aria-label="Rule for tasks with no reviewer"
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800 dark:bg-[#252525] dark:text-white"
+          value={doneRule}
+          onChange={(e) => { setSaved(false); setDoneRule(e.target.value as typeof doneRule); }}
+        >
+          <option value="ALLOW">Allow (no evidence or acceptance needed)</option>
+          <option value="SMALL_ONLY">Small tasks only (documented simplified review)</option>
+          <option value="REQUIRE_REVIEWER">Always require a reviewer and evidence</option>
+        </select>
+        <span className="mt-1 block text-xs text-slate-400 dark:text-slate-500">Subtasks are execution items and are not affected. Tasks that have a reviewer always use the evidence workflow.</span>
+      </label>
       <div className="flex items-center gap-3">
         <Button onClick={() => save.mutate()} disabled={save.isPending}>Save policy</Button>
         {saved ? <span className="text-sm text-emerald-600 dark:text-emerald-400">Saved</span> : null}

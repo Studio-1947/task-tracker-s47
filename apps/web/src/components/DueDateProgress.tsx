@@ -60,7 +60,9 @@ export function DueDateProgress({
       if (!t.dueDate) return;
       const next = new Date(t.dueDate);
       next.setDate(next.getDate() + days);
-      updateTask.mutate({ id: t.id, patch: { dueDate: next.toISOString() } });
+      const dueDateReason = window.prompt(`Why is the deadline moving ${days > 0 ? 'later' : 'earlier'}?`)?.trim();
+      if (!dueDateReason) return;
+      updateTask.mutate({ id: t.id, patch: { dueDate: next.toISOString(), dueDateReason } });
     },
     [t.id, t.dueDate, updateTask],
   );

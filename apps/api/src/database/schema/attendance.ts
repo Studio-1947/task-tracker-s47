@@ -177,6 +177,13 @@ export const organisationPolicies = pgTable('organisation_policies', {
   /** Most of a workspace team that may be on approved leave on one day; 100 disables the control. */
   maxConcurrentLeavePercent: integer('max_concurrent_leave_percent').notNull().default(100),
   unresolvedCorrectionTreatment: varchar('unresolved_correction_treatment', { length: 16 }).notNull().default('EXCLUDE'),
+  /**
+   * What happens when a top-level task with no reviewer is moved to Done (spec section 5):
+   * ALLOW keeps the legacy behaviour, SMALL_ONLY permits it only for estimates up to
+   * `simplifiedReviewMaxMinutes`, REQUIRE_REVIEWER always demands a reviewer and the evidence workflow.
+   */
+  noReviewerDonePolicy: varchar('no_reviewer_done_policy', { length: 16 }).notNull().default('ALLOW'),
+  simplifiedReviewMaxMinutes: integer('simplified_review_max_minutes').notNull().default(120),
   effectiveFrom: date('effective_from').notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [check('organisation_policies_singleton', sql`${t.id} = 1`)]);

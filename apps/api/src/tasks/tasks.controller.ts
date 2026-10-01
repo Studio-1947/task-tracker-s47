@@ -354,6 +354,11 @@ export class TasksController {
     return this.tasks.allocateTimeEntry(id, entryId, user, body);
   }
 
+  @Get(':id/blockers')
+  listBlockers(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.tasks.listBlockers(id, user);
+  }
+
   @Post(':id/blockers')
   addBlocker(
     @Param('id', ParseUUIDPipe) id: string,
@@ -366,6 +371,11 @@ export class TasksController {
   @Post('blockers/:blockerId/unblock')
   unblock(@Param('blockerId', ParseUUIDPipe) blockerId: string, @CurrentUser() user: RequestUser) {
     return this.tasks.unblock(blockerId, user);
+  }
+
+  @Get(':id/dependencies')
+  listDependencies(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.tasks.listDependencies(id, user);
   }
 
   @Post('dependencies')

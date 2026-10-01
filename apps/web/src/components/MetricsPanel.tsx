@@ -7,7 +7,13 @@ import { formatWorkingDuration } from '../lib/format';
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import { Button, Card, ErrorState, Spinner } from './ui';
 
-type Period = '7d' | '30d' | 'month';
+export type Period = '7d' | '30d' | 'month';
+
+export interface MetricFilters {
+  workspaceId: string;
+  period: Period;
+  basis: CommitmentBasis;
+}
 
 function periodRange(p: Period): { from: string; to: string } {
   const now = new Date();
@@ -28,20 +34,40 @@ interface CardSpec {
   tone?: 'danger';
 }
 
+/** Shared period / workspace / commitment-view filters, shown once at the top of the dashboard (spec section 10). */
+export function MetricFilterBar({ value, onChange }: { value: MetricFilters; onChange: (v: MetricFilters) => void }) {
+  const { data: workspaces } = useWorkspaces();
+  const active = (workspaces ?? []).filter((w) => !w.isArchived);
+  const select = 'min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500 dark:border-[#2d2d2d] dark:bg-[#1a1a1a] dark:text-white';
+  return (
+    <div role="group" aria-label="Dashboard filters" className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center gap-2 rounded-xl border border-slate-100 bg-white/90 px-3 py-2.5 backdrop-blur dark:border-slate-800 dark:bg-[#181818]/90">
+      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Showing</span>
+      <select aria-label="Workspace" className={select} value={value.workspaceId} onChange={(e) => onChange({ ...value, workspaceId: e.target.value })}>
+        {active.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+      </select>
+      <select aria-label="Period" className={select} value={value.period} onChange={(e) => onChange({ ...value, period: e.target.value as Period })}>
+        <option value="7d">Last 7 days</option>
+        <option value="30d">Last 30 days</option>
+        <option value="month">This month</option>
+      </select>
+      <select aria-label="Commitment view" className={select} value={value.basis} onChange={(e) => onChange({ ...value, basis: e.target.value as CommitmentBasis })}>
+        <option value="ORIGINAL">Original commitment</option>
+        <option value="REVISED">Revised commitment</option>
+      </select>
+      <span className="ml-auto hidden text-[11px] text-slate-400 sm:inline">Filters apply to delivery metrics. Org-wide cards say so.</span>
+    </div>
+  );
+}
+
 /**
  * Delivery metrics for one workspace and period. Every card shows its
  * numerator / denominator and can open the exact tasks behind the count; the
  * CSV button exports the same object the cards are drawn from.
  */
-export function MetricsPanel() {
-  const { data: workspaces } = useWorkspaces();
-  const active = (workspaces ?? []).filter((w) => !w.isArchived);
-  const [workspaceId, setWorkspaceId] = useState('');
-  const [period, setPeriod] = useState<Period>('30d');
-  const [basis, setBasis] = useState<CommitmentBasis>('ORIGINAL');
+export function MetricsPanel({ filters }: { filters: MetricFilters }) {
+  const { workspaceId: targetId, period, basis } = filters;
   const [open, setOpen] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
-  const targetId = workspaceId || active[0]?.id || '';
   const range = useMemo(() => periodRange(period), [period]);
   const qs = `workspaceId=${targetId}&from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}&basis=${basis}`;
 
@@ -52,7 +78,7 @@ export function MetricsPanel() {
   });
   const { data: refs } = useQuery({
     queryKey: ['metrics-refs', targetId],
-    queryFn: () => http.get<{ items: Array<{ id: string; ref: string; title: string }> }>(`/workspaces/${targetId}/tasks?pageSize=100`),
+    queryFn: () => http.get<{ items: Array<{ id: string; ref: string; title: string }> }>(`/workspaces/${targetId}/tasks?pageSize=100&includeArchived=true`),
     enabled: !!targetId && !!open,
   });
   const refOf = new Map((refs?.items ?? []).map((t) => [t.id, t]));
@@ -114,7 +140,6 @@ export function MetricsPanel() {
     }
   };
 
-  const select = 'rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500 dark:border-[#2d2d2d] dark:bg-[#1a1a1a] dark:text-white';
   return (
     <Card className="space-y-4 p-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -126,21 +151,7 @@ export function MetricsPanel() {
             </p>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-end gap-2">
-          <select aria-label="Workspace" className={select} value={targetId} onChange={(e) => setWorkspaceId(e.target.value)}>
-            {active.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
-          <select aria-label="Period" className={select} value={period} onChange={(e) => setPeriod(e.target.value as Period)}>
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-            <option value="month">This month</option>
-          </select>
-          <select aria-label="Commitment view" className={select} value={basis} onChange={(e) => setBasis(e.target.value as CommitmentBasis)}>
-            <option value="ORIGINAL">Original commitment</option>
-            <option value="REVISED">Revised commitment</option>
-          </select>
-          <Button variant="ghost" onClick={() => void download()} disabled={!m}>Export CSV</Button>
-        </div>
+        <Button variant="ghost" onClick={() => void download()} disabled={!m}>Export CSV</Button>
       </div>
       {downloadError ? <p className="text-sm text-red-600">{downloadError}</p> : null}
       {isLoading ? <Spinner /> : error ? <ErrorState message={error instanceof ApiRequestError ? error.message : 'Could not load metrics'} /> : null}

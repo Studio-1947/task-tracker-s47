@@ -1,0 +1,2 @@
+ALTER TABLE "organisation_policies" ADD COLUMN "no_reviewer_done_policy" varchar(16) DEFAULT 'ALLOW' NOT NULL;--> statement-breakpoint
+ALTER TABLE "organisation_policies" ADD COLUMN "simplified_review_max_minutes" integer DEFAULT 120 NOT NULL;

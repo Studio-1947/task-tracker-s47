@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react';
-import type { AttendancePunchInput, LeaveBalance, LeaveRequestItem } from '@task-tracker/shared';
+import type {
+  AttendanceDayState, AttendancePunchInput, LeaveBalance, LeaveRequestItem } from '@task-tracker/shared';
 import { useAuth } from '../stores/auth';
 import { ApiRequestError } from '../lib/api';
 import { useUsers } from '../hooks/useUsers';
 import { Avatar } from '../components/Avatar';
 import { PolicyTab } from '../components/PolicyTab';
+import { PayrollTab } from '../components/PayrollTab';
+import { TeamAvailabilityTab } from '../components/TeamAvailabilityTab';
 import { Badge, Button, Card, EmptyState, ErrorState, Input, Spinner } from '../components/ui';
 import {
   useAttendanceToday,
@@ -17,6 +20,7 @@ import {
   useLeaves,
   useLeaveTypes,
   useMyAttendance,
+  useMyDayStates,
   useMyBalances,
   useMyLeaves,
   useReviewLeave,
@@ -63,7 +67,7 @@ const statusTone: Record<string, 'slate' | 'green' | 'amber'> = {
   CANCELLED: 'slate',
 };
 
-type Tab = 'me' | 'approvals' | 'corrections' | 'types' | 'allotments' | 'team' | 'policy';
+type Tab = 'me' | 'approvals' | 'corrections' | 'types' | 'allotments' | 'team' | 'policy' | 'payroll' | 'availability';
 
 export function AttendancePage() {
   const { user } = useAuth();
@@ -78,8 +82,10 @@ export function AttendancePage() {
           { key: 'corrections', label: 'Attendance Corrections' },
           { key: 'types', label: 'Leave Types' },
           { key: 'allotments', label: 'Allotments' },
+          { key: 'availability', label: 'Team Availability' },
           { key: 'team', label: 'Team Log' },
           { key: 'policy', label: 'Policy' },
+          { key: 'payroll', label: 'Payroll Inputs' },
         ] as { key: Tab; label: string }[])
       : []),
   ];
@@ -111,8 +117,10 @@ export function AttendancePage() {
         {tab === 'corrections' ? <CorrectionsReviewTab /> : null}
         {tab === 'types' ? <LeaveTypesTab /> : null}
         {tab === 'allotments' ? <AllotmentsTab /> : null}
+        {tab === 'availability' ? <TeamAvailabilityTab /> : null}
         {tab === 'team' ? <TeamLogTab /> : null}
         {tab === 'policy' ? <PolicyTab /> : null}
+        {tab === 'payroll' ? <PayrollTab /> : null}
       </div>
     </div>
   );
@@ -126,7 +134,7 @@ function MyAttendanceTab() {
     <div className="space-y-6">
       <CheckInCard onOpenCorrection={() => setShowCorrection(true)} />
       <BalancesRow />
-      <MonthCalendar />
+      <MonthCalendar onCorrect={() => setShowCorrection(true)} />
       <MyCorrectionsSection onOpenCorrection={() => setShowCorrection(true)} />
       <section>
         <div className="mb-3 flex items-center justify-between">
@@ -272,11 +280,30 @@ function BalanceCard({ b }: { b: LeaveBalance }) {
   );
 }
 
-function MonthCalendar() {
+const DAY_STATE_STYLE: Record<AttendanceDayState, { label: string; cell: string; text: string }> = {
+  WORKED: { label: 'Worked', cell: 'bg-emerald-50/60 dark:bg-emerald-950/15', text: 'text-emerald-600 dark:text-emerald-400' },
+  PAID_LEAVE: { label: 'Paid leave', cell: 'bg-indigo-50/60 dark:bg-indigo-950/20', text: 'text-indigo-600 dark:text-indigo-400' },
+  UNPAID_LEAVE: { label: 'Unpaid leave', cell: 'bg-slate-100/70 dark:bg-slate-800/40', text: 'text-slate-600 dark:text-slate-300' },
+  ABSENCE: { label: 'Absent', cell: 'bg-red-50/70 dark:bg-red-950/20', text: 'text-red-600 dark:text-red-400' },
+  HOLIDAY: { label: 'Holiday', cell: 'bg-sky-50/70 dark:bg-sky-950/20', text: 'text-sky-600 dark:text-sky-400' },
+  WEEKLY_OFF: { label: 'Weekly off', cell: 'bg-slate-50 dark:bg-slate-900/40', text: 'text-slate-400 dark:text-slate-500' },
+  PENDING_CORRECTION: { label: 'Pending correction', cell: 'bg-amber-50/80 dark:bg-amber-950/20', text: 'text-amber-600 dark:text-amber-400' },
+  UPCOMING: { label: '', cell: '', text: 'text-slate-400' },
+};
+
+function MonthCalendar({ onCorrect }: { onCorrect?: () => void }) {
   const [cursor, setCursor] = useState(() => new Date());
   const month = `${cursor.getFullYear()}-${pad2(cursor.getMonth() + 1)}`;
   const { data: records } = useMyAttendance(month);
   const { data: leaves } = useMyLeaves();
+  const { data: dayStates } = useMyDayStates(month);
+  const stateByDay = useMemo(() => new Map((dayStates ?? []).map((d) => [d.date, d])), [dayStates]);
+  const tally = useMemo(() => {
+    const t: Partial<Record<AttendanceDayState, number>> = {};
+    for (const d of dayStates ?? []) t[d.state] = (t[d.state] ?? 0) + 1;
+    return t;
+  }, [dayStates]);
+  const missing = (dayStates ?? []).filter((d) => d.missingCheckout);
 
   const recByDay = useMemo(() => new Map((records ?? []).map((r) => [r.workDate, r])), [records]);
   const leaveByDay = useMemo(() => {
@@ -323,6 +350,7 @@ function MonthCalendar() {
           const rec = recByDay.get(dateStr);
           const leave = leaveByDay.get(dateStr);
           const isToday = dateStr === todayStr;
+          const st = stateByDay.get(dateStr);
           return (
             <div
               key={dateStr}
@@ -330,18 +358,23 @@ function MonthCalendar() {
                 isToday
                   ? 'border-indigo-400 dark:border-indigo-500/60'
                   : 'border-slate-100 dark:border-slate-800/60'
-              } ${leave ? '' : rec ? 'bg-emerald-50/50 dark:bg-emerald-950/15' : ''}`}
-              style={leave?.color ? { backgroundColor: `${leave.color}18` } : undefined}
+              } ${st ? DAY_STATE_STYLE[st.state].cell : leave ? '' : rec ? 'bg-emerald-50/50 dark:bg-emerald-950/15' : ''}`}
+              style={!st && leave?.color ? { backgroundColor: `${leave.color}18` } : undefined}
               title={leave ? `${leave.typeName} leave` : rec ? `In ${fmtTime(rec.checkInAt)}${rec.checkOutAt ? ` · Out ${fmtTime(rec.checkOutAt)}` : ''}` : undefined}
             >
               <div className={`text-xs font-bold ${isToday ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>{day}</div>
-              {leave ? (
+              {st && st.state !== 'UPCOMING' && !(st.state === 'WORKED' && rec) && st.state !== 'PAID_LEAVE' && st.state !== 'UNPAID_LEAVE' ? (
+                <div className={`mt-0.5 text-[9px] font-semibold leading-tight ${DAY_STATE_STYLE[st.state].text}`}>
+                  {st.state === 'HOLIDAY' && st.detail ? st.detail : DAY_STATE_STYLE[st.state].label}
+                </div>
+              ) : leave ? (
                 <div className="mt-0.5 truncate text-[9px] font-semibold" style={{ color: leave.color ?? '#6366f1' }}>
-                  {leave.halfDay ? '½ ' : ''}{leave.typeName}
+                  {leave.halfDay ? '½ ' : ''}{leave.typeName}{st?.state === 'UNPAID_LEAVE' ? ' (unpaid)' : ''}
                 </div>
               ) : rec ? (
                 <div className="mt-0.5 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">
                   {fmtTime(rec.checkInAt)}
+                  {st?.missingCheckout ? <span className="block text-amber-600 dark:text-amber-400">No check-out</span> : null}
                 </div>
               ) : null}
             </div>
@@ -349,9 +382,27 @@ function MonthCalendar() {
         })}
       </div>
       <div className="mt-3 flex flex-wrap gap-3 text-[10px] font-semibold text-slate-400 dark:text-slate-500">
-        <Legend swatch="bg-emerald-400" label="Present" />
-        <Legend swatch="bg-indigo-400" label="On leave" />
+        <Legend swatch="bg-emerald-400" label="Worked" />
+        <Legend swatch="bg-indigo-400" label="Paid leave" />
+        <Legend swatch="bg-slate-400" label="Unpaid leave" />
+        <Legend swatch="bg-red-400" label="Absent" />
+        <Legend swatch="bg-sky-400" label="Holiday" />
+        <Legend swatch="bg-slate-200 dark:bg-slate-700" label="Weekly off" />
+        <Legend swatch="bg-amber-400" label="Pending correction" />
       </div>
+      {dayStates ? (
+        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400" data-testid="month-summary">
+          This month: {tally.WORKED ?? 0} worked, {(tally.PAID_LEAVE ?? 0) + (tally.UNPAID_LEAVE ?? 0)} on leave, {tally.ABSENCE ?? 0} absent,
+          {' '}{tally.HOLIDAY ?? 0} holiday, {tally.WEEKLY_OFF ?? 0} weekly off, {tally.PENDING_CORRECTION ?? 0} pending correction.
+          Weekends and holidays are never counted as absence.
+        </p>
+      ) : null}
+      {missing.length ? (
+        <div role="status" className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
+          <span>Missing check-out on {missing.map((d) => d.date).join(', ')}.</span>
+          {onCorrect ? <button type="button" className="font-semibold underline" onClick={onCorrect}>Request a correction</button> : null}
+        </div>
+      ) : null}
     </Card>
   );
 }

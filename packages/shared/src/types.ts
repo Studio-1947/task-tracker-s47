@@ -243,6 +243,14 @@ export interface ReviewQueueItem {
   waitingWorkingMinutes: number | null;
   /** Wall-clock minutes waited, for contrast with the working-time figure. */
   waitingWallMinutes: number;
+  projectName: string;
+  /** Committed due date, so the reviewer can see how the submission relates to the deadline. */
+  dueDate: string | null;
+  deliveryNote: string;
+  /** Frozen evidence for this submission; null if the attachment was removed. */
+  evidence: { id: string; fileName: string } | null;
+  /** Earlier returns of this same task, newest first, so repeated corrections are visible. */
+  priorReturns: Array<{ reason: string; decidedAt: string }>;
 }
 
 interface AttachmentBase {
@@ -315,6 +323,17 @@ export interface WorkspacePerformance {
   completionPct: number;
   /** Any audit activity in the last 7 days. */
   isActive: boolean;
+  /** Open (not accepted, not archived) tasks in this workspace. */
+  openTasks: number;
+  inProgressTasks: number;
+  /** Tasks with a pending submission waiting for a reviewer decision. */
+  awaitingReviewTasks: number;
+  /** Tasks with an unresolved blocker. */
+  blockedTasks: number;
+  /** One actionable, calendar-aware state replacing the old unexplained "Idle" (spec section 10). */
+  /** In-progress tasks whose owner has not given a real update within the policy threshold. */
+  updateOverdueTasks: number;
+  state: 'WEEKLY_OFF' | 'BLOCKED' | 'AWAITING_REVIEW' | 'UPDATE_OVERDUE' | 'NO_ACTIVE_WORK' | 'ACTIVE';
 }
 
 export interface UpcomingDeadline {
@@ -364,6 +383,12 @@ export interface AdminDashboard {
 }
 
 export interface MemberDashboard {
+  /** Submissions waiting for this person to review (assigned reviewer). */
+  reviewsWaiting: number;
+  /** Open blockers this person is the named unblocker for. */
+  blockedOnMe: number;
+  /** This person's in-progress tasks with no real update inside the policy threshold. */
+  updateOverdueTaskIds: string[];
   myTasks: MyTaskItem[];
   myWorkspaceCount: number;
   myWorkspaceTaskCount: number;
@@ -826,3 +851,24 @@ export interface WorkspaceMetrics {
   reconciliation: { statusBreakdown: Record<string, number>; topLevelTotal: number; consistent: boolean };
 }
 
+
+/** One calendar day's classification for a person (spec section 8): every day is exactly one of these. */
+export type AttendanceDayState =
+  | 'WORKED'
+  | 'PAID_LEAVE'
+  | 'UNPAID_LEAVE'
+  | 'ABSENCE'
+  | 'HOLIDAY'
+  | 'WEEKLY_OFF'
+  | 'PENDING_CORRECTION'
+  | 'UPCOMING';
+
+export interface AttendanceDayStateItem {
+  date: string;
+  state: AttendanceDayState;
+  /** Holiday name, leave type or short explanation for the label. */
+  detail: string | null;
+  /** True for a past working day with a check-in but no check-out. */
+  missingCheckout: boolean;
+  halfDay: boolean;
+}

@@ -1,17 +1,11 @@
-import type { MeetingProjectOption } from '@task-tracker/shared';
+import { useMemo } from 'react';
 import { useMeetingProjectOptions } from '../hooks/useMeetings';
-
-/** Group the flat option list by workspace so long lists stay navigable. */
-function byWorkspace(options: MeetingProjectOption[]): [string, MeetingProjectOption[]][] {
-  const groups = new Map<string, MeetingProjectOption[]>();
-  for (const o of options) groups.set(o.workspaceName, [...(groups.get(o.workspaceName) ?? []), o]);
-  return [...groups.entries()];
-}
+import { SearchableSelect } from './SearchableSelect';
 
 /**
  * Picks the project a card is filed under. `''` means unfiled — filing a card
  * mirrors it as a real task in that project, so the empty option is offered
- * explicitly rather than left as an accident of an empty select.
+ * explicitly. Searchable, because the full list spans every workspace.
  */
 export function BoardProjectSelect({
   value,
@@ -29,27 +23,22 @@ export function BoardProjectSelect({
   className?: string;
 }) {
   const { data: options, isLoading } = useMeetingProjectOptions();
-  const groups = byWorkspace(options ?? []);
-
+  const items = useMemo(
+    () => (options ?? []).map((p) => ({ value: p.id, label: p.name, group: p.workspaceName, hint: p.taskPrefix })),
+    [options],
+  );
   return (
-    <select
+    <SearchableSelect
+      options={items}
       value={value}
-      disabled={disabled || isLoading}
-      onChange={(e) => onChange(e.target.value)}
-      className={`w-full rounded-lg border border-slate-200 bg-white/80 outline-none transition focus:border-indigo-500 disabled:opacity-60 dark:border-[#2d2d2d] dark:bg-[#1a1a1a] dark:text-white ${
-        size === 'sm' ? 'px-2 py-1 text-[11px]' : 'px-3 py-2 text-sm'
-      } ${className}`}
-    >
-      <option value="">{isLoading ? 'Loading projects…' : unfiledLabel}</option>
-      {groups.map(([workspaceName, projects]) => (
-        <optgroup key={workspaceName} label={workspaceName}>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </optgroup>
-      ))}
-    </select>
+      onChange={onChange}
+      emptyLabel={unfiledLabel}
+      placeholder="Search projects or workspaces…"
+      ariaLabel="Project"
+      disabled={disabled}
+      loading={isLoading}
+      size={size}
+      className={className}
+    />
   );
 }

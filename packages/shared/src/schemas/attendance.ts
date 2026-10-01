@@ -112,6 +112,8 @@ export const organisationPolicySchema = z.object({
   lateGraceMinutes: z.number().int().min(0).max(240).default(15),
   maxConcurrentLeavePercent: z.number().int().min(1).max(100).default(100),
   unresolvedCorrectionTreatment: z.literal('EXCLUDE').default('EXCLUDE'),
+  noReviewerDonePolicy: z.enum(['ALLOW', 'SMALL_ONLY', 'REQUIRE_REVIEWER']).default('ALLOW'),
+  simplifiedReviewMaxMinutes: z.number().int().min(1).max(1440).default(120),
   effectiveFrom: z.string().date(),
 });
 export type OrganisationPolicyInput = z.infer<typeof organisationPolicySchema>;

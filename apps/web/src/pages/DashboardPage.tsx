@@ -15,7 +15,7 @@ import { useWorkspaces } from '../hooks/useWorkspaces';
 import { useAuth } from '../stores/auth';
 import { apiBlob, ApiRequestError } from '../lib/api';
 import { Avatar } from '../components/Avatar';
-import { MetricsPanel } from '../components/MetricsPanel';
+import { MetricFilterBar, MetricsPanel, type MetricFilters } from '../components/MetricsPanel';
 import { HBarList, LineChart } from '../components/charts';
 import { Badge, Button, Card, ErrorState, Spinner } from '../components/ui';
 import { describeAudit, formatDate, formatDateTime, formatWorkingDuration, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
@@ -35,14 +35,23 @@ export function DashboardPage() {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: number | string; tone?: 'danger' }) {
-  return (
-    <Card className="p-6 hover:shadow-lg hover:shadow-indigo-500/[0.02] hover:-translate-y-0.5 transition-all duration-150 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
+function Stat({ label, value, tone, to, scope }: { label: string; value: number | string; tone?: 'danger'; to?: string; scope?: string }) {
+  const body = (
+    <Card className="h-full p-6 hover:shadow-lg hover:shadow-indigo-500/[0.02] hover:-translate-y-0.5 transition-all duration-150 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
       <div className="text-xs font-semibold uppercase tracking-wider text-slate-450 dark:text-slate-500">{label}</div>
       <div className={`mt-2.5 text-3xl font-extrabold tracking-tight ${tone === 'danger' ? 'text-red-500 dark:text-red-400' : 'text-slate-800 dark:text-slate-100'}`}>
         {value}
       </div>
+      {scope ? <div className="mt-1 text-[11px] font-medium text-slate-400 dark:text-slate-500">{scope}</div> : null}
     </Card>
+  );
+  if (!to) return body;
+  const cls = 'block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500';
+  const aria = `${label}: ${value}. Show the records`;
+  return to.startsWith('#') ? (
+    <a href={to} className={cls} aria-label={aria}>{body}</a>
+  ) : (
+    <Link to={to} className={cls} aria-label={aria}>{body}</Link>
   );
 }
 
@@ -130,10 +139,24 @@ function TeamWorkloadCard({ entries }: { entries: WorkloadEntry[] }) {
   );
 }
 
+const WORK_STATE: Record<WorkspacePerformance['state'], { label: string; tone: 'green' | 'amber' | 'slate' }> = {
+  ACTIVE: { label: 'Active', tone: 'green' },
+  AWAITING_REVIEW: { label: 'Awaiting review', tone: 'amber' },
+  BLOCKED: { label: 'Blocked', tone: 'amber' },
+  UPDATE_OVERDUE: { label: 'Update overdue', tone: 'amber' },
+  NO_ACTIVE_WORK: { label: 'No active work', tone: 'slate' },
+  WEEKLY_OFF: { label: 'Weekly off', tone: 'slate' },
+};
+
 function OfficePerformanceCard({ rows }: { rows: WorkspacePerformance[] }) {
   return (
     <Card className="overflow-hidden bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
-      <div className="px-6 pt-5 text-xs font-bold uppercase tracking-wider text-slate-455 dark:text-slate-400">Office-wise performance</div>
+      <div className="px-6 pt-5">
+        <div className="text-xs font-bold uppercase tracking-wider text-slate-455 dark:text-slate-400">Workspace delivery state</div>
+        <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+          Client and project workspaces, not physical offices. Accepted means reviewed and closed. State is calendar-aware: a weekend is Weekly off, not idle.
+        </p>
+      </div>
       {rows.length === 0 ? (
         <p className="px-6 pb-6 pt-3 text-sm text-slate-400 dark:text-slate-500">No active workspaces recorded.</p>
       ) : (
@@ -141,40 +164,45 @@ function OfficePerformanceCard({ rows }: { rows: WorkspacePerformance[] }) {
           <table className="w-full min-w-[640px] text-sm">
             <thead className="bg-slate-50/80 dark:bg-slate-900/30 text-left text-[11px] font-bold uppercase tracking-wider text-slate-450 dark:text-slate-500 border-b border-slate-100 dark:border-slate-800/50">
               <tr>
-                <th className="px-6 py-3 font-semibold">Office</th>
-                <th className="px-4 py-3 font-semibold">Total tasks</th>
-                <th className="px-4 py-3 font-semibold">Completed</th>
-                <th className="px-4 py-3 font-semibold">Completion</th>
-                <th className="px-6 py-3 font-semibold">Status</th>
+                <th scope="col" className="px-6 py-3 font-semibold">Workspace</th>
+                <th scope="col" className="px-4 py-3 font-semibold">Open</th>
+                <th scope="col" className="px-4 py-3 font-semibold">Accepted</th>
+                <th scope="col" className="px-4 py-3 font-semibold">Progress</th>
+                <th scope="col" className="px-6 py-3 font-semibold">State</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100/60 dark:divide-slate-800/40">
-              {rows.map((w) => (
-                <tr key={w.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/20 transition-colors">
-                  <td className="px-6 py-3.5">
-                    <Link to={`/workspaces/${w.id}`} className="flex items-center gap-2.5 font-semibold text-slate-700 dark:text-slate-200 hover:text-indigo-650 dark:hover:text-indigo-400 transition-colors">
-                      <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: w.color ?? '#6366f1' }}
-                      />
-                      {w.name}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3.5 text-slate-500 dark:text-slate-400 font-medium">{w.totalTasks}</td>
-                  <td className="px-4 py-3.5 text-slate-500 dark:text-slate-400 font-medium">{w.completedTasks}</td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center gap-3">
-                      <span className="w-9 text-right font-bold text-slate-700 dark:text-slate-350">{w.completionPct}%</span>
-                      <div className="h-1.5 min-w-[6rem] flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800/80">
-                        <div className="h-full rounded-full bg-indigo-500 dark:bg-indigo-600 transition-all" style={{ width: `${w.completionPct}%` }} />
+              {rows.map((w) => {
+                const st = WORK_STATE[w.state];
+                return (
+                  <tr key={w.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/20 transition-colors">
+                    <td className="px-6 py-3.5">
+                      <Link to={`/workspaces/${w.id}`} className="flex items-center gap-2.5 font-semibold text-slate-700 dark:text-slate-200 hover:text-indigo-650 dark:hover:text-indigo-400 transition-colors">
+                        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: w.color ?? '#6366f1' }} />
+                        {w.name}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3.5 text-slate-500 dark:text-slate-400 font-medium">{w.openTasks}</td>
+                    <td className="px-4 py-3.5 text-slate-500 dark:text-slate-400 font-medium">{w.completedTasks} of {w.totalTasks}</td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <span className="w-9 text-right font-bold text-slate-700 dark:text-slate-350">{w.totalTasks ? `${w.completionPct}%` : 'n/a'}</span>
+                        <div className="h-1.5 min-w-[6rem] flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800/80">
+                          <div className="h-full rounded-full bg-indigo-500 dark:bg-indigo-600 transition-all" style={{ width: `${w.completionPct}%` }} />
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-3.5">
-                    {w.isActive ? <Badge tone="green">Active operations</Badge> : <Badge>Idle</Badge>}
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-6 py-3.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge tone={st.tone}>{st.label}</Badge>
+                        {w.state !== 'BLOCKED' && w.blockedTasks > 0 ? <Badge tone="amber">{w.blockedTasks} blocked</Badge> : null}
+                        {w.state !== 'AWAITING_REVIEW' && w.awaitingReviewTasks > 0 ? <Badge tone="amber">{w.awaitingReviewTasks} in review</Badge> : null}
+                        {w.state !== 'UPDATE_OVERDUE' && w.updateOverdueTasks > 0 ? <Badge tone="amber">{w.updateOverdueTasks} need an update</Badge> : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -374,36 +402,49 @@ type AdminData = NonNullable<ReturnType<typeof useAdminDashboard>['data']>;
 
 function AdminView() {
   const { data, isLoading, error } = useAdminDashboard(true);
+  const { data: workspaces } = useWorkspaces();
+  const [filters, setFilters] = useState<MetricFilters>({ workspaceId: '', period: '30d', basis: 'ORIGINAL' });
+  const firstWorkspace = (workspaces ?? []).find((w) => !w.isArchived)?.id ?? '';
+  const metricFilters: MetricFilters = { ...filters, workspaceId: filters.workspaceId || firstWorkspace };
   if (isLoading) return <Spinner />;
   if (error) return <div className="mt-6"><ErrorState message={error instanceof ApiRequestError ? error.message : 'Failed to load'} /></div>;
   if (!data) return null;
 
   return (
     <div className="mt-6 space-y-6 animate-fade-in">
-      <MetricsPanel />
+      <MetricFilterBar value={metricFilters} onChange={setFilters} />
+
+      {/* Exceptions first: what needs a decision today. */}
+      <section aria-label="Needs attention" className="space-y-6">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <Stat label="Overdue commitments" value={data.overdueTasks} tone={data.overdueTasks > 0 ? 'danger' : undefined} to="#overdue-list" scope="All workspaces, open tasks, live" />
+          <Stat label="Workspaces" value={data.totalWorkspaces} to="/workspaces" scope="Active, not archived" />
+          <Stat label="Active users" value={data.totalUsers} to="/users" scope="Organisation-wide" />
+          <Stat label="Most active workspace" value={data.mostActiveWorkspace?.name ?? '-'} scope="By activity, last 7 days" />
+        </div>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <AtRiskCard overdueCount={data.overdueTasks} upcoming={data.upcomingDeadlines} />
+          <UpcomingDeadlinesCard items={data.upcomingDeadlines} />
+        </div>
+        <div id="overdue-list" className="scroll-mt-20">
+          <OverdueTaskListCard items={data.overdueTaskList} total={data.overdueTasks} />
+        </div>
+      </section>
+
+      <MetricsPanel filters={metricFilters} />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <TeamWorkloadCard entries={data.teamWorkload} />
+        <WeeklyCompletionCard points={data.weeklyCompletion} />
+      </div>
+      <OfficePerformanceCard rows={data.workspacePerformance} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <MonthlyReportDownloads />
         <OperationalDraftReportsCard />
       </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Workspaces" value={data.totalWorkspaces} />
-        <Stat label="Users" value={data.totalUsers} />
-        <Stat label="Overdue tasks" value={data.overdueTasks} tone={data.overdueTasks > 0 ? 'danger' : undefined} />
-        <Stat label="Most active" value={data.mostActiveWorkspace?.name ?? '—'} />
-      </div>
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <WeeklyCompletionCard points={data.weeklyCompletion} />
-        <TeamWorkloadCard entries={data.teamWorkload} />
-      </div>
-      <OfficePerformanceCard rows={data.workspacePerformance} />
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <UpcomingDeadlinesCard items={data.upcomingDeadlines} />
-        <ActivityFeed items={data.recentActivity} />
-      </div>
-      {/* G — At-Risk widget */}
-      <AtRiskCard overdueCount={data.overdueTasks} upcoming={data.upcomingDeadlines} />
-      <OverdueTaskListCard items={data.overdueTaskList} total={data.overdueTasks} />
       <StatusBreakdown counts={data.tasksByStatus} />
+      {/* Supporting context, deliberately last. */}
+      <ActivityFeed items={data.recentActivity} />
     </div>
   );
 }
@@ -606,16 +647,26 @@ function MemberView() {
   if (error) return <div className="mt-6"><ErrorState message={error instanceof ApiRequestError ? error.message : 'Failed to load'} /></div>;
   if (!data) return null;
 
+  const overdue = data.myTasks.filter((t) => t.dueDate && isOverdue(t.dueDate)).length;
+  const staleIds = new Set(data.updateOverdueTaskIds);
+
   return (
     <div className="mt-6 space-y-6 animate-fade-in">
+      {/* Exceptions first: what needs me today. Every card says its scope and opens its records. */}
+      <section aria-label="Needs my attention" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Stat label="Overdue" value={overdue} tone={overdue > 0 ? 'danger' : undefined} to="#my-tasks" scope="My open tasks past their deadline" />
+        <Stat label="Updates due" value={data.updateOverdueTaskIds.length} tone={data.updateOverdueTaskIds.length > 0 ? 'danger' : undefined} to="#my-tasks" scope="In progress, no update in working time" />
+        <Stat label="Reviews waiting on me" value={data.reviewsWaiting} to="/reviews" scope="Submissions I review" />
+        <Stat label="Blocked on me" value={data.blockedOnMe} scope="Blockers I am named to clear" />
+      </section>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Stat label="Assigned to me" value={data.myTasks.length} />
-        <Stat label="My workspaces" value={data.myWorkspaceCount} />
-        <Stat label="Workspace tasks" value={data.myWorkspaceTaskCount} />
+        <Stat label="Assigned to me" value={data.myTasks.length} scope="Open, not archived" />
+        <Stat label="My workspaces" value={data.myWorkspaceCount} to="/workspaces" />
+        <Stat label="Workspace tasks" value={data.myWorkspaceTaskCount} scope="Active tasks in my workspaces" />
       </div>
 
-      <Card className="p-6 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
-        <div className="mb-4 text-xs font-bold uppercase tracking-wider text-slate-455 dark:text-slate-400">My tasks</div>
+      <Card className="scroll-mt-20 p-6 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
+        <div id="my-tasks" className="mb-4 text-xs font-bold uppercase tracking-wider text-slate-455 dark:text-slate-400">My tasks</div>
         {data.myTasks.length === 0 ? (
           <p className="text-sm text-slate-400 dark:text-slate-500 py-2">No tasks assigned to you currently.</p>
         ) : (
@@ -623,7 +674,7 @@ function MemberView() {
             {data.myTasks.map((t) => (
               <Link
                 key={t.id}
-                to={`/workspaces/${t.workspaceId}`}
+                to={`/workspaces/${t.workspaceId}?task=${t.id}`}
                 className="block rounded-xl border border-slate-100 bg-white/50 dark:border-slate-800/40 dark:bg-slate-900/30 p-3.5 hover:border-indigo-500 dark:hover:border-indigo-500/50 hover:shadow-md hover:shadow-indigo-500/[0.02] hover:-translate-y-0.5 transition-all duration-150 sm:flex sm:items-center sm:gap-4 sm:px-5"
               >
                 <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-4 sm:flex-1 min-w-0">
@@ -639,6 +690,7 @@ function MemberView() {
                   {/* Metadata Row */}
                   <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:shrink-0 sm:gap-4">
                     <span className="text-xs text-slate-450 dark:text-slate-500 font-semibold">{t.workspaceName}</span>
+                    {staleIds.has(t.id) ? <Badge tone="amber">Update overdue</Badge> : null}
                     {t.dueDate ? (
                       <span className={`text-xs font-semibold ${isOverdue(t.dueDate) ? 'text-red-500 dark:text-red-400' : 'text-slate-450 dark:text-slate-500'}`}>
                         {formatDate(t.dueDate)}

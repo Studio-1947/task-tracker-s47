@@ -1,3 +1,4 @@
+import { RemindersModule } from '../reminders/reminders.module';
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
 import { CalendarModule } from '../calendar/calendar.module';
@@ -10,7 +11,7 @@ import { TasksModule } from '../tasks/tasks.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [WorkspacesModule, AuditModule, CalendarModule, TasksModule, NotificationsModule],
+  imports: [RemindersModule, WorkspacesModule, AuditModule, CalendarModule, TasksModule, NotificationsModule],
   controllers: [DashboardController],
   providers: [DashboardService, MonthlyReportService, MetricsService],
 })

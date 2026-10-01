@@ -48,6 +48,8 @@ export const updateTaskSchema = z
     status: statusEnum.optional(),
     priority: priorityEnum.optional(),
     dueDate: z.string().datetime().nullable().optional(),
+    /** Required when an existing commitment date is moved or cleared (PRD §2); stored in the audit trail. */
+    dueDateReason: z.string().trim().min(1).max(2000).optional(),
     assigneeIds: z.array(z.string().uuid()).optional(),
     ownerId: z.string().uuid().nullable().optional(),
     reviewerId: z.string().uuid().nullable().optional(),
@@ -111,6 +113,8 @@ export const taskQuerySchema = z.object({
   dueBefore: z.string().datetime().optional(),
   dueAfter: z.string().datetime().optional(),
   search: z.string().max(200).optional(),
+  /** Planning-hygiene filters (spec section 11): the exceptions a manager should chase. */
+  attention: z.enum(['NO_OWNER', 'NO_DEADLINE', 'BLOCKED', 'REVIEW_OVERDUE', 'MISSING_ESTIMATE', 'OVERDUE']).optional(),
   includeArchived: z
     .union([z.boolean(), z.enum(['true', 'false'])])
     .transform((v) => v === true || v === 'true')
@@ -182,3 +186,22 @@ export const delegateReviewSchema = z.object({
 }).refine((v) => v.effectiveTo > v.effectiveFrom, { message: 'Effective end must be after the start', path: ['effectiveTo'] });
 export type DelegateReviewInput = z.infer<typeof delegateReviewSchema>;
 
+
+export type TaskSizeLabel = 'SMALL' | 'SHORT' | 'BIG' | 'HUGE' | 'LARGER';
+export const TASK_SIZE_LABELS: Record<TaskSizeLabel, string> = {
+  SMALL: 'Small action',
+  SHORT: 'Short',
+  BIG: 'Big',
+  HUGE: 'Huge',
+  LARGER: 'Larger work',
+};
+
+/** PRD §4: size is derived from estimated minutes, never stored; priority is independent. */
+export function taskSizeLabel(minutes: number | null | undefined): TaskSizeLabel | null {
+  if (minutes === null || minutes === undefined) return null;
+  if (minutes < 10) return 'SMALL';
+  if (minutes <= 30) return 'SHORT';
+  if (minutes <= 60) return 'BIG';
+  if (minutes <= 120) return 'HUGE';
+  return 'LARGER';
+}

@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Logger } from '@nestjs/common';
-import { and, asc, count, desc, eq, gt, gte, ilike, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, gte, ilike, inArray, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 import type {
   AuditEntry,
   CreateLinkAttachmentInput,
@@ -46,6 +46,7 @@ import {
   capacityAllocations,
   reservedTimeBlocks,
   leaveRequests,
+  organisationPolicies,
   tasks,
   users,
   workspaceMembers,
@@ -572,6 +573,45 @@ export class TasksService {
         .where(eq(taskLabels.labelId, query.labelId));
       conds.push(inArray(tasks.id, labelled));
     }
+    if (query.attention) {
+      const open = ne(tasks.status, 'DONE');
+      switch (query.attention) {
+        case 'NO_OWNER':
+          conds.push(isNull(tasks.ownerId), open);
+          break;
+        case 'NO_DEADLINE':
+          conds.push(isNull(tasks.dueDate), open);
+          break;
+        case 'MISSING_ESTIMATE':
+          conds.push(isNull(tasks.baselineEstimateMinutes), open);
+          break;
+        case 'OVERDUE':
+          conds.push(sql`${tasks.dueDate} < now()`, open);
+          break;
+        case 'BLOCKED': {
+          const blocked = this.db.select({ id: taskBlockers.taskId }).from(taskBlockers).where(isNull(taskBlockers.unblockedAt));
+          conds.push(inArray(tasks.id, blocked), open);
+          break;
+        }
+        case 'REVIEW_OVERDUE': {
+          // Waiting time is measured in scheduled working minutes, not wall-clock hours.
+          const [policy] = await this.db.select().from(organisationPolicies).where(eq(organisationPolicies.id, 1));
+          const cal = await this.calendar.get();
+          const pending = await this.db
+            .select({ taskId: taskSubmissions.taskId, submittedAt: taskSubmissions.submittedAt })
+            .from(taskSubmissions)
+            .innerJoin(tasks, eq(tasks.id, taskSubmissions.taskId))
+            .where(and(eq(taskSubmissions.status, 'PENDING'), eq(tasks.workspaceId, workspaceId)));
+          const nowIso = new Date().toISOString();
+          const target = policy?.reviewTargetMinutes ?? 480;
+          const late = cal.settings
+            ? pending.filter((r) => workingMinutesElapsed(r.submittedAt.toISOString(), nowIso, cal.settings!, cal.exceptions) >= target).map((r) => r.taskId)
+            : [];
+          conds.push(late.length ? inArray(tasks.id, late) : sql`false`);
+          break;
+        }
+      }
+    }
     const where = and(...conds);
 
     const sortCol = {
@@ -697,7 +737,7 @@ export class TasksService {
 
     await this.db.transaction(async (tx) => {
       const patch: Partial<TaskRow> = {};
-      const audits: { action: AuditAction; before: unknown; after: unknown }[] = [];
+      const audits: { action: AuditAction; before: unknown; after: unknown; reason?: string }[] = [];
 
       if (input.title !== undefined && input.title !== current.title) {
         patch.title = input.title;
@@ -723,6 +763,9 @@ export class TasksService {
         if (current.reviewerId && (input.status === 'IN_REVIEW' || input.status === 'DONE')) {
           throw new BadRequestException('Use the evidence submission and review workflow for this status');
         }
+        if (!current.reviewerId && !current.parentTaskId && input.status === 'DONE') {
+          await this.assertSimplifiedDoneAllowed(current.currentEstimateMinutes ?? current.baselineEstimateMinutes);
+        }
         patch.status = input.status;
         // Track completion time for analytics; a re-opened task no longer counts as completed.
         patch.completedAt = input.status === 'DONE' ? new Date() : null;
@@ -737,11 +780,15 @@ export class TasksService {
         const currentIso = current.dueDate ? current.dueDate.toISOString() : null;
         const nextIso = nextDue ? nextDue.toISOString() : null;
         if (currentIso !== nextIso) {
+          // Moving or clearing an existing commitment needs a reason (PRD §2); setting the first date does not.
+          if (current.dueDate && !input.dueDateReason) {
+            throw new BadRequestException('A reason is required when changing an existing due date');
+          }
           patch.dueDate = nextDue;
           // The first non-null commitment becomes the immutable baseline for
           // deadline-revision reporting, including legacy undated tasks.
           if (!current.originalDueDate && nextDue) patch.originalDueDate = nextDue;
-          audits.push({ action: AuditAction.DUE_DATE_CHANGED, before: currentIso, after: nextIso });
+          audits.push({ action: AuditAction.DUE_DATE_CHANGED, before: currentIso, after: nextIso, reason: input.dueDateReason });
         }
       }
       if (input.ownerId !== undefined && input.ownerId !== current.ownerId) {
@@ -806,7 +853,7 @@ export class TasksService {
             userId: actor.id,
             action: a.action,
             beforeValue: a.before,
-            afterValue: a.after,
+            afterValue: a.reason ? { value: a.after, reason: a.reason } : a.after,
           },
           tx,
         );
@@ -1001,7 +1048,7 @@ export class TasksService {
   async reviewQueue(actor: Actor): Promise<ReviewQueueItem[]> {
     const now = new Date();
     const rows = await this.db
-      .select({ sub: taskSubmissions, task: tasks, workspaceName: workspaces.name, prefix: projects.taskPrefix })
+      .select({ sub: taskSubmissions, task: tasks, workspaceName: workspaces.name, prefix: projects.taskPrefix, projectName: projects.name })
       .from(taskSubmissions)
       .innerJoin(tasks, eq(tasks.id, taskSubmissions.taskId))
       .innerJoin(workspaces, eq(workspaces.id, tasks.workspaceId))
@@ -1025,10 +1072,25 @@ export class TasksService {
       }
       if (ok) visible.push(r);
     }
-    const [people, cal] = await Promise.all([
+    const visibleTaskIds = visible.map((r) => r.task.id);
+    const evidenceIds = visible.map((r) => r.sub.evidenceAttachmentId);
+    const [people, cal, evidenceRows, returnedRows] = await Promise.all([
       this.userRefs(visible.flatMap((r) => [r.sub.submitterId, r.task.reviewerId, activeDelegation.get(r.task.id)?.delegatorId ?? null])),
       this.calendar.get(),
+      evidenceIds.length ? this.db.select({ id: taskAttachments.id, fileName: taskAttachments.fileName }).from(taskAttachments).where(inArray(taskAttachments.id, evidenceIds)) : Promise.resolve([]),
+      visibleTaskIds.length
+        ? this.db.select({ taskId: taskSubmissions.taskId, reason: taskSubmissions.reviewNote, decidedAt: taskSubmissions.decidedAt }).from(taskSubmissions)
+            .where(and(inArray(taskSubmissions.taskId, visibleTaskIds), eq(taskSubmissions.status, 'RETURNED'))).orderBy(desc(taskSubmissions.decidedAt))
+        : Promise.resolve([]),
     ]);
+    const evidenceById = new Map(evidenceRows.map((e) => [e.id, e]));
+    const returnsByTask = new Map<string, Array<{ reason: string; decidedAt: string }>>();
+    for (const rr of returnedRows) {
+      if (!rr.decidedAt) continue;
+      const list = returnsByTask.get(rr.taskId) ?? [];
+      list.push({ reason: rr.reason ?? '', decidedAt: rr.decidedAt.toISOString() });
+      returnsByTask.set(rr.taskId, list);
+    }
     return visible.map((r) => {
       const d = activeDelegation.get(r.task.id);
       return {
@@ -1044,6 +1106,11 @@ export class TasksService {
         submittedAt: r.sub.submittedAt.toISOString(),
         waitingWorkingMinutes: cal.settings ? workingMinutesElapsed(r.sub.submittedAt.toISOString(), now.toISOString(), cal.settings, cal.exceptions) : null,
         waitingWallMinutes: Math.max(0, Math.round((now.getTime() - r.sub.submittedAt.getTime()) / 60000)),
+        projectName: r.projectName,
+        dueDate: r.task.dueDate ? r.task.dueDate.toISOString() : null,
+        deliveryNote: r.sub.note,
+        evidence: evidenceById.get(r.sub.evidenceAttachmentId) ?? null,
+        priorReturns: returnsByTask.get(r.task.id) ?? [],
       };
     });
   }
@@ -1839,6 +1906,41 @@ export class TasksService {
     });
   }
 
+  /** Every blocker interval for a task, open ones first, with the responsible unblocker resolved to a person. */
+  /**
+   * Marking a reviewer-less top-level task Done skips evidence and acceptance, so the
+   * organisation policy decides whether that is allowed (spec section 5 "documented simplified review policy").
+   */
+  private async assertSimplifiedDoneAllowed(estimateMinutes: number | null): Promise<void> {
+    const [policy] = await this.db.select().from(organisationPolicies).where(eq(organisationPolicies.id, 1));
+    const mode = policy?.noReviewerDonePolicy ?? 'ALLOW';
+    if (mode === 'ALLOW') return;
+    if (mode === 'REQUIRE_REVIEWER') {
+      throw new BadRequestException('Assign a reviewer and submit evidence for review; tasks cannot be marked Done without one');
+    }
+    const max = policy?.simplifiedReviewMaxMinutes ?? 120;
+    if (estimateMinutes === null || estimateMinutes > max) {
+      throw new BadRequestException(`Only tasks estimated at ${max} minutes or less can be marked Done without a reviewer; assign a reviewer and submit evidence`);
+    }
+  }
+
+  async listBlockers(taskId: string, actor: Actor) {
+    const task = await this.loadTaskOrThrow(taskId);
+    await this.workspaces.assertCanAccess(task.workspaceId, actor);
+    const rows = await this.db.select().from(taskBlockers).where(eq(taskBlockers.taskId, taskId)).orderBy(desc(taskBlockers.blockedAt));
+    const people = await this.userRefs(rows.map((r) => r.unblockerUserId));
+    const open = rows.filter((r) => !r.unblockedAt);
+    const closed = rows.filter((r) => r.unblockedAt);
+    return [...open, ...closed].map((r) => ({
+      id: r.id,
+      reason: r.reason,
+      unblocker: people.get(r.unblockerUserId) ?? null,
+      blockedAt: r.blockedAt.toISOString(),
+      unblockedAt: r.unblockedAt ? r.unblockedAt.toISOString() : null,
+      nextFollowUpAt: r.nextFollowUpAt ? r.nextFollowUpAt.toISOString() : null,
+    }));
+  }
+
   async unblock(blockerId: string, actor: Actor) {
     const [blocker] = await this.db.select().from(taskBlockers).where(eq(taskBlockers.id, blockerId)).limit(1);
     if (!blocker) throw new NotFoundException('Blocker record not found');
@@ -1889,6 +1991,31 @@ export class TasksService {
     });
 
     return dep;
+  }
+
+  /** Predecessors this task waits on, and successors that wait on it — with enough task context to render and link them. */
+  async listDependencies(taskId: string, actor: Actor) {
+    const task = await this.loadTaskOrThrow(taskId);
+    await this.workspaces.assertCanAccess(task.workspaceId, actor);
+    const rows = await this.db
+      .select()
+      .from(taskDependencies)
+      .where(or(eq(taskDependencies.predecessorTaskId, taskId), eq(taskDependencies.successorTaskId, taskId)));
+    const otherIds = rows.map((r) => (r.predecessorTaskId === taskId ? r.successorTaskId : r.predecessorTaskId));
+    const others = otherIds.length
+      ? await this.db
+          .select({ id: tasks.id, number: tasks.number, title: tasks.title, status: tasks.status, prefix: projects.taskPrefix })
+          .from(tasks)
+          .innerJoin(projects, eq(projects.id, tasks.projectId))
+          .where(inArray(tasks.id, otherIds))
+      : [];
+    const byId = new Map(others.map((o) => [o.id, o]));
+    return rows.flatMap((r) => {
+      const waitsOn = r.successorTaskId === taskId;
+      const other = byId.get(waitsOn ? r.predecessorTaskId : r.successorTaskId);
+      if (!other) return [];
+      return [{ id: r.id, direction: waitsOn ? ('WAITS_ON' as const) : ('BLOCKS' as const), isBlocking: r.isBlocking, task: { id: other.id, ref: this.ref(other.prefix, other.number), title: other.title, status: other.status } }];
+    });
   }
 
   async removeDependency(dependencyId: string, actor: Actor) {

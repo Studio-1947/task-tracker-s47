@@ -75,8 +75,12 @@ export function describeAudit(e: AuditEntry): string {
       return `${who} changed status ${val(e.beforeValue)} → ${val(e.afterValue)}`;
     case AuditAction.PRIORITY_CHANGED:
       return `${who} changed priority ${val(e.beforeValue)} → ${val(e.afterValue)}`;
-    case AuditAction.DUE_DATE_CHANGED:
-      return `${who} changed due date ${val(e.beforeValue)} → ${val(e.afterValue)}`;
+    case AuditAction.DUE_DATE_CHANGED: {
+      const after = e.afterValue as { value?: unknown; reason?: string } | null;
+      const hasReason = !!after && typeof after === 'object' && 'reason' in after;
+      const fmt = (v: unknown) => (typeof v === 'string' && v ? formatDate(v) : '∅');
+      return `${who} changed due date ${fmt(e.beforeValue)} → ${fmt(hasReason ? after!.value : e.afterValue)}${hasReason ? ` (reason: ${after!.reason})` : ''}`;
+    }
     case AuditAction.TITLE_CHANGED:
       return `${who} renamed the task`;
     case AuditAction.DESCRIPTION_CHANGED:

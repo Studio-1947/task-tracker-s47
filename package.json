@@ -35,6 +35,7 @@
     "test:final": "node scripts/final-improvements-smoke.mjs",
     "test:stress": "node scripts/stress-test.mjs",
     "test:permissions": "node scripts/permissions-matrix-smoke.mjs",
+    "test:specui": "node scripts/spec-ui-support-smoke.mjs",
     "verify:improvements": "pnpm typecheck && pnpm test && pnpm build",
     "typecheck": "turbo run typecheck",
     "db:up": "docker compose up -d postgres",

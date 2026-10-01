@@ -101,9 +101,20 @@ export class AttendanceController {
     return this.attendance.myMonth(userId, month ?? new Date().toISOString().slice(0, 7));
   }
 
+  @Get('attendance/day-states')
+  dayStates(@CurrentUser('id') userId: string, @Query('month') month?: string) {
+    return this.attendance.monthDayStates(userId, month ?? new Date().toISOString().slice(0, 7));
+  }
+
   @Get('attendance/state')
   dailyState(@CurrentUser('id') userId: string, @Query('date') date?: string) {
     return this.attendance.getDailyAttendanceState(userId, date ?? new Date().toISOString().slice(0, 10));
+  }
+
+  @Get('attendance/team-availability')
+  @Roles(Role.ADMIN)
+  teamAvailability(@Query('from') from: string, @Query('to') to: string) {
+    return this.attendance.teamAvailability(from, to);
   }
 
   @Get('attendance/team')
