@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { MeetingSlot } from '@task-tracker/shared';
+import type { BoardItem, MeetingSlot } from '@task-tracker/shared';
 import { useCreateBoardItem } from '../hooks/useMeetings';
 import { ApiRequestError } from '../lib/api';
 import { BoardProjectSelect } from './BoardProjectSelect';
@@ -23,6 +23,7 @@ export function BoardCardComposer({
   placeholder = 'What are you working on?',
   size = 'md',
   onError,
+  onCreated,
 }: {
   boardId: string;
   dayDate: string;
@@ -33,6 +34,8 @@ export function BoardCardComposer({
   placeholder?: string;
   size?: 'sm' | 'md';
   onError: (m: string | null) => void;
+  /** A filed card has a real task behind it; callers can open its full detail straight away. */
+  onCreated?: (item: BoardItem) => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState('');
@@ -51,7 +54,7 @@ export function BoardCardComposer({
     onError(null);
     // Cleared up front so a blur landing before the POST resolves can't double-submit.
     setDraft('');
-    createItem
+    void createItem
       .mutateAsync({
         boardId,
         input: {
@@ -62,6 +65,7 @@ export function BoardCardComposer({
           ...(projectId ? { projectId } : {}),
         },
       })
+      .then((item) => onCreated?.(item))
       .catch((e: unknown) =>
         onError(e instanceof ApiRequestError ? e.message : 'Could not add the card'),
       );

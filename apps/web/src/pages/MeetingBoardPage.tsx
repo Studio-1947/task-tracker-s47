@@ -35,6 +35,7 @@ import { BoardCardComposer } from '../components/BoardCardComposer';
 import { BoardItemCard } from '../components/BoardItemCard';
 import { BoardProjectChip } from '../components/BoardProjectChip';
 import { MeetingItemDrawer } from '../components/MeetingItemDrawer';
+import { MeetingTaskDrawer } from '../components/MeetingTaskDrawer';
 import { MemberSwimlanes } from '../components/MemberSwimlanes';
 import { ProgressBar } from '../components/ProgressBar';
 import { ProjectLanes } from '../components/ProjectLanes';
@@ -92,6 +93,7 @@ export function MeetingBoardPage() {
   const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
   const [tab, setTab] = useState<Tab>('board');
   const [openItemId, setOpenItemId] = useState<string | null>(null);
+  const [openTask, setOpenTask] = useState<{ taskId: string; workspaceId: string } | null>(null);
   const [ownerFilter, setOwnerFilter] = useState<'all' | 'mine' | 'selected'>('all');
   const [watchedMemberIds, setWatchedMemberIds] = useState<string[]>([]);
   const [projectFilter, setProjectFilter] = useState<ProjectFilter>('all');
@@ -219,6 +221,15 @@ export function MeetingBoardPage() {
   }, [board, allUsers, isAdmin, ownerFilter, user?.id, watchedMemberIds]);
 
   const openItem = board?.items.find((i) => i.id === openItemId) ?? null;
+  /** Linked cards are real tasks: open their complete workspace detail directly. */
+  const openCardDetails = (itemId: string) => {
+    const item = board?.items.find((candidate) => candidate.id === itemId);
+    if (item?.taskId && item.project) {
+      setOpenTask({ taskId: item.taskId, workspaceId: item.project.workspaceId });
+      return;
+    }
+    setOpenItemId(itemId);
+  };
   const myMood = board?.members.find((m) => m.user.id === user?.id)?.mood ?? null;
   const canWrite = Boolean(board && (isAdmin || !board.isLocked));
 
@@ -462,8 +473,11 @@ export function MeetingBoardPage() {
                       isAdmin={isAdmin}
                       draggable={false}
                       defaultProjectId={composerProjectId}
-                      onOpen={setOpenItemId}
+                      onOpen={openCardDetails}
                       onError={setError}
+                      onCreated={(item) => {
+                        if (item.taskId && item.project) setOpenTask({ taskId: item.taskId, workspaceId: item.project.workspaceId });
+                      }}
                       onDragStart={setDragId}
                       onDrop={onDropInCell}
                     />
@@ -511,8 +525,11 @@ export function MeetingBoardPage() {
                         isAdmin={isAdmin}
                         draggable
                         defaultProjectId={composerProjectId}
-                        onOpen={setOpenItemId}
+                        onOpen={openCardDetails}
                         onError={setError}
+                        onCreated={(item) => {
+                          if (item.taskId && item.project) setOpenTask({ taskId: item.taskId, workspaceId: item.project.workspaceId });
+                        }}
                         onDragStart={setDragId}
                         onDrop={onDropInCell}
                       />
@@ -532,7 +549,7 @@ export function MeetingBoardPage() {
               currentUserId={user?.id}
               canWrite={canWrite}
               defaultProjectId={composerProjectId}
-              onOpen={setOpenItemId}
+              onOpen={openCardDetails}
               onError={setError}
               onDragStart={setDragId}
               onDropOnMember={onDropOnMember}
@@ -545,7 +562,7 @@ export function MeetingBoardPage() {
               isAdmin={isAdmin}
               currentUserId={user?.id}
               canWrite={canWrite}
-              onOpen={setOpenItemId}
+              onOpen={openCardDetails}
               onError={setError}
               onDragStart={setDragId}
               onDropOnProject={onDropOnProject}
@@ -564,6 +581,15 @@ export function MeetingBoardPage() {
           board={board}
           members={allUsers ?? []}
           onClose={() => setOpenItemId(null)}
+          onOpenTaskDetail={(taskId, workspaceId) => setOpenTask({ taskId, workspaceId })}
+        />
+      ) : null}
+      {openTask ? (
+        <MeetingTaskDrawer
+          workspaceId={openTask.workspaceId}
+          taskId={openTask.taskId}
+          onClose={() => setOpenTask(null)}
+          onOpenTask={(taskId) => setOpenTask((current) => (current ? { ...current, taskId } : null))}
         />
       ) : null}
     </div>
@@ -813,6 +839,7 @@ function Cell({
   defaultProjectId,
   onOpen,
   onError,
+  onCreated,
   onDragStart,
   onDrop,
 }: {
@@ -827,6 +854,7 @@ function Cell({
   defaultProjectId: string;
   onOpen: (id: string) => void;
   onError: (m: string | null) => void;
+  onCreated: (item: BoardItem) => void;
   onDragStart: (id: string | null) => void;
   onDrop: (day: string, slot: MeetingSlot) => void;
 }) {
@@ -880,6 +908,7 @@ function Cell({
           slot={slot}
           defaultProjectId={defaultProjectId}
           onError={onError}
+          onCreated={onCreated}
         />
       ) : null}
     </div>

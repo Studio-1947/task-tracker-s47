@@ -474,12 +474,23 @@ async function body(state) {
     assert(pushed.body?.status === 'IN_PROGRESS', 'moving the card moves the task');
     assert(pushed.body?.title === 'Ship the pricing page v2', 'renaming the card renames the task');
 
-    // Task -> board, reconciled on the next board read.
-    await call(admin, 'PATCH', `/tasks/${filed.body.taskId}`, { status: 'DONE' });
+    // Task -> board, reconciled on the next board read. This is the path used
+    // when somebody opens the full task drawer from the Meetings tab.
+    await call(admin, 'PATCH', `/tasks/${filed.body.taskId}`, {
+      status: 'DONE',
+      title: 'Ship the pricing page — approved',
+      description: 'Final task detail written from the full task drawer',
+    });
     const synced = (await call(admin, 'GET', `/meeting-boards?date=${board.weekStart}`)).body;
     const back = synced.items.find((i) => i.id === filed.body.id);
     assert(back?.status === 'DONE', 'completing the task ticks the card off', String(back?.status));
     assert(Boolean(back?.completedAt), 'the reconciled card gets a completedAt stamp');
+    assert(back?.title === 'Ship the pricing page — approved', 'editing the full task title updates the meeting card');
+    assert(
+      back?.note === 'Final task detail written from the full task drawer',
+      'editing the full task description updates the meeting card',
+      String(back?.note),
+    );
 
     // IN_REVIEW has no board equivalent and must fold into IN_PROGRESS.
     await call(admin, 'PATCH', `/tasks/${filed.body.taskId}`, { status: 'IN_REVIEW' });

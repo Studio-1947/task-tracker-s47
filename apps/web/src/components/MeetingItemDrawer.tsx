@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   BOARD_ITEM_STATUSES,
   BOARD_ITEM_STATUS_LABELS,
@@ -46,11 +45,13 @@ export function MeetingItemDrawer({
   board,
   members,
   onClose,
+  onOpenTaskDetail,
 }: {
   item: BoardItem;
   board: MeetingBoardDetail;
   members: UserSummary[];
   onClose: () => void;
+  onOpenTaskDetail: (taskId: string, workspaceId: string) => void;
 }) {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
@@ -231,13 +232,14 @@ export function MeetingItemDrawer({
             {item.project && item.taskId ? (
               <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
                 Mirrored as{' '}
-                <Link
-                  to={`/workspaces/${item.project.workspaceId}?task=${item.taskId}`}
+                <button
+                  type="button"
+                  onClick={() => onOpenTaskDetail(item.taskId!, item.project!.workspaceId)}
                   className="font-semibold text-indigo-600 hover:underline dark:text-indigo-400"
                 >
                   {item.taskRef ?? 'this task'}
-                </Link>{' '}
-                in {item.project.workspaceName}. Title, note and status stay in step both ways.
+                </button>{' '}
+                in {item.project.workspaceName}. Open it here for the full task detail, history, attachments and planning controls.
               </p>
             ) : item.project ? (
               <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
