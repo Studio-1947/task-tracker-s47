@@ -11,6 +11,7 @@ import { MeetingBoardPage } from './pages/MeetingBoardPage';
 import { ReviewQueuePage } from './pages/ReviewQueuePage';
 import { LoginPage } from './pages/LoginPage';
 import { UsersPage } from './pages/UsersPage';
+import { OrganisationPage } from './pages/OrganisationPage';
 import { WorkspacesPage } from './pages/WorkspacesPage';
 import { WorkspaceTasksPage } from './pages/WorkspaceTasksPage';
 import { useAuth } from './stores/auth';
@@ -76,6 +77,7 @@ export default function App() {
           <Route path="settings" element={<SettingsPage />} />
           <Route element={<RequireAdmin />}>
             <Route path="users" element={<UsersPage />} />
+            <Route path="organisation" element={<OrganisationPage />} />
           </Route>
         </Route>
       </Route>
