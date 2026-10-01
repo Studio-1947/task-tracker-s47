@@ -234,3 +234,11 @@ export function useTeamAvailability(from: string, to: string) {
     enabled: !!from && !!to,
   });
 }
+
+export function useCanViewTeamAvailability() {
+  return useQuery({
+    queryKey: ['attendance', 'team-availability', 'access'],
+    queryFn: () => http.get<{ allowed: boolean }>('/attendance/team-availability/access'),
+    staleTime: 5 * 60_000,
+  });
+}

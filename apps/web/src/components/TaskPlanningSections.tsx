@@ -257,11 +257,17 @@ export function PlanningFlags({ task }: { task: import('@task-tracker/shared').T
   if (task.status === 'DONE') return null;
   const fmt = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : `${m}m`);
   const chip = 'shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold';
+  const forecast = task.actualEffortMinutes + (task.remainingEstimateMinutes ?? 0);
+  const over = task.baselineEstimateMinutes !== null ? forecast - task.baselineEstimateMinutes : 0;
   return (
     <>
       {task.remainingEstimateMinutes !== null ? (
-        <span className={`${chip} bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-300`} title="Remaining effort estimate">
-          {fmt(task.remainingEstimateMinutes)} left
+        <span
+          className={`${chip} ${over > 0 ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300' : 'bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-300'}`}
+          title={`Recorded ${fmt(task.actualEffortMinutes)} + remaining ${fmt(task.remainingEstimateMinutes)} = forecast ${fmt(forecast)}${task.baselineEstimateMinutes !== null ? ` against an original ${fmt(task.baselineEstimateMinutes)}` : ''}`}
+        >
+          Forecast {fmt(forecast)}
+          {over > 0 ? ` (+${fmt(over)})` : ''}
         </span>
       ) : task.baselineEstimateMinutes === null ? (
         <span className={`${chip} bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400`}>No estimate</span>

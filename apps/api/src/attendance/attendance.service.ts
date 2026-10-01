@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -595,12 +596,38 @@ export class AttendanceService {
    * Who is in, on leave, or off, for every active person across a short range
    * (spec section 11 "team availability"). `to` is inclusive; capped at 31 days.
    */
-  async teamAvailability(from: string, to: string) {
+  /**
+   * Admins see everyone; a workspace MANAGER sees only the people who share a
+   * workspace they manage (spec section 9: assigned teams and spaces only).
+   * Returns null when the actor manages nothing.
+   */
+  private async availabilityScope(actor: { id: string; role: string }): Promise<string[] | 'ALL' | null> {
+    if (actor.role === 'ADMIN') return 'ALL';
+    const managed = await this.db.select({ id: workspaceMembers.workspaceId }).from(workspaceMembers)
+      .where(and(eq(workspaceMembers.userId, actor.id), eq(workspaceMembers.role, 'MANAGER')));
+    if (managed.length === 0) return null;
+    const people = await this.db.selectDistinct({ id: workspaceMembers.userId }).from(workspaceMembers)
+      .where(inArray(workspaceMembers.workspaceId, managed.map((m) => m.id)));
+    return people.map((p) => p.id);
+  }
+
+  async canViewTeamAvailability(actor: { id: string; role: string }): Promise<{ allowed: boolean }> {
+    return { allowed: (await this.availabilityScope(actor)) !== null };
+  }
+
+  /**
+   * Who is in, on leave, or off, for every person in scope across a short range
+   * (spec section 11 "team availability"). `to` is inclusive; capped at 31 days.
+   */
+  async teamAvailability(from: string, to: string, actor: { id: string; role: string }) {
+    const scope = await this.availabilityScope(actor);
+    if (scope === null) throw new ForbiddenException('Only administrators and workspace managers can view team availability');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || to < from) throw new BadRequestException('from and to must be YYYY-MM-DD with to on or after from');
     const days = dateRange(from, to);
     if (days.length > 31) throw new BadRequestException('Choose a range of at most 31 days');
     const end = new Date(new Date(`${to}T00:00:00Z`).getTime() + 86_400_000).toISOString().slice(0, 10);
-    const people = await this.db.select({ id: users.id, name: users.name, email: users.email, avatarKey: users.avatarKey }).from(users).where(eq(users.isActive, true)).orderBy(users.name);
+    const active = and(eq(users.isActive, true), scope === 'ALL' ? undefined : inArray(users.id, scope));
+    const people = await this.db.select({ id: users.id, name: users.name, email: users.email, avatarKey: users.avatarKey }).from(users).where(active).orderBy(users.name);
     const rows = [] as Array<{ user: (typeof people)[number]; days: AttendanceDayStateItem[] }>;
     for (const person of people) rows.push({ user: person, days: await this.dayStatesBetween(person.id, from, end) });
     return { from, to, dates: days, people: rows };

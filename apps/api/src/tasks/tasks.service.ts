@@ -131,6 +131,7 @@ export class TasksService {
     attachmentCounts: Map<string, number>;
     subtaskCounts: Map<string, number>;
     subtaskDoneCounts: Map<string, number>;
+    actualMinutes: Map<string, number>;
   }> {
     const assigneeMap = new Map<string, UserRef[]>();
     const labelMap = new Map<string, LabelRef[]>();
@@ -146,6 +147,7 @@ export class TasksService {
         attachmentCounts,
         subtaskCounts,
         subtaskDoneCounts,
+        actualMinutes: new Map(),
       };
 
     const [assigneeRows, labelRows, commentRows, attachmentRows, subtaskRows] = await Promise.all([
@@ -200,7 +202,16 @@ export class TasksService {
       if (r.status === 'DONE') subtaskDoneCounts.set(r.parentTaskId, Number(r.c));
     }
 
-    return { assignees: assigneeMap, labels: labelMap, commentCounts, attachmentCounts, subtaskCounts, subtaskDoneCounts };
+    // Recorded effort per task, with a parent's total including its direct subtasks so it matches the rolled-up remaining estimate.
+    const effortRows = await this.db
+      .select({ root: sql<string>`coalesce(${tasks.parentTaskId}, ${tasks.id})`, minutes: sql<number>`coalesce(sum(${taskTimeEntries.durationMinutes}), 0)` })
+      .from(taskTimeEntries)
+      .innerJoin(tasks, eq(tasks.id, taskTimeEntries.taskId))
+      .where(or(inArray(tasks.id, taskIds), inArray(tasks.parentTaskId, taskIds)))
+      .groupBy(sql`coalesce(${tasks.parentTaskId}, ${tasks.id})`);
+    const actualMinutes = new Map(effortRows.filter((r) => taskIds.includes(r.root)).map((r) => [r.root, Number(r.minutes)]));
+
+    return { assignees: assigneeMap, labels: labelMap, commentCounts, attachmentCounts, subtaskCounts, subtaskDoneCounts, actualMinutes };
   }
 
   /**
@@ -233,6 +244,7 @@ export class TasksService {
       attachmentCounts: Map<string, number>;
       subtaskCounts: Map<string, number>;
       subtaskDoneCounts: Map<string, number>;
+      actualMinutes: Map<string, number>;
     },
     people: Map<string, UserRef> = new Map(),
     calendar?: CalendarSnapshot,
@@ -258,6 +270,7 @@ export class TasksService {
       baselineEstimateMinutes: t.baselineEstimateMinutes,
       currentEstimateMinutes: t.currentEstimateMinutes,
       remainingEstimateMinutes: t.remainingEstimateMinutes,
+      actualEffortMinutes: rel.actualMinutes.get(t.id) ?? 0,
       assignees: rel.assignees.get(t.id) ?? [],
       labels: rel.labels.get(t.id) ?? [],
       commentCount: rel.commentCounts.get(t.id) ?? 0,

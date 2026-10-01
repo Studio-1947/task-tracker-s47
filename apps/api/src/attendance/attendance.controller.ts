@@ -36,7 +36,7 @@ import {
   type OrganisationPolicyInput,
   type CreatePayrollDraftInput,
 } from '@task-tracker/shared';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { CurrentUser, type RequestUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
@@ -111,10 +111,14 @@ export class AttendanceController {
     return this.attendance.getDailyAttendanceState(userId, date ?? new Date().toISOString().slice(0, 10));
   }
 
+  @Get('attendance/team-availability/access')
+  availabilityAccess(@CurrentUser() user: RequestUser) {
+    return this.attendance.canViewTeamAvailability(user);
+  }
+
   @Get('attendance/team-availability')
-  @Roles(Role.ADMIN)
-  teamAvailability(@Query('from') from: string, @Query('to') to: string) {
-    return this.attendance.teamAvailability(from, to);
+  teamAvailability(@Query('from') from: string, @Query('to') to: string, @CurrentUser() user: RequestUser) {
+    return this.attendance.teamAvailability(from, to, user);
   }
 
   @Get('attendance/team')

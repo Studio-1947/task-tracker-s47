@@ -174,6 +174,8 @@ export interface TaskListItem {
   baselineEstimateMinutes: number | null;
   currentEstimateMinutes: number | null;
   remainingEstimateMinutes: number | null;
+  /** Recorded effort, including direct subtasks; forecast total = this + remaining. */
+  actualEffortMinutes: number;
   assignees: UserRef[];
   labels: LabelRef[];
   commentCount: number;

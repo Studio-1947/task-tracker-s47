@@ -21,6 +21,7 @@ import {
   useLeaveTypes,
   useMyAttendance,
   useMyDayStates,
+  useCanViewTeamAvailability,
   useMyBalances,
   useMyLeaves,
   useReviewLeave,
@@ -73,6 +74,7 @@ export function AttendancePage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
   const [tab, setTab] = useState<Tab>('me');
+  const { data: availabilityAccess } = useCanViewTeamAvailability();
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'me', label: 'My Attendance' },
@@ -82,12 +84,12 @@ export function AttendancePage() {
           { key: 'corrections', label: 'Attendance Corrections' },
           { key: 'types', label: 'Leave Types' },
           { key: 'allotments', label: 'Allotments' },
-          { key: 'availability', label: 'Team Availability' },
           { key: 'team', label: 'Team Log' },
           { key: 'policy', label: 'Policy' },
           { key: 'payroll', label: 'Payroll Inputs' },
         ] as { key: Tab; label: string }[])
       : []),
+    ...(availabilityAccess?.allowed ? ([{ key: 'availability', label: 'Team Availability' }] as { key: Tab; label: string }[]) : []),
   ];
 
   return (

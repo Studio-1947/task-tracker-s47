@@ -176,6 +176,17 @@ async function main() {
       void sub2;
     }
 
+    // ---- forecast on list rows (AT08: 60 baseline, 45 actual, 30 remaining => 75) -----
+    const fc = await mk({ title: 'Forecast task', ownerId: me.id, baselineEstimateMinutes: 60, remainingEstimateMinutes: 30 });
+    const logged = await call(token, 'POST', `/tasks/${fc.body.id}/time-entries`, { workDate: new Date().toISOString().slice(0, 10), durationMinutes: 45, category: 'EXECUTION' });
+    assert(logged.status === 201, '45 minutes logged', JSON.stringify(logged.body));
+    // Logging time burns the remaining estimate down; the owner then states what is really left (spec: remaining is an owner forecast).
+    await call(token, 'PATCH', `/tasks/${fc.body.id}`, { remainingEstimateMinutes: 30 });
+    const fcList = (await call(token, 'GET', `/workspaces/${workspace.id}/tasks?pageSize=100`)).body.items.find((t) => t.id === fc.body.id);
+    assert(fcList?.actualEffortMinutes === 45, 'list row reports 45 recorded minutes', String(fcList?.actualEffortMinutes));
+    assert(fcList.actualEffortMinutes + fcList.remainingEstimateMinutes === 75, 'forecast is actual + remaining = 75');
+    assert(fcList.actualEffortMinutes + fcList.remainingEstimateMinutes - fcList.baselineEstimateMinutes === 15, 'forecast overrun against the original is 15');
+
     // ---- project edit -------------------------------------------------------
     const renamed = await call(token, 'PATCH', `/projects/${project.id}`, { name: 'Renamed by smoke', color: '#10b981' });
     assert(renamed.status === 200 && renamed.body.name === 'Renamed by smoke' && renamed.body.color === '#10b981', 'admin can edit a project', JSON.stringify(renamed.body));
@@ -189,6 +200,8 @@ async function main() {
     const avail = await call(token, 'GET', `/attendance/team-availability?from=${fromD}&to=${toD}`);
     assert(avail.status === 200 && avail.body.dates.length === 7, 'team availability covers the 7 requested days', String(avail.status));
     assert(avail.body.people.length > 0 && avail.body.people.every((p) => p.days.length === 7), 'every person has one state per day');
+    const access = await call(token, 'GET', '/attendance/team-availability/access');
+    assert(access.status === 200 && access.body.allowed === true, 'an admin is allowed to view team availability');
     const tooLong = await call(token, 'GET', `/attendance/team-availability?from=2026-01-01&to=2026-06-01`);
     assert(tooLong.status === 400, 'a range over 31 days is rejected');
     const backwards = await call(token, 'GET', `/attendance/team-availability?from=${toD}&to=${fromD}`);
