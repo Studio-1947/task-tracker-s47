@@ -18,6 +18,8 @@ export const createWorkspaceSchema = z.object({
     .string()
     .regex(/^[A-Z]{2,6}$/, 'Prefix must be 2-6 uppercase letters')
     .optional(),
+  clientId: z.string().uuid().nullable().optional(),
+  officeId: z.string().uuid().nullable().optional(),
 });
 export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>;
 
@@ -32,6 +34,8 @@ export const updateWorkspaceSchema = z
       .regex(/^#([0-9a-fA-F]{6})$/)
       .optional(),
     isArchived: z.boolean().optional(),
+    clientId: z.string().uuid().nullable().optional(),
+    officeId: z.string().uuid().nullable().optional(),
   })
   .strict();
 export type UpdateWorkspaceInput = z.infer<typeof updateWorkspaceSchema>;

@@ -30,6 +30,8 @@ export class WorkspacesService {
       description: w.description,
       color: w.color,
       logoKey: w.logoKey,
+      clientId: w.clientId,
+      officeId: w.officeId,
       isArchived: w.isArchived,
       createdAt: w.createdAt.toISOString(),
       ...(memberCount !== undefined ? { memberCount } : {}),
@@ -167,6 +169,8 @@ export class WorkspacesService {
           subtitle: input.subtitle ?? null,
           description: input.description ?? null,
           color: input.color ?? null,
+          clientId: input.clientId ?? null,
+          officeId: input.officeId ?? null,
           createdById,
         })
         .returning();

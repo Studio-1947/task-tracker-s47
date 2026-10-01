@@ -113,6 +113,8 @@ export interface WorkspaceSummary {
   color: string | null;
   /** Storage key of the small square logo, e.g. "avatars/<uuid>.png"; served via /api/files. */
   logoKey: string | null;
+  clientId?: string | null;
+  officeId?: string | null;
   isArchived: boolean;
   createdAt: string;
   memberCount?: number;
