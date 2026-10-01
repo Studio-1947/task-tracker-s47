@@ -151,6 +151,12 @@ async function main() {
       maxConcurrentLeavePercent: original.maxConcurrentLeavePercent ?? 100, effectiveFrom: original.effectiveFrom,
     });
     if (ws.body?.id) await call(t, 'PATCH', `/workspaces/${ws.body.id}`, { isArchived: true });
+    // The two fixture types are reused across runs (find-or-reactivate), so retire them afterwards: left active they show
+    // up as real leave balances for every user.
+    const types = (await call(t, 'GET', '/leave-types?includeInactive=true')).body ?? [];
+    for (const type of types.filter((x) => x.name === LIMITED || x.name === UNLIMITED)) {
+      await call(t, 'PATCH', `/leave-types/${type.id}`, { isActive: false });
+    }
   }
   if (failures) throw new Error(`${failures} leave-controls smoke assertion(s) failed`);
   console.log('Leave controls smoke passed.');

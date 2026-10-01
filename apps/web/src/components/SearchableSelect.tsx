@@ -76,7 +76,8 @@ export function SearchableSelect({
     onChange(v);
     setQuery('');
     setOpen(false);
-    inputRef.current?.blur();
+    // Focus deliberately stays on the input: a blur here would look like leaving the form to any parent that
+    // submits on blur (the meeting board's card composer submits the card the moment focus leaves it).
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

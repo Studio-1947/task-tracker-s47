@@ -387,6 +387,10 @@ export class TasksService {
       .from(tasks)
       .where(and(eq(tasks.parentTaskId, parentTaskId), eq(tasks.isArchived, false)));
     if (children.length === 0) return;
+    // A parent only rolls up from effort-bearing children. Subtasks with no estimate yet say nothing about the work, so they
+    // must not overwrite the parent's own baseline, approved and remaining estimates with nothing (spec section 3 and 6).
+    const effortBearing = children.some((c) => c.baseline !== null || c.current !== null || c.remaining !== null);
+    if (!effortBearing) return;
 
     const sum = (values: (number | null)[]): number | null => {
       const present = values.filter((v): v is number => v !== null);

@@ -39,7 +39,10 @@ function Stat({ label, value, tone, to, scope }: { label: string; value: number 
   const body = (
     <Card className="h-full p-6 hover:shadow-lg hover:shadow-indigo-500/[0.02] hover:-translate-y-0.5 transition-all duration-150 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
       <div className="text-xs font-semibold uppercase tracking-wider text-slate-450 dark:text-slate-500">{label}</div>
-      <div className={`mt-2.5 text-3xl font-extrabold tracking-tight ${tone === 'danger' ? 'text-red-500 dark:text-red-400' : 'text-slate-800 dark:text-slate-100'}`}>
+      <div
+        className={`mt-2.5 font-extrabold tracking-tight [overflow-wrap:anywhere] ${typeof value === 'string' && value.length > 8 ? 'text-lg leading-snug sm:text-xl' : 'text-3xl'} ${tone === 'danger' ? 'text-red-500 dark:text-red-400' : 'text-slate-800 dark:text-slate-100'}`}
+        title={typeof value === 'string' ? value : undefined}
+      >
         {value}
       </div>
       {scope ? <div className="mt-1 text-[11px] font-medium text-slate-400 dark:text-slate-500">{scope}</div> : null}
@@ -404,7 +407,10 @@ function AdminView() {
   const { data, isLoading, error } = useAdminDashboard(true);
   const { data: workspaces } = useWorkspaces();
   const [filters, setFilters] = useState<MetricFilters>({ workspaceId: '', period: '30d', basis: 'ORIGINAL' });
-  const firstWorkspace = (workspaces ?? []).find((w) => !w.isArchived)?.id ?? '';
+  // Default the delivery metrics to the workspace people are actually working in, not whichever sorts first alphabetically.
+  const activeIds = new Set((workspaces ?? []).filter((w) => !w.isArchived).map((w) => w.id));
+  const busiest = data?.mostActiveWorkspace && activeIds.has(data.mostActiveWorkspace.id) ? data.mostActiveWorkspace.id : '';
+  const firstWorkspace = busiest || (workspaces ?? []).find((w) => !w.isArchived)?.id || '';
   const metricFilters: MetricFilters = { ...filters, workspaceId: filters.workspaceId || firstWorkspace };
   if (isLoading) return <Spinner />;
   if (error) return <div className="mt-6"><ErrorState message={error instanceof ApiRequestError ? error.message : 'Failed to load'} /></div>;

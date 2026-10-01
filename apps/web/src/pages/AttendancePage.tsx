@@ -269,7 +269,7 @@ function BalanceCard({ b }: { b: LeaveBalance }) {
     <Card className="p-4">
       <div className="flex items-center gap-2">
         <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: dot }} />
-        <span className="truncate text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{b.typeName}</span>
+        <span className="min-w-0 break-words text-xs font-bold uppercase leading-tight tracking-wider text-slate-500 dark:text-slate-400">{b.typeName}</span>
       </div>
       <div className="mt-2 text-2xl font-extrabold tabular-nums text-slate-800 dark:text-slate-100">{b.remaining}</div>
       <div className="mt-0.5 text-xs font-medium text-slate-400 dark:text-slate-500">

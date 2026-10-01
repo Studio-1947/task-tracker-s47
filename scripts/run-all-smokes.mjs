@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const SLOW = new Set(['updates']);
-const NEVER = new Set(['stress']); // load test, not a pass/fail smoke
+const NEVER = new Set(['stress', 'browser']); // load test and the real-browser suite: neither is a plain API smoke
 
 const args = process.argv.slice(2).filter((a) => a !== '--');
 const includeSlow = args.includes('--slow');

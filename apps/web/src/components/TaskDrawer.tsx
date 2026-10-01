@@ -1387,7 +1387,9 @@ function BlockerSection({ taskId, workspaceId, members }: { taskId: string; work
 
   const [showForm, setShowForm] = useState(false);
   const [reason, setReason] = useState('');
-  const [unblockerUserId, setUnblockerUserId] = useState(members[0]?.id ?? '');
+  // The members list may still be loading when this mounts (task opened from a link), so the default is derived, not stored.
+  const [pickedUnblocker, setPickedUnblocker] = useState('');
+  const unblockerUserId = pickedUnblocker || members[0]?.id || '';
   const [followUp, setFollowUp] = useState('');
 
   const active = blockers.filter((b) => !b.unblockedAt);
@@ -1420,7 +1422,7 @@ function BlockerSection({ taskId, workspaceId, members }: { taskId: string; work
           </label>
           <label className="block font-semibold text-amber-800 dark:text-amber-300">
             Who is responsible for unblocking it?
-            <select aria-label="Responsible unblocker" className={`${field} mt-1 font-normal`} value={unblockerUserId} onChange={(e) => setUnblockerUserId(e.target.value)}>
+            <select aria-label="Responsible unblocker" className={`${field} mt-1 font-normal`} value={unblockerUserId} onChange={(e) => setPickedUnblocker(e.target.value)}>
               {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
           </label>

@@ -684,11 +684,20 @@ function ListView({
   return (
     <div className="space-y-2.5">
       {tasks.map((t) => (
-        <button
+        // A div with button semantics: the row contains the deadline-push buttons, and a button cannot contain buttons.
+        <div
           key={t.id}
-          type="button"
+          role="button"
+          tabIndex={0}
+          aria-label={`Open ${t.ref} ${t.title}`}
           onClick={() => onOpen(t.id)}
-          className="w-full rounded-xl border border-slate-100 bg-white/70 dark:border-slate-800/40 dark:bg-slate-900/30 p-3.5 text-left hover:border-indigo-500 dark:hover:border-indigo-500/50 hover:shadow-md hover:shadow-indigo-500/[0.01] hover:-translate-y-0.5 transition-all duration-150 flex flex-col sm:px-5"
+          onKeyDown={(e) => {
+            if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+              e.preventDefault();
+              onOpen(t.id);
+            }
+          }}
+          className="w-full cursor-pointer rounded-xl border border-slate-100 bg-white/70 dark:border-slate-800/40 dark:bg-slate-900/30 p-3.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 hover:border-indigo-500 dark:hover:border-indigo-500/50 hover:shadow-md hover:shadow-indigo-500/[0.01] hover:-translate-y-0.5 transition-all duration-150 flex flex-col sm:px-5"
         >
           <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-4 sm:flex-1 min-w-0 w-full">
             {/* Primary Row: Ref, Title, Mobile Status */}
@@ -744,7 +753,7 @@ function ListView({
           </div>
           {/* Due date progress bar — features A-E, I */}
           <DueDateProgress t={t} workspaceId={workspaceId} />
-        </button>
+        </div>
       ))}
     </div>
   );

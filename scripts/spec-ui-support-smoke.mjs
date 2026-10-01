@@ -187,6 +187,13 @@ async function main() {
     assert(fcList.actualEffortMinutes + fcList.remainingEstimateMinutes === 75, 'forecast is actual + remaining = 75');
     assert(fcList.actualEffortMinutes + fcList.remainingEstimateMinutes - fcList.baselineEstimateMinutes === 15, 'forecast overrun against the original is 15');
 
+    // ---- an estimate-less subtask must not erase the parent's estimates ----------------
+    const par = await mk({ title: 'Parent with its own estimate', ownerId: me.id, baselineEstimateMinutes: 150 });
+    const kid = await call(token, 'POST', `/tasks/${par.body.id}/subtasks`, { title: 'Subtask with no estimate yet' });
+    assert(kid.status === 201, 'subtask without an estimate created', JSON.stringify(kid.body));
+    const parAfter = (await call(token, 'GET', `/tasks/${par.body.id}`)).body;
+    assert(parAfter.baselineEstimateMinutes === 150 && parAfter.currentEstimateMinutes === 150 && parAfter.remainingEstimateMinutes === 150, 'the parent keeps its own estimates when its only subtask has none', `${parAfter.baselineEstimateMinutes}/${parAfter.currentEstimateMinutes}/${parAfter.remainingEstimateMinutes}`);
+
     // ---- project edit -------------------------------------------------------
     const renamed = await call(token, 'PATCH', `/projects/${project.id}`, { name: 'Renamed by smoke', color: '#10b981' });
     assert(renamed.status === 200 && renamed.body.name === 'Renamed by smoke' && renamed.body.color === '#10b981', 'admin can edit a project', JSON.stringify(renamed.body));
