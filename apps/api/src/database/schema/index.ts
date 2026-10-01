@@ -2,6 +2,7 @@
 // so `db.query.*` relations and typed tables are available.
 export * from './enums';
 export * from './users';
+export * from './organisation';
 export * from './workspaces';
 export * from './projects';
 export * from './tasks';

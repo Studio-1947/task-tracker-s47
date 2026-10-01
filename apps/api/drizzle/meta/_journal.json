@@ -225,6 +225,13 @@
       "when": 1791849600000,
       "tag": "0031_simplified_review_policy",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791936000000,
+      "tag": "0032_organisation_delivery_model",
+      "breakpoints": true
     }
   ]
 }

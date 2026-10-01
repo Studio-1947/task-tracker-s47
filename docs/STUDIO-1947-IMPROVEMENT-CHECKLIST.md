@@ -144,7 +144,7 @@ The `[x]` marks above record that an API and a smoke test exist. They did not me
 | §11 team availability on the attendance page | [x] | `TeamAvailabilityTab`; admins see everyone, workspace managers only people in workspaces they manage |
 | §10 member dashboard follows the same scope/drill-down rules | [x] | Needs-attention row (overdue, updates due, reviews waiting, blocked on me), scope captions, tasks open directly |
 | §1/§5 Done without evidence on a task with **no reviewer** | [x] | Policy-controlled (migration 0031): Allow / Small tasks only / Always require a reviewer. **Default is Allow (legacy behaviour); an admin must choose the rule** |
-| §9 office vs workspace vs client vs team data relationship | [?] | Table relabelled "Workspace delivery state"; the underlying data model decision is still open |
+| §9 office vs workspace vs client vs team data relationship | [x] | Offices are physical/HR locations; clients are external accounts; teams are internal people groups; workspaces are delivery containers with optional office/client links and many teams. None of these links grants task access. Migration `0032_organisation_delivery_model`. |
 
 Also added: searchable project picker (`SearchableSelect`, used on the meeting board), project search and **Edit project** on the workspace page (editing/archiving is now admin or workspace manager only on the server).
 
