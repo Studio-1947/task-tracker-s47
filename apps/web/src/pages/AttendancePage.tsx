@@ -8,6 +8,7 @@ import { Avatar } from '../components/Avatar';
 import { PolicyTab } from '../components/PolicyTab';
 import { PayrollTab } from '../components/PayrollTab';
 import { TeamAvailabilityTab } from '../components/TeamAvailabilityTab';
+import { OrganisationCalendarCard } from '../components/CalendarAdmin';
 import { Badge, Button, Card, EmptyState, ErrorState, Input, Spinner } from '../components/ui';
 import {
   useAttendanceToday,
@@ -68,7 +69,7 @@ const statusTone: Record<string, 'slate' | 'green' | 'amber'> = {
   CANCELLED: 'slate',
 };
 
-type Tab = 'me' | 'approvals' | 'corrections' | 'types' | 'allotments' | 'team' | 'policy' | 'payroll' | 'availability';
+type Tab = 'me' | 'approvals' | 'corrections' | 'types' | 'allotments' | 'team' | 'policy' | 'payroll' | 'calendar' | 'availability';
 
 export function AttendancePage() {
   const { user } = useAuth();
@@ -87,6 +88,7 @@ export function AttendancePage() {
           { key: 'team', label: 'Team Log' },
           { key: 'policy', label: 'Policy' },
           { key: 'payroll', label: 'Payroll Inputs' },
+          { key: 'calendar', label: 'Organisation Calendar' },
         ] as { key: Tab; label: string }[])
       : []),
     ...(availabilityAccess?.allowed ? ([{ key: 'availability', label: 'Team Availability' }] as { key: Tab; label: string }[]) : []),
@@ -123,6 +125,7 @@ export function AttendancePage() {
         {tab === 'team' ? <TeamLogTab /> : null}
         {tab === 'policy' ? <PolicyTab /> : null}
         {tab === 'payroll' ? <PayrollTab /> : null}
+        {tab === 'calendar' ? <OrganisationCalendarCard /> : null}
       </div>
     </div>
   );
