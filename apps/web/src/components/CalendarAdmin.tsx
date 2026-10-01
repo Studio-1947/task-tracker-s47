@@ -23,7 +23,7 @@ function holidayRowsFromPdf(text: string): string {
   const headings = /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(20\d{2})\b/g;
   const found = [...compact.matchAll(headings)];
   for (let i = 0; i < found.length; i++) { const heading = found[i]!; const month = heading[1]!; const year = heading[2]!; const body = compact.slice((heading.index ?? 0) + heading[0].length, found[i + 1]?.index ?? compact.length); const row = new RegExp(`\\b(\\d{1,2})\\s+[A-Za-z]{3}\\s+${WEEKDAYS}\\s+(.+?)(?=\\s+\\d{1,2}\\s+[A-Za-z]{3}\\s+${WEEKDAYS}|$)`, 'g'); for (const m of body.matchAll(row)) { const name = m[2]!.replace(/\s+(?:Office trip|Holiday|Type|Yearly|Monthly).*$/i, '').trim(); if (name) out.push(`${year}-${MONTHS[month]!}-${m[1]!.padStart(2,'0')}, ${name}, HOLIDAY`); } }
-  return [...new Set(out)].join('\n');
+  const byDate = new Map<string, string>(); for (const line of out) { const date = line.split(',')[0]!; if (!byDate.has(date)) byDate.set(date, line); } return [...byDate.values()].join('\n');
 }
 const hoursLabel = (start: number, end: number, brk: number) => {
   const mins = end - start - brk;
