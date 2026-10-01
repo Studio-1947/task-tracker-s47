@@ -8,6 +8,7 @@ import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
+import { OrganisationModule } from './organisation/organisation.module';
 import { ProjectsModule } from './projects/projects.module';
 import { TasksModule } from './tasks/tasks.module';
 import { AuditModule } from './audit/audit.module';
@@ -41,6 +42,7 @@ import { RemindersModule } from './reminders/reminders.module';
     AuthModule,
     UsersModule,
     WorkspacesModule,
+    OrganisationModule,
     ProjectsModule,
     TasksModule,
     AuditModule,

@@ -2,6 +2,7 @@ export * from './enums';
 export * from './schemas/auth';
 export * from './schemas/user';
 export * from './schemas/workspace';
+export * from './schemas/organisation';
 export * from './schemas/project';
 export * from './schemas/task';
 export * from './schemas/label';
@@ -14,4 +15,3 @@ export * from './schemas/calendar';
 export * from './schemas/leave-balance';
 export * from './schemas/capacity';
 export * from './types';
-
