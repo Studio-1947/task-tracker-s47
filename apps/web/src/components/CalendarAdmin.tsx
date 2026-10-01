@@ -61,6 +61,9 @@ export function OrganisationCalendarCard() {
   const [exDate, setExDate] = useState('');
   const [exName, setExName] = useState('');
   const [kind, setKind] = useState<CalendarException['kind']>('HOLIDAY');
+  const [bulkText, setBulkText] = useState('');
+  const [bulkMode, setBulkMode] = useState<'ADD_ONLY'|'REPLACE_MATCHING'>('ADD_ONLY');
+  const bulkRows = useMemo(() => bulkText.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => { const [date,name,rawKind] = line.split(',').map(x=>x.trim()); return { date: date ?? '', name: name ?? '', kind: (rawKind || 'HOLIDAY').toUpperCase() }; }).filter(x => /^\d{4}-\d{2}-\d{2}$/.test(x.date) && x.name), [bulkText]);
   useEffect(() => {
     if (data?.settings && !draft) setDraft(data.settings);
   }, [data, draft]);
@@ -77,6 +80,7 @@ export function OrganisationCalendarCard() {
     onSuccess: () => { setExDate(''); setExName(''); refresh(); },
   });
   const removeEx = useMutation({ mutationFn: (id: string) => http.del(`/calendar/exceptions/${id}`), onSuccess: refresh });
+  const bulk = useMutation({ mutationFn: () => http.post('/calendar/exceptions/bulk', { mode: bulkMode, exceptions: bulkRows }), onSuccess: () => { setBulkText(''); refresh(); } });
 
   const dirty = useMemo(() => !!draft && !!data && JSON.stringify(draft) !== JSON.stringify(data.settings), [draft, data]);
   if (!data || !draft) return <Card className="p-6"><p className="text-sm text-slate-500">Loading organisation calendar…</p></Card>;
@@ -128,6 +132,14 @@ export function OrganisationCalendarCard() {
         <Button type="submit" disabled={addEx.isPending}>Add</Button>
       </form>
       {addEx.error ? <p className="mt-2 text-sm text-red-600">{errMsg(addEx.error)}</p> : null}
+      <div className="mt-4 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+        <h4 className="text-sm font-semibold">Bulk import holidays</h4>
+        <p className="mt-1 text-xs text-slate-500">Paste CSV rows as <code>YYYY-MM-DD, Holiday name, HOLIDAY</code>. Review the parsed rows before importing; a PDF should first be converted to this preview rather than imported blindly.</p>
+        <textarea className={`${input} min-h-28`} value={bulkText} onChange={e=>setBulkText(e.target.value)} placeholder={'2026-10-20, Durga Puja, HOLIDAY\n2026-10-21, Vijaya Dashami, HOLIDAY'} />
+        {bulkText && <p className="mt-2 text-xs text-slate-500">Preview: {bulkRows.length} valid row(s). Invalid lines are excluded.</p>}
+        <div className="mt-2 flex flex-wrap items-center gap-2"><select className="rounded border p-2 text-sm dark:bg-[#252525]" value={bulkMode} onChange={e=>setBulkMode(e.target.value as typeof bulkMode)}><option value="ADD_ONLY">Add only (skip existing dates)</option><option value="REPLACE_MATCHING">Replace matching dates</option></select><Button disabled={!bulkRows.length || bulk.isPending} onClick={()=>bulk.mutate()}>Import {bulkRows.length || ''} rows</Button></div>
+        {bulk.error ? <p className="mt-2 text-sm text-red-600">{errMsg(bulk.error)}</p> : null}
+      </div>
       <ul className="mt-3 space-y-2">
         {data.exceptions.length === 0 ? <li className="text-sm text-slate-400">No holidays or exceptions recorded.</li> : null}
         {data.exceptions.map((x) => (
