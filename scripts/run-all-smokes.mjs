@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const SLOW = new Set(['updates']);
-const NEVER = new Set(['stress', 'browser']); // load test and the real-browser suite: neither is a plain API smoke
+const NEVER = new Set(['stress', 'browser', 'browser-orgchart', 'browser-weekly']); // load test and the real-browser suite: neither is a plain API smoke
 
 const args = process.argv.slice(2).filter((a) => a !== '--');
 const includeSlow = args.includes('--slow');
@@ -22,7 +22,7 @@ const named = args.filter((a) => !a.startsWith('--'));
 const suites = Object.keys(pkg.scripts)
   .filter((k) => k.startsWith('test:') && !['test:all'].includes(k))
   .map((k) => k.slice('test:'.length))
-  .filter((n) => !NEVER.has(n))
+  .filter((n) => !NEVER.has(n) && !n.startsWith('browser'))
   .filter((n) => (named.length ? named.includes(n) : includeSlow || !SLOW.has(n)));
 
 if (suites.length === 0) {

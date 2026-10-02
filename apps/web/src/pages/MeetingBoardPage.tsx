@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   MEETING_SLOTS,
   MEETING_SLOT_LABELS,
@@ -38,6 +39,7 @@ import { MeetingItemDrawer } from '../components/MeetingItemDrawer';
 import { MeetingTaskDrawer } from '../components/MeetingTaskDrawer';
 import { MemberSwimlanes } from '../components/MemberSwimlanes';
 import { ProgressBar } from '../components/ProgressBar';
+import { TeamProgressCards, TeamProgressStrip } from '../components/TeamProgress';
 import { ProjectLanes } from '../components/ProjectLanes';
 import { Button, Card, EmptyState, ErrorState, Spinner } from '../components/ui';
 
@@ -90,7 +92,13 @@ export function MeetingBoardPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
 
-  const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
+  // `?week=YYYY-MM-DD` opens that week (any day in it) so a week can be linked to or shared.
+  const [searchParams] = useSearchParams();
+  const [weekStart, setWeekStart] = useState(() => {
+    const asked = searchParams.get('week');
+    const valid = asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) && !Number.isNaN(new Date(`${asked}T00:00:00`).getTime());
+    return mondayOf(valid ? new Date(`${asked}T00:00:00`) : new Date());
+  });
   const [tab, setTab] = useState<Tab>('board');
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [openTask, setOpenTask] = useState<{ taskId: string; workspaceId: string } | null>(null);
@@ -645,6 +653,7 @@ function WeekHeader({
     <Card className="p-4 sm:p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Weekly tasks</p>
           <div className="flex items-center gap-2">
             <h1 className="text-lg font-bold tracking-tight text-slate-800 dark:text-white sm:text-xl">
               {monthDay(board.weekStart)} – {monthDay(board.weekEnd)}
@@ -715,12 +724,13 @@ function WeekHeader({
 
       <div className="mt-4">
         <div className="mb-1.5 flex items-baseline justify-between">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Team progress</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Everyone this week</span>
           <span className="text-xs text-slate-400 dark:text-slate-500">
             {board.members.length} member{board.members.length === 1 ? '' : 's'}
           </span>
         </div>
         <ProgressBar progress={board.progress} size="lg" />
+        <TeamProgressStrip board={board} />
       </div>
     </Card>
   );
@@ -922,6 +932,12 @@ function TeamPanel({ board, onPickWeek }: { board: MeetingBoardDetail; onPickWee
 
   return (
     <div className="space-y-5">
+      <Card className="p-4 sm:p-5">
+        <h2 className="mb-1 text-sm font-bold text-slate-700 dark:text-slate-200">Progress by team</h2>
+        <p className="mb-4 text-xs text-slate-400 dark:text-slate-500">A card counts for every team its owner or tagged people belong to. Select a team to see each person.</p>
+        <TeamProgressCards board={board} />
+      </Card>
+
       <Card className="p-4 sm:p-5">
         <h2 className="mb-4 text-sm font-bold text-slate-700 dark:text-slate-200">Where the week went</h2>
         {board.projects.length === 0 ? (

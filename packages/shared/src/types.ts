@@ -733,6 +733,23 @@ export interface BoardProjectSummary {
   memberCount: number;
 }
 
+/**
+ * One organisation team's slice of the week (Tech, Production, ...). A card counts toward a team when its owner or
+ * an assignee belongs to that team, so a card shared across two teams shows in both. The `team: null` row collects
+ * people who have cards but sit in no team.
+ */
+export interface BoardTeamSummary {
+  team: { id: string; name: string } | null;
+  managerId: string | null;
+  /** Active people in the team. */
+  peopleCount: number;
+  /** Team people who have at least one card this week, in board order. */
+  memberIds: string[];
+  /** Team people with nothing planned this week. */
+  idleCount: number;
+  progress: BoardProgress;
+}
+
 /** One member's row on the board: their cards' roll-up plus this week's mood. */
 export interface BoardMemberSummary {
   user: UserRef;
@@ -767,6 +784,8 @@ export interface MeetingBoardDetail {
   members: BoardMemberSummary[];
   /** Per-project roll-up, busiest first, with unfiled work last. */
   projects: BoardProjectSummary[];
+  /** Per-team roll-up (Tech, Production, ...), alphabetical, with people who are in no team last. */
+  teams: BoardTeamSummary[];
   progress: BoardProgress;
   createdAt: string;
 }
@@ -891,4 +910,45 @@ export interface AttendanceDayStateItem {
   /** True for a past working day with a check-in but no check-out. */
   missingCheckout: boolean;
   halfDay: boolean;
+}
+
+/* ── Organisation tree ── */
+export interface OrgTreeTeam {
+  id: string;
+  name: string;
+  parentTeamId: string | null;
+  managerId: string | null;
+  memberIds: string[];
+}
+export interface OrgTreePerson {
+  id: string;
+  name: string;
+  designation: string | null;
+  avatarKey: string | null;
+  /** Who this person reports to; null for the top of the chart or someone not placed yet. */
+  reportsToId: string | null;
+  /** True for the person at the top of the chart (CEO). */
+  isTop: boolean;
+}
+/** What the viewer may change, decided on the server. Admin: everything. Manager: only their own reporting subtree and the teams they lead. */
+export interface OrgTreePermissions {
+  level: 'ADMIN' | 'MANAGER' | 'VIEWER';
+  manageablePersonIds: string[];
+  manageableTeamIds: string[];
+  canPlaceTopLevel: boolean;
+  canCreatePeople: boolean;
+}
+export interface OrgTree {
+  teams: OrgTreeTeam[];
+  people: OrgTreePerson[];
+  permissions: OrgTreePermissions;
+}
+export interface OrgChangeItem {
+  id: string;
+  actor: string;
+  kind: string;
+  subject: string | null;
+  before: unknown;
+  after: unknown;
+  createdAt: string;
 }

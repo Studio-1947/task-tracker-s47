@@ -12,6 +12,7 @@ import { ReviewQueuePage } from './pages/ReviewQueuePage';
 import { LoginPage } from './pages/LoginPage';
 import { UsersPage } from './pages/UsersPage';
 import { OrganisationPage } from './pages/OrganisationPage';
+import { OrgTreePage } from './pages/OrgTreePage';
 import { WorkspacesPage } from './pages/WorkspacesPage';
 import { WorkspaceTasksPage } from './pages/WorkspaceTasksPage';
 import { useAuth } from './stores/auth';
@@ -75,6 +76,8 @@ export default function App() {
           <Route path="reviews" element={<ReviewQueuePage />} />
           <Route path="meetings" element={<MeetingBoardPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          {/* Everyone signed in can read the org tree; what they may change is decided by the server. */}
+          <Route path="org-tree" element={<OrgTreePage />} />
           <Route element={<RequireAdmin />}>
             <Route path="users" element={<UsersPage />} />
             <Route path="organisation" element={<OrganisationPage />} />

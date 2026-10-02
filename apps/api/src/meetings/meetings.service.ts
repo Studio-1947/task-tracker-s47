@@ -19,6 +19,7 @@ import {
   type BoardProgress,
   type BoardProjectRef,
   type BoardProjectSummary,
+  type BoardTeamSummary,
   type CreateBoardItemInput,
   type CreateBoardNoteInput,
   type MeetingBoardDetail,
@@ -42,6 +43,8 @@ import {
   meetingBoards,
   projects,
   taskAssignees,
+  teamMembers as orgTeamMembers,
+  teams as orgTeams,
   tasks,
   users,
   workspaceMembers,
@@ -558,6 +561,8 @@ export class MeetingsService {
           (a.project?.name ?? '').localeCompare(b.project?.name ?? ''),
       );
 
+    const teamSummaries = await this.teamSummaries(items, memberIds);
+
     const days = workingDays(board.weekStart);
     return {
       id: board.id,
@@ -572,9 +577,65 @@ export class MeetingsService {
       notes,
       members,
       projects: projectSummaries,
+      teams: teamSummaries,
       progress: progressOf(items),
       createdAt: board.createdAt.toISOString(),
     };
+  }
+
+  /**
+   * Roll the week's cards up per organisation team. Membership is the team's members plus its manager, active people
+   * only. A card counts once per team that owns or is tagged on it.
+   */
+  private async teamSummaries(items: BoardItem[], boardMemberIds: string[]): Promise<BoardTeamSummary[]> {
+    const [teamRows, links, active] = await Promise.all([
+      this.db.select({ id: orgTeams.id, name: orgTeams.name, managerId: orgTeams.managerId }).from(orgTeams).where(eq(orgTeams.isArchived, false)),
+      this.db.select({ teamId: orgTeamMembers.teamId, userId: orgTeamMembers.userId }).from(orgTeamMembers),
+      this.db.select({ id: users.id }).from(users).where(eq(users.isActive, true)),
+    ]);
+    const activeIds = new Set(active.map((u) => u.id));
+    const peopleOf = new Map<string, Set<string>>();
+    for (const t of teamRows) {
+      const set = new Set(links.filter((l) => l.teamId === t.id && activeIds.has(l.userId)).map((l) => l.userId));
+      if (t.managerId && activeIds.has(t.managerId)) set.add(t.managerId);
+      peopleOf.set(t.id, set);
+    }
+    const touches = (item: BoardItem, people: Set<string>) =>
+      people.has(item.user.id) || item.assignees.some((a) => people.has(a.id));
+    const withCards = new Set(boardMemberIds);
+
+    const out: BoardTeamSummary[] = teamRows
+      .filter((t) => (peopleOf.get(t.id)?.size ?? 0) > 0)
+      .map((t) => {
+        const people = peopleOf.get(t.id)!;
+        const mine = items.filter((i) => touches(i, people));
+        const active = [...people].filter((id) => items.some((i) => i.user.id === id || i.assignees.some((a) => a.id === id)));
+        return {
+          team: { id: t.id, name: t.name },
+          managerId: t.managerId && activeIds.has(t.managerId) ? t.managerId : null,
+          peopleCount: people.size,
+          memberIds: active,
+          idleCount: people.size - active.length,
+          progress: progressOf(mine),
+        };
+      })
+      .sort((a, b) => (a.team?.name ?? '').localeCompare(b.team?.name ?? ''));
+
+    // People who have cards but sit in no team.
+    const inSomeTeam = new Set([...peopleOf.values()].flatMap((s) => [...s]));
+    const loose = [...withCards].filter((id) => !inSomeTeam.has(id) && items.some((i) => i.user.id === id || i.assignees.some((a) => a.id === id)));
+    if (loose.length) {
+      const looseSet = new Set(loose);
+      out.push({
+        team: null,
+        managerId: null,
+        peopleCount: loose.length,
+        memberIds: loose,
+        idleCount: 0,
+        progress: progressOf(items.filter((i) => touches(i, looseSet))),
+      });
+    }
+    return out;
   }
 
   /**

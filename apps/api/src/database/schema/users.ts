@@ -1,4 +1,4 @@
-import { boolean, integer, pgTable, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { boolean, type AnyPgColumn, integer, pgTable, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { roleEnum } from './enums';
 
 export const users = pgTable('users', {
@@ -12,6 +12,10 @@ export const users = pgTable('users', {
   /** Job title shown under the name (e.g. "Executive Director"); admin-settable. */
   designation: varchar('designation', { length: 120 }),
   gender: varchar('gender', { length: 32 }).notNull().default('UNSPECIFIED'),
+  /** Who this person reports to in the org chart (CEO has none). Not an access boundary. */
+  /** True when the person sits at the top of the org chart (CEO). Everyone else is in the chart by reporting to someone. */
+  orgTop: boolean('org_top').notNull().default(false),
+  reportsToId: uuid('reports_to_id').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
   isActive: boolean('is_active').notNull().default(true),
   /**
    * Stamped when an admin *removes* the person rather than merely deactivating

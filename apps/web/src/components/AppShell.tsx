@@ -66,7 +66,7 @@ const nav = [
   },
   {
     to: '/meetings',
-    label: 'Meetings',
+    label: 'Weekly tasks',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <rect x="3" y="4" width="18" height="17" rx="2" />
@@ -90,6 +90,7 @@ const nav = [
       </svg>
     ),
   },
+  { to: '/org-tree', label: 'Org tree', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v5M5 17v-5h14v5"/></svg> },
   { to: '/organisation', label: 'Organisation', adminOnly: true, icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg> },
 ];
 
