@@ -56,6 +56,7 @@ import {
   type ProjectRow,
 } from '../database/schema';
 import { TasksService } from '../tasks/tasks.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 
 type Actor = { id: string; role: string };
@@ -125,6 +126,7 @@ export class MeetingsService {
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly tasks: TasksService,
     private readonly workspaces: WorkspacesService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /* ── helpers ───────────────────────────────────────────────────────────── */
@@ -1105,6 +1107,19 @@ export class MeetingsService {
     if (!row) throw new NotFoundException('Could not save note');
 
     const refs = await this.userRefs([row.authorId]);
+    if (input.mentionIds && input.mentionIds.length > 0) {
+      for (const targetId of input.mentionIds) {
+        await this.notifications.createNotification(
+          targetId,
+          actor.id,
+          'TASK_COMMENT',
+          'Mention in meeting notes',
+          `${refs.get(actor.id)?.name ?? 'Someone'} mentioned you in a meeting note.`,
+          { boardId: board.id, itemId: input.itemId },
+        ).catch((err) => this.logger.warn(`Could not notify user ${targetId}: ${err}`));
+      }
+    }
+
     return this.toNote(row, refs);
   }
 

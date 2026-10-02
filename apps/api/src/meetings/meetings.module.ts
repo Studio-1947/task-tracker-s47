@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TasksModule } from '../tasks/tasks.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { MeetingsController } from './meetings.controller';
 import { MeetingsService } from './meetings.service';
 import { MeetingReportsService } from './meeting-reports.service';
@@ -10,7 +11,7 @@ import { MeetingReportsService } from './meeting-reports.service';
  * leans on the tasks and workspaces layers rather than writing those tables itself.
  */
 @Module({
-  imports: [TasksModule, WorkspacesModule],
+  imports: [TasksModule, WorkspacesModule, NotificationsModule],
   controllers: [MeetingsController],
   providers: [MeetingsService, MeetingReportsService],
 })

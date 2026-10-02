@@ -102,6 +102,7 @@ export const createBoardNoteSchema = z
     /** Omit for a board-level meeting note; set to comment on one card. */
     itemId: z.string().uuid().nullable().optional(),
     body: z.string().min(1).max(4000),
+    mentionIds: z.array(z.string().uuid()).max(50).optional(),
   })
   .strict();
 export type CreateBoardNoteInput = z.infer<typeof createBoardNoteSchema>;

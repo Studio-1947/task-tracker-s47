@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   MEETING_SLOTS,
@@ -27,6 +27,7 @@ import {
   useUpdateBoardItem,
   useUpdateBoardNote,
   useUpdateMeetingBoard,
+  useMeetingProjectOptions,
 } from '../hooks/useMeetings';
 import { apiBlob, ApiRequestError } from '../lib/api';
 import { linkify } from '../lib/linkify';
@@ -654,7 +655,7 @@ export function MeetingBoardPage() {
       {tab === 'team' ? <TeamPanel board={board} onPickWeek={setWeekStart} /> : null}
 
       {tab === 'notes' ? (
-        <NotesPanel board={board} isAdmin={isAdmin} canWrite={canWrite} onError={setError} />
+        <NotesPanel board={board} isAdmin={isAdmin} canWrite={canWrite} onError={setError} allUsers={allUsers} />
       ) : null}
 
       {openItem ? (
@@ -1282,22 +1283,39 @@ function NotesPanel({
   isAdmin,
   canWrite,
   onError,
+  allUsers,
 }: {
   board: MeetingBoardDetail;
   isAdmin: boolean;
   canWrite: boolean;
   onError: (m: string | null) => void;
+  allUsers?: UserRef[];
 }) {
   const { user } = useAuth();
   const updateBoard = useUpdateMeetingBoard();
   const createNote = useCreateBoardNote();
   const updateNote = useUpdateBoardNote();
   const deleteNote = useDeleteBoardNote();
+  const { data: allProjects } = useMeetingProjectOptions();
 
   const [agenda, setAgenda] = useState(board.agenda ?? '');
   const [draft, setDraft] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingBody, setEditingBody] = useState('');
+
+  const personOptions = (allUsers ?? board.members.map((m) => m.user)).map((u) => ({
+    id: u.id,
+    name: u.name,
+    tagText: `@${u.name.replace(/\s+/g, '')}`,
+    avatarUser: u,
+  }));
+
+  const projectOptions = (allProjects ?? []).map((p) => ({
+    id: p.id,
+    name: p.name,
+    tagText: `#${p.name.replace(/\s+/g, '-')}`,
+    avatarUser: undefined,
+  }));
 
   useEffect(() => setAgenda(board.agenda ?? ''), [board.id, board.agenda]);
 
@@ -1332,13 +1350,27 @@ function NotesPanel({
               }}
               className="w-full resize-y rounded-lg border border-slate-200 bg-white/80 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 dark:border-[#2d2d2d] dark:bg-[#1a1a1a] dark:text-white dark:placeholder-slate-500"
             />
-            <div className="mt-2">
+            <div className="mt-2 flex flex-wrap gap-2">
               <TextLinkButton value={agenda} onChange={setAgenda} />
+              <TagDropdown
+                label="Tag person"
+                icon={PersonIcon}
+                options={personOptions}
+                value={agenda}
+                onChange={setAgenda}
+              />
+              <TagDropdown
+                label="Tag project"
+                icon={ProjectIcon}
+                options={projectOptions}
+                value={agenda}
+                onChange={setAgenda}
+              />
             </div>
           </div>
         ) : board.agenda ? (
           <p className="whitespace-pre-wrap break-words text-sm text-slate-600 dark:text-slate-350">
-            {linkify(board.agenda)}
+            {linkify(board.agenda, { users: allUsers ?? [] })}
           </p>
         ) : (
           <p className="text-sm text-slate-400 dark:text-slate-500">No agenda set for this week.</p>
@@ -1401,7 +1433,7 @@ function NotesPanel({
                       </div>
                     ) : (
                       <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-slate-600 dark:text-slate-350">
-                        {linkify(n.body)}
+                        {linkify(n.body, { users: allUsers ?? [] })}
                       </p>
                     )}
                     {(mine || isAdmin) && editingId !== n.id ? (
@@ -1443,16 +1475,35 @@ function NotesPanel({
               onChange={(e) => setDraft(e.target.value)}
               className="flex-1 resize-y rounded-lg border border-slate-200 bg-white/80 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 dark:border-[#2d2d2d] dark:bg-[#1a1a1a] dark:text-white dark:placeholder-slate-500"
             />
-            <TextLinkButton value={draft} onChange={setDraft} className="self-start sm:self-end" />
+            <div className="flex flex-wrap gap-2 self-start sm:self-end">
+              <TextLinkButton value={draft} onChange={setDraft} />
+              <TagDropdown
+                label="Tag person"
+                icon={PersonIcon}
+                options={personOptions}
+                value={draft}
+                onChange={setDraft}
+              />
+              <TagDropdown
+                label="Tag project"
+                icon={ProjectIcon}
+                options={projectOptions}
+                value={draft}
+                onChange={setDraft}
+              />
+            </div>
             <Button
               className="self-end px-4 py-2 text-xs sm:self-stretch"
               disabled={!draft.trim() || createNote.isPending}
               onClick={() => {
                 const body = draft.trim();
                 if (!body) return;
+                const mentionIds = personOptions
+                  .filter((p) => body.toLowerCase().includes(p.tagText.toLowerCase()))
+                  .map((p) => p.id);
                 guard(
                   createNote
-                    .mutateAsync({ boardId: board.id, input: { body } })
+                    .mutateAsync({ boardId: board.id, input: { body, mentionIds } })
                     .then(() => setDraft('')),
                 );
               }}
@@ -1466,6 +1517,105 @@ function NotesPanel({
           </p>
         )}
       </Card>
+    </div>
+  );
+}
+
+const PersonIcon = (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+    <circle cx="12" cy="7" r="4" />
+  </svg>
+);
+
+const ProjectIcon = (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+    <path d="M3 9h18" />
+    <path d="M9 21V9" />
+  </svg>
+);
+
+function TagDropdown({
+  label,
+  icon,
+  options,
+  value,
+  onChange,
+  className = '',
+}: {
+  label: string;
+  icon: ReactNode;
+  options: { id: string; name: string; tagText: string; avatarUser?: UserRef }[];
+  value: string;
+  onChange: (v: string) => void;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const rootRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setQuery('');
+      return;
+    }
+    const close = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    inputRef.current?.focus();
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const filtered = query.trim()
+    ? options.filter((o) => o.name.toLowerCase().includes(query.trim().toLowerCase()))
+    : options;
+
+  return (
+    <div className={`relative inline-block ${className}`} ref={rootRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-[#2d2d2d] dark:bg-[#1a1a1a] dark:text-slate-300 dark:hover:border-indigo-700 dark:hover:text-indigo-400"
+      >
+        {icon}
+        {label}
+      </button>
+      {open ? (
+        <div className="absolute bottom-full left-0 mb-1 z-40 w-48 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl dark:border-[#2d2d2d] dark:bg-[#1f1f1f]">
+          <div className="p-1.5 border-b border-slate-100 dark:border-[#2d2d2d]">
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search..."
+              className="w-full rounded bg-slate-50 px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-[#151515] dark:text-white"
+            />
+          </div>
+          <ul className="max-h-40 overflow-y-auto p-1">
+            {filtered.length === 0 ? (
+              <li className="px-2 py-1.5 text-xs text-slate-400">No results</li>
+            ) : null}
+            {filtered.map((o) => (
+              <li key={o.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(value.trim() ? `${value} ${o.tagText}` : o.tagText);
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-center gap-2 truncate rounded px-2 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-[#2a2a2a]"
+                >
+                  {o.avatarUser ? <Avatar user={o.avatarUser} size="sm" className="h-5 w-5 text-[9px]" /> : null}
+                  {o.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }

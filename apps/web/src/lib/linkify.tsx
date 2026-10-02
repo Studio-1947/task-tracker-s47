@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react';
+import { Avatar } from '../components/Avatar';
+import type { UserRef } from '@task-tracker/shared';
 
 /**
- * Bare URLs in user-typed text (comments, chat). Matches http(s) only — the same
- * rule the link-attachment API enforces — so `javascript:`/`data:` text can never
- * become a live href.
+ * Bare URLs, user mentions (@name), and project mentions (#name).
  */
-const URL_RE = /(https?:\/\/[^\s<>"']+)/gi;
+const TOKEN_RE = /(https?:\/\/[^\s<>"']+|@[^\s.,;:!?()]+|#[^\s.,;:!?()]+)/gi;
 
 /** Trailing punctuation that reads as sentence structure, not part of the URL. */
 const TRAILING = /[.,;:!?]+$/;
@@ -59,26 +59,51 @@ export const LINK_ON_ACCENT = 'text-white decoration-white/60 hover:decoration-w
  */
 export function linkify(
   text: string,
-  { keyPrefix = 'l', className = LINK_ON_SURFACE }: { keyPrefix?: string; className?: string } = {},
+  { keyPrefix = 'l', className = LINK_ON_SURFACE, users = [] }: { keyPrefix?: string; className?: string; users?: UserRef[] } = {},
 ): ReactNode[] {
-  return text.split(URL_RE).map((part, i) => {
-    if (i % 2 === 0 || !/^https?:\/\//i.test(part)) return <span key={`${keyPrefix}${i}`}>{part}</span>;
+  return text.split(TOKEN_RE).map((part, i) => {
+    if (i % 2 === 0) return <span key={`${keyPrefix}${i}`}>{part}</span>;
 
-    const { href, tail } = trimUrl(part);
-    return (
-      <span key={`${keyPrefix}${i}`}>
-        <a
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer nofollow"
-          className={`font-medium underline underline-offset-2 [overflow-wrap:anywhere] ${className}`}
-          // Comments/messages can sit inside a clickable row — don't trigger it.
-          onClick={(e) => e.stopPropagation()}
-        >
-          {href}
-        </a>
-        {tail}
-      </span>
-    );
+    if (/^https?:\/\//i.test(part)) {
+      const { href, tail } = trimUrl(part);
+      return (
+        <span key={`${keyPrefix}${i}`}>
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer nofollow"
+            className={`font-medium underline underline-offset-2 [overflow-wrap:anywhere] ${className}`}
+            // Comments/messages can sit inside a clickable row — don't trigger it.
+            onClick={(e) => e.stopPropagation()}
+          >
+            {href}
+          </a>
+          {tail}
+        </span>
+      );
+    }
+
+    if (part.startsWith('@') && users.length > 0) {
+      const tagText = part.toLowerCase();
+      const foundUser = users.find(u => `@${u.name.replace(/\s+/g, '').toLowerCase()}` === tagText);
+      if (foundUser) {
+        return (
+          <span key={`${keyPrefix}${i}`} className="inline-flex items-center gap-1 rounded bg-indigo-100 px-1 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300">
+            <Avatar user={foundUser} size="sm" className="h-4 w-4 text-[8px]" />
+            {foundUser.name}
+          </span>
+        );
+      }
+    }
+
+    if (part.startsWith('#')) {
+      return (
+        <span key={`${keyPrefix}${i}`} className="inline-flex items-center rounded bg-slate-100 px-1 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+          {part}
+        </span>
+      );
+    }
+
+    return <span key={`${keyPrefix}${i}`}>{part}</span>;
   });
 }
