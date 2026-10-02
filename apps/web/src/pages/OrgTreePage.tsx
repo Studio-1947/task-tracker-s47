@@ -92,6 +92,22 @@ function TeamEditor({ team, ctx, onDone }: { team: OrgTreeTeam; ctx: Ctx; onDone
   const [parent, setParent] = useState(team.parentTeamId ?? '');
   const [members, setMembers] = useState(new Set(team.memberIds));
   const [error, setError] = useState<string | null>(null);
+  
+  const previousManager = useRef(manager);
+  useEffect(() => {
+    if (manager && manager !== previousManager.current) {
+      const reports = [...ctx.people.values()].filter((p) => p.reportsToId === manager);
+      if (reports.length > 0) {
+        setMembers((cur) => {
+          const next = new Set(cur);
+          reports.forEach((r) => next.add(r.id));
+          return next;
+        });
+      }
+    }
+    previousManager.current = manager;
+  }, [manager, ctx.people]);
+
   const blocked = useMemo(() => descendantIds(team.id, ctx.children), [team.id, ctx.children]);
   const save = useMutation({
     mutationFn: async () => {

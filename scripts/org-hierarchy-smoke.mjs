@@ -89,6 +89,12 @@ async function main() {
   let team = teams.find((t) => t.name === 'Hier Smoke Team');
   if (!team) team = (await call(at, 'POST', '/organisation/teams', { name: 'Hier Smoke Team' })).body;
   await call(at, 'PATCH', `/organisation/teams/${team.id}`, { managerId: mgr.id });
+  // Moving someone under a team's manager adds them to that team, so the Teams view stays in step with the People chart.
+  await call(at, 'PUT', `/org-tree/teams/${team.id}/members`, { userIds: [] });
+  assert((await move(at, e1.id, { reportsToId: mgr.id })).status === 200, 'admin moves staff under the team manager');
+  const inTeam = async () => ((await call(at, 'GET', '/org-tree')).body.teams.find((t) => t.id === team.id)?.memberIds ?? []);
+  assert((await inTeam()).includes(e1.id), 'the person is added to the manager\'s team automatically');
+  assert((await inTeam()).filter((id) => id === e1.id).length === 1, 'and only once');
   assert((await call(mgr.token, 'PUT', `/org-tree/teams/${team.id}/members`, { userIds: [e1.id, e2.id] })).status === 200, 'manager sets the members of a team they lead');
   assert((await call(mgr.token, 'PUT', `/org-tree/teams/${team.id}/members`, { userIds: [e1.id, out.id] })).status === 403, 'manager cannot add an outsider to their team');
   assert((await call(out.token, 'PUT', `/org-tree/teams/${team.id}/members`, { userIds: [out.id] })).status === 403, 'a non-manager cannot change a team');
