@@ -275,14 +275,14 @@ function WorkspaceSwitcher({ collapsed = false }: { collapsed?: boolean }) {
               </label>
             ))}
           </div>
-          <div className="mt-2 flex items-center justify-between border-t border-slate-100 px-2 pt-2 dark:border-slate-700">
-            <span className="text-[10px] text-slate-400">
+          <div className="mt-2 border-t border-slate-100 px-2 pt-2 dark:border-slate-700">
+            <span className="block text-[10px] leading-relaxed text-slate-400">
               No selection includes every workspace.
             </span>
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-500"
+              className="ml-auto mt-2 block rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-500"
             >
               Done
             </button>

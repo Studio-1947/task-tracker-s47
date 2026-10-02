@@ -20,6 +20,7 @@ import { useLabels } from '../hooks/useLabels';
 import { useProjects } from '../hooks/useProjects';
 import { useEnsureProjectConversation } from '../hooks/useChat';
 import { useAuth } from '../stores/auth';
+import { useWorkspaceContext } from '../stores/workspace-context';
 import { formatDate, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
 import { ApiRequestError } from '../lib/api';
 import { Button, Card, EmptyState, ErrorState, Input, LabelChip, Spinner } from '../components/ui';
@@ -40,6 +41,14 @@ const DEFAULT_FILTERS: TaskFilters = { sort: 'createdAt', order: 'desc', pageSiz
 
 export function WorkspaceTasksPage() {
   const { id = '' } = useParams();
+  const selectedWorkspaceIds = useWorkspaceContext((state) => state.workspaceIds);
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (selectedWorkspaceIds.length > 0 && !selectedWorkspaceIds.includes(id)) {
+      navigate('/workspaces', { replace: true });
+    }
+  }, [id, navigate, selectedWorkspaceIds]);
+  if (selectedWorkspaceIds.length > 0 && !selectedWorkspaceIds.includes(id)) return null;
   // Key by workspace id so filter state (persisted per workspace) resets cleanly
   // when navigating between boards.
   return <Board key={id} workspaceId={id} />;
@@ -68,7 +77,9 @@ function loadFilters(workspaceId: string, params: URLSearchParams): TaskFilters 
     if (v) fromUrl[key] = v;
   }
   // Explicit URL filters win over the remembered ones; with none in the URL, fall back to the remembered set.
-  return Object.keys(fromUrl).length ? { ...DEFAULT_FILTERS, ...fromUrl, includeArchived: base.includeArchived } : base;
+  return Object.keys(fromUrl).length
+    ? { ...DEFAULT_FILTERS, ...fromUrl, includeArchived: base.includeArchived }
+    : base;
 }
 
 function Board({ workspaceId }: { workspaceId: string }) {
@@ -106,9 +117,12 @@ function Board({ workspaceId }: { workspaceId: string }) {
     const q = projectQuery.trim().toLowerCase();
     if (!q) return activeProjects;
     // The open project stays visible while searching so the current scope is never hidden.
-    return activeProjects.filter((p) => p.id === selectedProjectId || `${p.name} ${p.taskPrefix}`.toLowerCase().includes(q));
+    return activeProjects.filter(
+      (p) => p.id === selectedProjectId || `${p.name} ${p.taskPrefix}`.toLowerCase().includes(q),
+    );
   }, [activeProjects, projectQuery, selectedProjectId]);
-  const canManageProjects = isAdmin || (members ?? []).find((m) => m.id === user?.id)?.workspaceRole === 'MANAGER';
+  const canManageProjects =
+    isAdmin || (members ?? []).find((m) => m.id === user?.id)?.workspaceRole === 'MANAGER';
   const selectProject = (id: string) => {
     const next = new URLSearchParams(searchParams);
     if (id) next.set('project', id);
@@ -196,7 +210,12 @@ function Board({ workspaceId }: { workspaceId: string }) {
   );
 
   const filtersActive =
-    !!filters.search || !!filters.status || !!filters.assigneeId || !!filters.labelId || !!filters.attention || !!filters.includeArchived;
+    !!filters.search ||
+    !!filters.status ||
+    !!filters.assigneeId ||
+    !!filters.labelId ||
+    !!filters.attention ||
+    !!filters.includeArchived;
 
   const pageSize = data?.pageSize ?? 15;
   const totalPages = data ? Math.max(1, Math.ceil(data.total / pageSize)) : 1;
@@ -215,14 +234,26 @@ function Board({ workspaceId }: { workspaceId: string }) {
       <div className="animate-fade-in">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <Link to="/workspaces" className="text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-slate-650 dark:text-slate-500 dark:hover:text-slate-300 transition-colors flex items-center gap-1">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <Link
+              to="/workspaces"
+              className="text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-slate-650 dark:text-slate-500 dark:hover:text-slate-300 transition-colors flex items-center gap-1"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
                 <line x1="19" y1="12" x2="5" y2="12" />
                 <polyline points="12 19 5 12 12 5" />
               </svg>
               Workspaces
             </Link>
-            <h1 className="mt-1.5 text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">{workspace?.name ?? 'Tasks'}</h1>
+            <h1 className="mt-1.5 text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+              {workspace?.name ?? 'Tasks'}
+            </h1>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 p-0.5 bg-slate-100/50 dark:bg-slate-900/50">
@@ -241,11 +272,19 @@ function Board({ workspaceId }: { workspaceId: string }) {
                 </button>
               ))}
             </div>
-            <Button variant="ghost" className="text-xs font-semibold py-2" onClick={() => setShowPlanning((v) => !v)}>
+            <Button
+              variant="ghost"
+              className="text-xs font-semibold py-2"
+              onClick={() => setShowPlanning((v) => !v)}
+            >
               {showPlanning ? 'Hide planning' : 'Planning'}
             </Button>
             {isAdmin ? (
-              <Button variant="ghost" className="text-xs font-semibold py-2" onClick={() => void setShowSettings(true)}>
+              <Button
+                variant="ghost"
+                className="text-xs font-semibold py-2"
+                onClick={() => void setShowSettings(true)}
+              >
                 Manage
               </Button>
             ) : null}
@@ -255,7 +294,15 @@ function Board({ workspaceId }: { workspaceId: string }) {
         {/* Project scope selector */}
         <div className="mt-5 flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
           <div className="relative shrink-0">
-            <svg className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <svg
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+            >
               <circle cx="11" cy="11" r="7" />
               <path d="M20 20l-3.2-3.2" />
             </svg>
@@ -268,7 +315,11 @@ function Board({ workspaceId }: { workspaceId: string }) {
               className="w-40 rounded-full border border-slate-200 bg-white/60 py-1.5 pl-8 pr-3 text-xs text-slate-700 outline-none focus:border-indigo-500 sm:w-52 dark:border-slate-800 dark:bg-slate-900/40 dark:text-white"
             />
           </div>
-          <ProjectPill active={!selectedProjectId} onClick={() => selectProject('')} label="All projects" />
+          <ProjectPill
+            active={!selectedProjectId}
+            onClick={() => selectProject('')}
+            label="All projects"
+          />
           {visibleProjects.map((p) => (
             <ProjectPill
               key={p.id}
@@ -280,7 +331,9 @@ function Board({ workspaceId }: { workspaceId: string }) {
             />
           ))}
           {projectQuery && visibleProjects.length === 0 ? (
-            <span className="shrink-0 text-xs text-slate-400">No project matches “{projectQuery}”.</span>
+            <span className="shrink-0 text-xs text-slate-400">
+              No project matches “{projectQuery}”.
+            </span>
           ) : null}
           {selectedProject && canManageProjects ? (
             <button
@@ -306,7 +359,14 @@ function Board({ workspaceId }: { workspaceId: string }) {
               title="Open this project's chat channel"
               className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-100 disabled:opacity-50 dark:bg-indigo-950/30 dark:text-indigo-400 dark:hover:bg-indigo-950/50 transition-colors cursor-pointer"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
               Open chat
@@ -316,7 +376,10 @@ function Board({ workspaceId }: { workspaceId: string }) {
 
         {/* Create + filters */}
         <Card className="mt-6 p-5 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
-          <form className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-3" onSubmit={onCreate}>
+          <form
+            className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-3"
+            onSubmit={onCreate}
+          >
             <Input
               className="flex-1"
               placeholder="Quick add — task title…"
@@ -338,10 +401,19 @@ function Board({ workspaceId }: { workspaceId: string }) {
               </select>
             ) : null}
             <div className="flex gap-2 shrink-0">
-              <Button type="submit" className="flex-1 sm:flex-initial" disabled={createTask.isPending || !targetProjectId}>
+              <Button
+                type="submit"
+                className="flex-1 sm:flex-initial"
+                disabled={createTask.isPending || !targetProjectId}
+              >
                 {createTask.isPending ? 'Adding…' : 'Add'}
               </Button>
-              <Button type="button" className="flex-1 sm:flex-initial" variant="ghost" onClick={() => void setShowCreate(true)}>
+              <Button
+                type="button"
+                className="flex-1 sm:flex-initial"
+                variant="ghost"
+                onClick={() => void setShowCreate(true)}
+              >
                 + Detailed task
               </Button>
             </div>
@@ -370,7 +442,9 @@ function Board({ workspaceId }: { workspaceId: string }) {
               aria-label="Filter by assignee"
               className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 px-3 py-2 text-xs text-slate-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all lg:w-auto"
               value={filters.assigneeId ?? ''}
-              onChange={(e) => setFilters((f) => ({ ...f, assigneeId: e.target.value || undefined }))}
+              onChange={(e) =>
+                setFilters((f) => ({ ...f, assigneeId: e.target.value || undefined }))
+              }
             >
               <option value="">All assignees</option>
               {memberRefs.map((m) => (
@@ -396,7 +470,9 @@ function Board({ workspaceId }: { workspaceId: string }) {
               aria-label="Needs attention"
               className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 px-3 py-2 text-xs text-slate-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all lg:w-auto"
               value={filters.attention ?? ''}
-              onChange={(e) => setFilters((f) => ({ ...f, attention: e.target.value || undefined }))}
+              onChange={(e) =>
+                setFilters((f) => ({ ...f, attention: e.target.value || undefined }))
+              }
             >
               <option value="">Any planning state</option>
               <option value="OVERDUE">Overdue</option>
@@ -416,7 +492,11 @@ function Board({ workspaceId }: { workspaceId: string }) {
               Show archived
             </label>
             {filtersActive ? (
-              <Button variant="ghost" className="w-full lg:w-auto text-xs py-2 px-3" onClick={() => setFilters({ ...DEFAULT_FILTERS })}>
+              <Button
+                variant="ghost"
+                className="w-full lg:w-auto text-xs py-2 px-3"
+                onClick={() => setFilters({ ...DEFAULT_FILTERS })}
+              >
                 Reset filters
               </Button>
             ) : null}
@@ -439,17 +519,25 @@ function Board({ workspaceId }: { workspaceId: string }) {
           </div>
         </Card>
 
-        {showPlanning ? <PlanningPanel workspaceId={workspaceId} onOpenTask={setOpenTaskId} /> : null}
+        {showPlanning ? (
+          <PlanningPanel workspaceId={workspaceId} onOpenTask={setOpenTaskId} />
+        ) : null}
 
         <div className="mt-6">
           {isLoading ? (
             <Spinner />
           ) : error ? (
-            <ErrorState message={error instanceof ApiRequestError ? error.message : 'Failed to load tasks'} />
+            <ErrorState
+              message={error instanceof ApiRequestError ? error.message : 'Failed to load tasks'}
+            />
           ) : !data || data.items.length === 0 ? (
             <EmptyState
               title={filtersActive ? 'No tasks match your filters' : 'No tasks yet'}
-              hint={filtersActive ? 'Try clearing filters to see everything.' : 'Add your first task above.'}
+              hint={
+                filtersActive
+                  ? 'Try clearing filters to see everything.'
+                  : 'Add your first task above.'
+              }
               action={
                 filtersActive ? (
                   <Button variant="ghost" onClick={() => setFilters({ ...DEFAULT_FILTERS })}>
@@ -459,9 +547,19 @@ function Board({ workspaceId }: { workspaceId: string }) {
               }
             />
           ) : view === 'list' ? (
-            <ListView tasks={displayTasks} onOpen={setOpenTaskId} showProject={!selectedProjectId} workspaceId={workspaceId} />
+            <ListView
+              tasks={displayTasks}
+              onOpen={setOpenTaskId}
+              showProject={!selectedProjectId}
+              workspaceId={workspaceId}
+            />
           ) : view === 'table' ? (
-            <TableView tasks={displayTasks} onOpen={setOpenTaskId} showProject={!selectedProjectId} workspaceId={workspaceId} />
+            <TableView
+              tasks={displayTasks}
+              onOpen={setOpenTaskId}
+              showProject={!selectedProjectId}
+              workspaceId={workspaceId}
+            />
           ) : (
             <KanbanView
               workspaceId={workspaceId}
@@ -480,7 +578,9 @@ function Board({ workspaceId }: { workspaceId: string }) {
                   <select
                     aria-label="Tasks per page"
                     value={filters.pageSize ?? 15}
-                    onChange={(e) => setFilters((f) => ({ ...f, pageSize: Number(e.target.value) }))}
+                    onChange={(e) =>
+                      setFilters((f) => ({ ...f, pageSize: Number(e.target.value) }))
+                    }
                     className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1a1a1a] py-1 px-1.5 outline-none text-[11px] font-semibold text-slate-700 dark:text-slate-350 cursor-pointer focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all"
                   >
                     <option value={10}>10 per page</option>
@@ -492,13 +592,23 @@ function Board({ workspaceId }: { workspaceId: string }) {
               </div>
               {view !== 'kanban' && totalPages > 1 ? (
                 <div className="flex items-center gap-2 text-xs font-semibold">
-                  <Button variant="ghost" className="py-1 px-3" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                  <Button
+                    variant="ghost"
+                    className="py-1 px-3"
+                    disabled={page <= 1}
+                    onClick={() => setPage((p) => p - 1)}
+                  >
                     Prev
                   </Button>
                   <span className="text-slate-500 dark:text-slate-400 min-w-12 text-center">
                     {page} / {totalPages}
                   </span>
-                  <Button variant="ghost" className="py-1 px-3" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                  <Button
+                    variant="ghost"
+                    className="py-1 px-3"
+                    disabled={page >= totalPages}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
                     Next
                   </Button>
                 </div>
@@ -574,9 +684,13 @@ function ProjectPill({
       }`}
     >
       <span className="truncate max-w-[10rem]">{label}</span>
-      {prefix ? <span className="font-mono text-[10px] text-slate-400 dark:text-slate-500">{prefix}</span> : null}
+      {prefix ? (
+        <span className="font-mono text-[10px] text-slate-400 dark:text-slate-500">{prefix}</span>
+      ) : null}
       {count !== undefined ? (
-        <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-1.5 text-[10px] text-slate-500 dark:text-slate-400">{count}</span>
+        <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+          {count}
+        </span>
       ) : null}
     </button>
   );
@@ -585,30 +699,64 @@ function ProjectPill({
 function StatusBadge({ t }: { t: TaskListItem }) {
   const icon = {
     TODO: (
-      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+      <svg
+        width="9"
+        height="9"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        className="shrink-0"
+      >
         <circle cx="12" cy="12" r="10" />
       </svg>
     ),
     IN_PROGRESS: (
-      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+      <svg
+        width="9"
+        height="9"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        className="shrink-0"
+      >
         <path d="M21 12a9 9 0 1 1-9-9" />
       </svg>
     ),
     IN_REVIEW: (
-      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+      <svg
+        width="9"
+        height="9"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        className="shrink-0"
+      >
         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
         <circle cx="12" cy="12" r="3" />
       </svg>
     ),
     DONE: (
-      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" className="shrink-0">
+      <svg
+        width="9"
+        height="9"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3.5"
+        className="shrink-0"
+      >
         <polyline points="20 6 9 17 4 12" />
       </svg>
     ),
   }[t.status];
 
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${statusClasses[t.status]}`}>
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${statusClasses[t.status]}`}
+    >
       {icon}
       {statusLabel(t.status)}
     </span>
@@ -618,29 +766,63 @@ function StatusBadge({ t }: { t: TaskListItem }) {
 function PriorityBadge({ t }: { t: TaskListItem }) {
   const icon = {
     LOW: (
-      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+      <svg
+        width="9"
+        height="9"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        className="shrink-0"
+      >
         <path d="M12 5v14M19 12l-7 7-7-7" />
       </svg>
     ),
     MEDIUM: (
-      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+      <svg
+        width="9"
+        height="9"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        className="shrink-0"
+      >
         <path d="M5 12h14" />
       </svg>
     ),
     HIGH: (
-      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+      <svg
+        width="9"
+        height="9"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        className="shrink-0"
+      >
         <path d="M12 19V5M5 12l7-7 7 7" />
       </svg>
     ),
     URGENT: (
-      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0">
+      <svg
+        width="9"
+        height="9"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        className="shrink-0"
+      >
         <path d="m18 17-6-6-6 6M18 12l-6-6-6 6" />
       </svg>
     ),
   }[t.priority];
 
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${priorityClasses[t.priority]}`}>
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${priorityClasses[t.priority]}`}
+    >
       {icon}
       {t.priority}
     </span>
@@ -650,7 +832,15 @@ function PriorityBadge({ t }: { t: TaskListItem }) {
 function SubtaskProgress({ count, done }: { count: number; done: number }) {
   return (
     <span className="shrink-0 inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-80 shrink-0">
+      <svg
+        width="10"
+        height="10"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        className="opacity-80 shrink-0"
+      >
         <polyline points="9 11 12 14 22 4" />
         <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
       </svg>
@@ -662,7 +852,15 @@ function SubtaskProgress({ count, done }: { count: number; done: number }) {
 function ProjectTag({ name }: { name: string }) {
   return (
     <span className="shrink-0 inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-80 shrink-0">
+      <svg
+        width="10"
+        height="10"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        className="opacity-80 shrink-0"
+      >
         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
       </svg>
       {name}
@@ -702,8 +900,12 @@ function ListView({
           <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-4 sm:flex-1 min-w-0 w-full">
             {/* Primary Row: Ref, Title, Mobile Status */}
             <div className="flex items-center justify-between sm:justify-start gap-3 min-w-0 sm:flex-1">
-              <span className="font-mono text-xs text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded w-16 text-center shrink-0">{t.ref}</span>
-              <span className="min-w-0 flex-1 truncate font-semibold text-slate-750 dark:text-slate-200">{t.title}</span>
+              <span className="font-mono text-xs text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded w-16 text-center shrink-0">
+                {t.ref}
+              </span>
+              <span className="min-w-0 flex-1 truncate font-semibold text-slate-750 dark:text-slate-200">
+                {t.title}
+              </span>
               <span className="sm:hidden shrink-0">
                 <StatusBadge t={t} />
               </span>
@@ -718,7 +920,9 @@ function ListView({
                   Archived
                 </span>
               ) : null}
-              {t.subtaskCount > 0 ? <SubtaskProgress count={t.subtaskCount} done={t.subtaskDoneCount} /> : null}
+              {t.subtaskCount > 0 ? (
+                <SubtaskProgress count={t.subtaskCount} done={t.subtaskDoneCount} />
+              ) : null}
               {t.labels.length > 0 ? (
                 <div className="flex flex-wrap gap-1 sm:hidden lg:flex">
                   {t.labels.slice(0, 2).map((l) => (
@@ -729,14 +933,26 @@ function ListView({
               {t.assignees.length ? (
                 <span className="sm:hidden md:inline-flex items-center gap-1.5 rounded-full bg-slate-100/60 dark:bg-slate-800/40 px-2 py-0.5 text-[10px] font-semibold text-slate-650 dark:text-slate-350 border border-slate-200/30 dark:border-slate-700/50 shadow-xs">
                   <AvatarStack users={t.assignees} max={3} />
-                  <span>{t.assignees.length === 1 ? t.assignees[0]!.name : `${t.assignees.length} assignees`}</span>
+                  <span>
+                    {t.assignees.length === 1
+                      ? t.assignees[0]!.name
+                      : `${t.assignees.length} assignees`}
+                  </span>
                 </span>
               ) : null}
               {t.dueDate ? (
                 <span
                   className={`inline-flex items-center gap-1.5 text-xs font-semibold ${isOverdue(t.dueDate) ? 'text-red-500 dark:text-red-400' : 'text-slate-450 dark:text-slate-500'}`}
                 >
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-80 shrink-0">
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    className="opacity-80 shrink-0"
+                  >
                     <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
                     <line x1="16" y1="2" x2="16" y2="6" />
                     <line x1="8" y1="2" x2="8" y2="6" />
@@ -775,19 +991,49 @@ function TableView({
   const [sorting, setSorting] = useState<SortingState>([]);
   const columns = useMemo(
     () => [
-      columnHelper.accessor('ref', { header: 'Ref', cell: (c) => <span className="font-mono text-xs text-slate-450 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{c.getValue()}</span> }),
-      columnHelper.accessor('title', { header: 'Title', cell: (c) => <span className="font-semibold text-slate-750 dark:text-slate-200">{c.getValue()}</span> }),
+      columnHelper.accessor('ref', {
+        header: 'Ref',
+        cell: (c) => (
+          <span className="font-mono text-xs text-slate-450 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+            {c.getValue()}
+          </span>
+        ),
+      }),
+      columnHelper.accessor('title', {
+        header: 'Title',
+        cell: (c) => (
+          <span className="font-semibold text-slate-750 dark:text-slate-200">{c.getValue()}</span>
+        ),
+      }),
       ...(showProject
         ? [
             columnHelper.accessor('projectName', {
               header: 'Project',
-              cell: (c) => <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{c.getValue()}</span>,
+              cell: (c) => (
+                <span className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                  {c.getValue()}
+                </span>
+              ),
             }),
           ]
         : []),
-      columnHelper.display({ id: 'plan', header: 'Plan', cell: (c) => <div className="flex flex-wrap gap-1"><PlanningFlags task={c.row.original} /></div> }),
-      columnHelper.accessor('status', { header: 'Status', cell: (c) => <StatusBadge t={c.row.original} /> }),
-      columnHelper.accessor('priority', { header: 'Priority', cell: (c) => <PriorityBadge t={c.row.original} /> }),
+      columnHelper.display({
+        id: 'plan',
+        header: 'Plan',
+        cell: (c) => (
+          <div className="flex flex-wrap gap-1">
+            <PlanningFlags task={c.row.original} />
+          </div>
+        ),
+      }),
+      columnHelper.accessor('status', {
+        header: 'Status',
+        cell: (c) => <StatusBadge t={c.row.original} />,
+      }),
+      columnHelper.accessor('priority', {
+        header: 'Priority',
+        cell: (c) => <PriorityBadge t={c.row.original} />,
+      }),
       columnHelper.accessor((r) => r.assignees, {
         id: 'assignee',
         header: 'Assignees',
@@ -808,7 +1054,9 @@ function TableView({
       columnHelper.accessor('dueDate', {
         header: 'Due',
         cell: (c) => (
-          <span className={`text-sm font-semibold ${isOverdue(c.getValue()) ? 'text-red-500 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>
+          <span
+            className={`text-sm font-semibold ${isOverdue(c.getValue()) ? 'text-red-500 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}
+          >
             {formatDate(c.getValue())}
           </span>
         ),
@@ -840,7 +1088,11 @@ function TableView({
             {table.getHeaderGroups().map((hg) => (
               <tr key={hg.id}>
                 {hg.headers.map((h) => (
-                  <th key={h.id} className="cursor-pointer px-4 py-3 font-semibold select-none" onClick={h.column.getToggleSortingHandler()}>
+                  <th
+                    key={h.id}
+                    className="cursor-pointer px-4 py-3 font-semibold select-none"
+                    onClick={h.column.getToggleSortingHandler()}
+                  >
                     <span className="flex items-center gap-1.5">
                       {flexRender(h.column.columnDef.header, h.getContext())}
                       {{ asc: ' ↑', desc: ' ↓' }[h.column.getIsSorted() as string] ?? ''}
@@ -852,7 +1104,11 @@ function TableView({
           </thead>
           <tbody className="divide-y divide-slate-100/60 dark:divide-slate-800/40">
             {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="cursor-pointer hover:bg-slate-50/50 dark:hover:bg-slate-850/20 transition-colors" onClick={() => onOpen(row.original.id)}>
+              <tr
+                key={row.id}
+                className="cursor-pointer hover:bg-slate-50/50 dark:hover:bg-slate-850/20 transition-colors"
+                onClick={() => onOpen(row.original.id)}
+              >
                 {row.getVisibleCells().map((cell) => (
                   <td key={cell.id} className="px-4 py-3">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}

@@ -15,6 +15,7 @@ import {
   type UserRef,
 } from '@task-tracker/shared';
 import { useAuth } from '../stores/auth';
+import { useWorkspaceContext } from '../stores/workspace-context';
 import { useUsers } from '../hooks/useUsers';
 import {
   useCreateBoardNote,
@@ -59,13 +60,23 @@ function shiftWeeks(weekStart: string, weeks: number): string {
   return ymd(d);
 }
 
-const weekdayShort = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short' });
-const weekdayLong = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long' });
+const weekdayShort = (d: string) =>
+  new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short' });
+const weekdayLong = (d: string) =>
+  new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long' });
 const dayNum = (d: string) => new Date(`${d}T00:00:00`).getDate();
-const monthDay = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-const stamp = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+const monthDay = (d: string) =>
+  new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+const stamp = (iso: string) =>
+  new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
-const emptyProgress = (): BoardProgress => ({ total: 0, done: 0, inProgress: 0, pending: 0, percent: 0 });
+const emptyProgress = (): BoardProgress => ({
+  total: 0,
+  done: 0,
+  inProgress: 0,
+  pending: 0,
+  percent: 0,
+});
 
 function rollUp(items: BoardItem[]): BoardProgress {
   const p = { total: 0, done: 0, inProgress: 0, pending: 0, percent: 0 };
@@ -90,13 +101,17 @@ type ProjectFilter = string;
 
 export function MeetingBoardPage() {
   const { user } = useAuth();
+  const workspaceIds = useWorkspaceContext((state) => state.workspaceIds);
   const isAdmin = user?.role === 'ADMIN';
 
   // `?week=YYYY-MM-DD` opens that week (any day in it) so a week can be linked to or shared.
   const [searchParams] = useSearchParams();
   const [weekStart, setWeekStart] = useState(() => {
     const asked = searchParams.get('week');
-    const valid = asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) && !Number.isNaN(new Date(`${asked}T00:00:00`).getTime());
+    const valid =
+      asked &&
+      /^\d{4}-\d{2}-\d{2}$/.test(asked) &&
+      !Number.isNaN(new Date(`${asked}T00:00:00`).getTime());
     return mondayOf(valid ? new Date(`${asked}T00:00:00`) : new Date());
   });
   const [tab, setTab] = useState<Tab>('board');
@@ -124,7 +139,13 @@ export function MeetingBoardPage() {
   useEffect(() => {
     if (!board) return;
     const today = ymd(new Date());
-    setMobileDay((prev) => (prev && board.days.includes(prev) ? prev : board.days.includes(today) ? today : board.days[0] ?? null));
+    setMobileDay((prev) =>
+      prev && board.days.includes(prev)
+        ? prev
+        : board.days.includes(today)
+          ? today
+          : (board.days[0] ?? null),
+    );
   }, [board?.id, board?.days.join(',')]);
 
   /**
@@ -134,9 +155,12 @@ export function MeetingBoardPage() {
    * one unfinished card as four.
    */
   const membersToWatch = useMemo<UserRef[]>(() => {
-    const people = isAdmin && allUsers
-      ? allUsers.filter((u) => u.isActive).map((u) => ({ id: u.id, name: u.name, email: u.email, avatarKey: u.avatarKey }))
-      : board?.members.map((m) => m.user) ?? [];
+    const people =
+      isAdmin && allUsers
+        ? allUsers
+            .filter((u) => u.isActive)
+            .map((u) => ({ id: u.id, name: u.name, email: u.email, avatarKey: u.avatarKey }))
+        : (board?.members.map((m) => m.user) ?? []);
     return [...people].sort((a, b) => a.name.localeCompare(b.name));
   }, [allUsers, board?.members, isAdmin]);
 
@@ -144,6 +168,8 @@ export function MeetingBoardPage() {
     item.user.id === userId || item.assignees.some((assignee) => assignee.id === userId);
 
   const matches = (i: BoardItem) =>
+    (workspaceIds.length === 0 ||
+      Boolean(i.project && workspaceIds.includes(i.project.workspaceId))) &&
     (ownerFilter === 'all' ||
       (ownerFilter === 'mine' && Boolean(user?.id && isAssignedTo(i, user.id))) ||
       (ownerFilter === 'selected' && watchedMemberIds.some((id) => isAssignedTo(i, id)))) &&
@@ -152,12 +178,12 @@ export function MeetingBoardPage() {
 
   const visibleItems = useMemo(
     () => (board ? board.items.filter(matches) : []),
-    [board, ownerFilter, projectFilter, user?.id, watchedMemberIds],
+    [board, ownerFilter, projectFilter, user?.id, watchedMemberIds, workspaceIds],
   );
 
   const displayItems = useMemo(
     () => (board ? [...visibleItems, ...board.carryOver.filter(matches)] : []),
-    [board, visibleItems, ownerFilter, projectFilter, user?.id, watchedMemberIds],
+    [board, visibleItems, ownerFilter, projectFilter, user?.id, watchedMemberIds, workspaceIds],
   );
 
   /**
@@ -185,7 +211,8 @@ export function MeetingBoardPage() {
   }, [visibleItems]);
 
   /** The project new cards inherit when one is filtered — 'all'/'none' mean unfiled. */
-  const composerProjectId = projectFilter === 'all' || projectFilter === 'none' ? '' : projectFilter;
+  const composerProjectId =
+    projectFilter === 'all' || projectFilter === 'none' ? '' : projectFilter;
 
   const carriedCount = displayItems.length - visibleItems.length;
 
@@ -215,11 +242,12 @@ export function MeetingBoardPage() {
         });
       }
     }
-    const filtered = ownerFilter === 'mine'
-      ? rows.filter((m) => m.user.id === user?.id)
-      : ownerFilter === 'selected'
-        ? rows.filter((m) => watchedMemberIds.includes(m.user.id))
-        : rows;
+    const filtered =
+      ownerFilter === 'mine'
+        ? rows.filter((m) => m.user.id === user?.id)
+        : ownerFilter === 'selected'
+          ? rows.filter((m) => watchedMemberIds.includes(m.user.id))
+          : rows;
     // People with work planned float to the top; the empty rows collect underneath.
     return filtered.sort(
       (a, b) =>
@@ -347,15 +375,23 @@ export function MeetingBoardPage() {
 
       {error ? <ErrorState message={error} /> : null}
 
-      <MoodCheckIn board={board} current={myMood?.mood ?? null} note={myMood?.note ?? null} canWrite={canWrite} onError={setError} />
+      <MoodCheckIn
+        board={board}
+        current={myMood?.mood ?? null}
+        note={myMood?.note ?? null}
+        canWrite={canWrite}
+        onError={setError}
+      />
 
       {/* tabs */}
       <div className="flex gap-1.5 overflow-x-auto rounded-xl bg-slate-100/70 p-1 dark:bg-[#1e1e1e]">
-        {([
-          { key: 'board', label: 'Board' },
-          { key: 'team', label: 'Team & Progress' },
-          { key: 'notes', label: `Notes${board.notes.length ? ` (${board.notes.length})` : ''}` },
-        ] as { key: Tab; label: string }[]).map((t) => (
+        {(
+          [
+            { key: 'board', label: 'Board' },
+            { key: 'team', label: 'Team & Progress' },
+            { key: 'notes', label: `Notes${board.notes.length ? ` (${board.notes.length})` : ''}` },
+          ] as { key: Tab; label: string }[]
+        ).map((t) => (
           <button
             key={t.key}
             type="button"
@@ -397,11 +433,13 @@ export function MeetingBoardPage() {
               </div>
             ) : null}
             <div className="flex rounded-lg border border-slate-200 p-0.5 dark:border-[#2d2d2d]">
-              {([
-                { key: 'day', label: 'By day' },
-                { key: 'member', label: 'By member' },
-                { key: 'project', label: 'By project' },
-              ] as { key: ViewMode; label: string }[]).map((v) => (
+              {(
+                [
+                  { key: 'day', label: 'By day' },
+                  { key: 'member', label: 'By member' },
+                  { key: 'project', label: 'By project' },
+                ] as { key: ViewMode; label: string }[]
+              ).map((v) => (
                 <button
                   key={v.key}
                   type="button"
@@ -442,111 +480,137 @@ export function MeetingBoardPage() {
 
           {viewMode === 'day' ? (
             <>
-          {/* mobile: one day at a time */}
-          <div className="lg:hidden">
-            <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1">
-              {board.days.map((d) => {
-                const count = displayItems.filter((i) => i.dayDate === d).length;
-                const active = mobileDay === d;
-                return (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setMobileDay(d)}
-                    className={`flex min-w-[4.25rem] flex-col items-center rounded-xl border px-3 py-2 transition ${
-                      active
-                        ? 'border-indigo-500 bg-indigo-50/60 text-indigo-700 dark:border-indigo-500 dark:bg-indigo-950/25 dark:text-indigo-400'
-                        : 'border-slate-200 text-slate-500 dark:border-[#2d2d2d] dark:text-slate-400'
-                    }`}
-                  >
-                    <span className="text-[10px] font-semibold uppercase tracking-wide">{weekdayShort(d)}</span>
-                    <span className="text-lg font-bold leading-tight">{dayNum(d)}</span>
-                    <span className="text-[10px]">{count} card{count === 1 ? '' : 's'}</span>
-                  </button>
-                );
-              })}
-            </div>
+              {/* mobile: one day at a time */}
+              <div className="lg:hidden">
+                <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1">
+                  {board.days.map((d) => {
+                    const count = displayItems.filter((i) => i.dayDate === d).length;
+                    const active = mobileDay === d;
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setMobileDay(d)}
+                        className={`flex min-w-[4.25rem] flex-col items-center rounded-xl border px-3 py-2 transition ${
+                          active
+                            ? 'border-indigo-500 bg-indigo-50/60 text-indigo-700 dark:border-indigo-500 dark:bg-indigo-950/25 dark:text-indigo-400'
+                            : 'border-slate-200 text-slate-500 dark:border-[#2d2d2d] dark:text-slate-400'
+                        }`}
+                      >
+                        <span className="text-[10px] font-semibold uppercase tracking-wide">
+                          {weekdayShort(d)}
+                        </span>
+                        <span className="text-lg font-bold leading-tight">{dayNum(d)}</span>
+                        <span className="text-[10px]">
+                          {count} card{count === 1 ? '' : 's'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
 
-            {mobileDay ? (
-              <div className="space-y-4">
-                {(MEETING_SLOTS as MeetingSlot[]).map((slot) => (
-                  <HalfSection key={slot} slot={slot} progress={rollUp(visibleItems.filter((i) => i.dayDate === mobileDay && i.slot === slot))}>
-                    <Cell
-                      board={board}
-                      day={mobileDay}
-                      slot={slot}
-                      items={cellItems(mobileDay, slot)}
-                      canWrite={canWrite}
-                      currentUserId={user?.id}
-                      isAdmin={isAdmin}
-                      draggable={false}
-                      defaultProjectId={composerProjectId}
-                      onOpen={openCardDetails}
-                      onError={setError}
-                      onCreated={(item) => {
-                        if (item.taskId && item.project) setOpenTask({ taskId: item.taskId, workspaceId: item.project.workspaceId });
-                      }}
-                      onDragStart={setDragId}
-                      onDrop={onDropInCell}
-                    />
-                  </HalfSection>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          {/* desktop: the full week, split into two half-bands */}
-          <div className="hidden lg:block">
-            <div className="mb-2 grid grid-cols-5 gap-3">
-              {board.days.map((d) => {
-                const isToday = d === ymd(new Date());
-                return (
-                  <div key={d} className="px-1 text-center">
-                    <div
-                      className={`text-xs font-bold uppercase tracking-wide ${
-                        isToday ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'
-                      }`}
-                    >
-                      {weekdayLong(d)}
-                    </div>
-                    <div className={`text-[11px] ${isToday ? 'text-indigo-500 dark:text-indigo-400/80' : 'text-slate-400 dark:text-slate-500'}`}>
-                      {monthDay(d)}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="space-y-4">
-              {(MEETING_SLOTS as MeetingSlot[]).map((slot) => (
-                <HalfSection key={slot} slot={slot} progress={rollUp(visibleItems.filter((i) => i.slot === slot))}>
-                  <div className="grid grid-cols-5 gap-3">
-                    {board.days.map((d) => (
-                      <Cell
-                        key={`${d}-${slot}`}
-                        board={board}
-                        day={d}
+                {mobileDay ? (
+                  <div className="space-y-4">
+                    {(MEETING_SLOTS as MeetingSlot[]).map((slot) => (
+                      <HalfSection
+                        key={slot}
                         slot={slot}
-                        items={cellItems(d, slot)}
-                        canWrite={canWrite}
-                        currentUserId={user?.id}
-                        isAdmin={isAdmin}
-                        draggable
-                        defaultProjectId={composerProjectId}
-                        onOpen={openCardDetails}
-                        onError={setError}
-                        onCreated={(item) => {
-                          if (item.taskId && item.project) setOpenTask({ taskId: item.taskId, workspaceId: item.project.workspaceId });
-                        }}
-                        onDragStart={setDragId}
-                        onDrop={onDropInCell}
-                      />
+                        progress={rollUp(
+                          visibleItems.filter((i) => i.dayDate === mobileDay && i.slot === slot),
+                        )}
+                      >
+                        <Cell
+                          board={board}
+                          day={mobileDay}
+                          slot={slot}
+                          items={cellItems(mobileDay, slot)}
+                          canWrite={canWrite}
+                          currentUserId={user?.id}
+                          isAdmin={isAdmin}
+                          draggable={false}
+                          defaultProjectId={composerProjectId}
+                          onOpen={openCardDetails}
+                          onError={setError}
+                          onCreated={(item) => {
+                            if (item.taskId && item.project)
+                              setOpenTask({
+                                taskId: item.taskId,
+                                workspaceId: item.project.workspaceId,
+                              });
+                          }}
+                          onDragStart={setDragId}
+                          onDrop={onDropInCell}
+                        />
+                      </HalfSection>
                     ))}
                   </div>
-                </HalfSection>
-              ))}
-            </div>
-          </div>
+                ) : null}
+              </div>
+
+              {/* desktop: the full week, split into two half-bands */}
+              <div className="hidden lg:block">
+                <div className="mb-2 grid grid-cols-5 gap-3">
+                  {board.days.map((d) => {
+                    const isToday = d === ymd(new Date());
+                    return (
+                      <div key={d} className="px-1 text-center">
+                        <div
+                          className={`text-xs font-bold uppercase tracking-wide ${
+                            isToday
+                              ? 'text-indigo-600 dark:text-indigo-400'
+                              : 'text-slate-500 dark:text-slate-400'
+                          }`}
+                        >
+                          {weekdayLong(d)}
+                        </div>
+                        <div
+                          className={`text-[11px] ${isToday ? 'text-indigo-500 dark:text-indigo-400/80' : 'text-slate-400 dark:text-slate-500'}`}
+                        >
+                          {monthDay(d)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="space-y-4">
+                  {(MEETING_SLOTS as MeetingSlot[]).map((slot) => (
+                    <HalfSection
+                      key={slot}
+                      slot={slot}
+                      progress={rollUp(visibleItems.filter((i) => i.slot === slot))}
+                    >
+                      <div className="grid grid-cols-5 gap-3">
+                        {board.days.map((d) => (
+                          <Cell
+                            key={`${d}-${slot}`}
+                            board={board}
+                            day={d}
+                            slot={slot}
+                            items={cellItems(d, slot)}
+                            canWrite={canWrite}
+                            currentUserId={user?.id}
+                            isAdmin={isAdmin}
+                            draggable
+                            defaultProjectId={composerProjectId}
+                            onOpen={openCardDetails}
+                            onError={setError}
+                            onCreated={(item) => {
+                              if (item.taskId && item.project)
+                                setOpenTask({
+                                  taskId: item.taskId,
+                                  workspaceId: item.project.workspaceId,
+                                });
+                            }}
+                            onDragStart={setDragId}
+                            onDrop={onDropInCell}
+                          />
+                        ))}
+                      </div>
+                    </HalfSection>
+                  ))}
+                </div>
+              </div>
             </>
           ) : viewMode === 'member' ? (
             <MemberSwimlanes
@@ -559,7 +623,8 @@ export function MeetingBoardPage() {
               defaultProjectId={composerProjectId}
               onOpen={openCardDetails}
               onCreated={(item) => {
-                if (item.taskId && item.project) setOpenTask({ taskId: item.taskId, workspaceId: item.project.workspaceId });
+                if (item.taskId && item.project)
+                  setOpenTask({ taskId: item.taskId, workspaceId: item.project.workspaceId });
               }}
               onError={setError}
               onDragStart={setDragId}
@@ -575,7 +640,8 @@ export function MeetingBoardPage() {
               canWrite={canWrite}
               onOpen={openCardDetails}
               onCreated={(item) => {
-                if (item.taskId && item.project) setOpenTask({ taskId: item.taskId, workspaceId: item.project.workspaceId });
+                if (item.taskId && item.project)
+                  setOpenTask({ taskId: item.taskId, workspaceId: item.project.workspaceId });
               }}
               onError={setError}
               onDragStart={setDragId}
@@ -587,7 +653,9 @@ export function MeetingBoardPage() {
 
       {tab === 'team' ? <TeamPanel board={board} onPickWeek={setWeekStart} /> : null}
 
-      {tab === 'notes' ? <NotesPanel board={board} isAdmin={isAdmin} canWrite={canWrite} onError={setError} /> : null}
+      {tab === 'notes' ? (
+        <NotesPanel board={board} isAdmin={isAdmin} canWrite={canWrite} onError={setError} />
+      ) : null}
 
       {openItem ? (
         <MeetingItemDrawer
@@ -603,7 +671,9 @@ export function MeetingBoardPage() {
           workspaceId={openTask.workspaceId}
           taskId={openTask.taskId}
           onClose={() => setOpenTask(null)}
-          onOpenTask={(taskId) => setOpenTask((current) => (current ? { ...current, taskId } : null))}
+          onOpenTask={(taskId) =>
+            setOpenTask((current) => (current ? { ...current, taskId } : null))
+          }
         />
       ) : null}
     </div>
@@ -615,13 +685,64 @@ function MeetingReportDownloads() {
   const [loading, setLoading] = useState<'pdf' | 'csv' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const download = async (format: 'pdf' | 'csv') => {
-    setLoading(format); setError(null);
+    setLoading(format);
+    setError(null);
     try {
       const blob = await apiBlob(`/meeting-boards/reports/monthly.${format}?month=${month}`);
-      const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `meeting-report-${month}.${format}`; document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
-    } catch (e) { setError(e instanceof ApiRequestError ? e.message : 'Could not download the meeting report'); } finally { setLoading(null); }
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `meeting-report-${month}.${format}`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof ApiRequestError ? e.message : 'Could not download the meeting report');
+    } finally {
+      setLoading(null);
+    }
   };
-  return <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-end sm:justify-between"><div><div className="text-xs font-bold uppercase tracking-wider text-slate-455 dark:text-slate-400">Meeting reports</div><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Monthly delivery, carry-over, team, and project analysis.</p></div><div className="flex flex-wrap items-end gap-2"><label className="text-xs font-semibold text-slate-500 dark:text-slate-400"><span className="mb-1 block">Report month</span><input type="month" value={month} max={new Date().toISOString().slice(0, 7)} onChange={(e) => setMonth(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500 dark:border-[#2d2d2d] dark:bg-[#1a1a1a] dark:text-white" /></label><Button disabled={!month || loading !== null} onClick={() => void download('pdf')} className="px-3 py-2 text-xs">{loading === 'pdf' ? 'Preparing PDF...' : 'Download PDF'}</Button><Button variant="ghost" disabled={!month || loading !== null} onClick={() => void download('csv')} className="px-3 py-2 text-xs">{loading === 'csv' ? 'Preparing CSV...' : 'Download CSV'}</Button></div>{error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}</Card>;
+  return (
+    <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <div className="text-xs font-bold uppercase tracking-wider text-slate-455 dark:text-slate-400">
+          Meeting reports
+        </div>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Monthly delivery, carry-over, team, and project analysis.
+        </p>
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+          <span className="mb-1 block">Report month</span>
+          <input
+            type="month"
+            value={month}
+            max={new Date().toISOString().slice(0, 7)}
+            onChange={(e) => setMonth(e.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500 dark:border-[#2d2d2d] dark:bg-[#1a1a1a] dark:text-white"
+          />
+        </label>
+        <Button
+          disabled={!month || loading !== null}
+          onClick={() => void download('pdf')}
+          className="px-3 py-2 text-xs"
+        >
+          {loading === 'pdf' ? 'Preparing PDF...' : 'Download PDF'}
+        </Button>
+        <Button
+          variant="ghost"
+          disabled={!month || loading !== null}
+          onClick={() => void download('csv')}
+          className="px-3 py-2 text-xs"
+        >
+          {loading === 'csv' ? 'Preparing CSV...' : 'Download CSV'}
+        </Button>
+      </div>
+      {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+    </Card>
+  );
 }
 
 /* ── week header ─────────────────────────────────────────────────────────── */
@@ -659,7 +780,9 @@ function WeekHeader({
     <Card className="p-4 sm:p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Weekly tasks</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+            Weekly tasks
+          </p>
           <div className="flex items-center gap-2">
             <h1 className="text-lg font-bold tracking-tight text-slate-800 dark:text-white sm:text-xl">
               {monthDay(board.weekStart)} – {monthDay(board.weekEnd)}
@@ -698,11 +821,23 @@ function WeekHeader({
             onClick={onPrev}
             className="rounded-lg border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50 dark:border-[#2d2d2d] dark:text-slate-400 dark:hover:bg-[#222]"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <path d="M15 18l-6-6 6-6" />
             </svg>
           </button>
-          <Button variant="ghost" className="px-3 py-2 text-xs" onClick={onToday} disabled={isCurrentWeek}>
+          <Button
+            variant="ghost"
+            className="px-3 py-2 text-xs"
+            onClick={onToday}
+            disabled={isCurrentWeek}
+          >
             Today
           </Button>
           <button
@@ -711,7 +846,14 @@ function WeekHeader({
             onClick={onNext}
             className="rounded-lg border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50 dark:border-[#2d2d2d] dark:text-slate-400 dark:hover:bg-[#222]"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <path d="M9 18l6-6-6-6" />
             </svg>
           </button>
@@ -720,7 +862,11 @@ function WeekHeader({
               variant="ghost"
               className="px-3 py-2 text-xs"
               onClick={() => save({ isLocked: !board.isLocked })}
-              title={board.isLocked ? 'Reopen the week for the team' : 'Lock the week — members can no longer edit'}
+              title={
+                board.isLocked
+                  ? 'Reopen the week for the team'
+                  : 'Lock the week — members can no longer edit'
+              }
             >
               {board.isLocked ? 'Unlock' : 'Lock'}
             </Button>
@@ -730,7 +876,9 @@ function WeekHeader({
 
       <div className="mt-4">
         <div className="mb-1.5 flex items-baseline justify-between">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Everyone this week</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+            Everyone this week
+          </span>
           <span className="text-xs text-slate-400 dark:text-slate-500">
             {board.members.length} member{board.members.length === 1 ? '' : 's'}
           </span>
@@ -764,9 +912,11 @@ function MoodCheckIn({
 
   const save = (mood: MoodLevel, moodNote: string | null) => {
     onError(null);
-    setMood.mutateAsync({ boardId: board.id, input: { mood, note: moodNote } }).catch((e: unknown) => {
-      onError(e instanceof ApiRequestError ? e.message : 'Could not save your mood');
-    });
+    setMood
+      .mutateAsync({ boardId: board.id, input: { mood, note: moodNote } })
+      .catch((e: unknown) => {
+        onError(e instanceof ApiRequestError ? e.message : 'Could not save your mood');
+      });
   };
 
   return (
@@ -785,9 +935,19 @@ function MoodCheckIn({
               disabled={!canWrite}
               onClick={() => save(m, draft.trim() === '' ? null : draft.trim())}
               className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                active ? 'shadow-sm' : 'border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-[#2d2d2d] dark:text-slate-400 dark:hover:bg-[#222]'
+                active
+                  ? 'shadow-sm'
+                  : 'border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-[#2d2d2d] dark:text-slate-400 dark:hover:bg-[#222]'
               }`}
-              style={active ? { borderColor: meta.color, color: meta.color, backgroundColor: `${meta.color}14` } : undefined}
+              style={
+                active
+                  ? {
+                      borderColor: meta.color,
+                      color: meta.color,
+                      backgroundColor: `${meta.color}14`,
+                    }
+                  : undefined
+              }
             >
               <span className="text-base leading-none">{meta.emoji}</span>
               {meta.label}
@@ -933,19 +1093,32 @@ function Cell({
 
 /* ── team & progress ─────────────────────────────────────────────────────── */
 
-function TeamPanel({ board, onPickWeek }: { board: MeetingBoardDetail; onPickWeek: (w: string) => void }) {
+function TeamPanel({
+  board,
+  onPickWeek,
+}: {
+  board: MeetingBoardDetail;
+  onPickWeek: (w: string) => void;
+}) {
   const { data: weeks } = useMeetingWeeks(8);
 
   return (
     <div className="space-y-5">
       <Card className="p-4 sm:p-5">
-        <h2 className="mb-1 text-sm font-bold text-slate-700 dark:text-slate-200">Progress by team</h2>
-        <p className="mb-4 text-xs text-slate-400 dark:text-slate-500">A card counts for every team its owner or tagged people belong to. Select a team to see each person.</p>
+        <h2 className="mb-1 text-sm font-bold text-slate-700 dark:text-slate-200">
+          Progress by team
+        </h2>
+        <p className="mb-4 text-xs text-slate-400 dark:text-slate-500">
+          A card counts for every team its owner or tagged people belong to. Select a team to see
+          each person.
+        </p>
         <TeamProgressCards board={board} />
       </Card>
 
       <Card className="p-4 sm:p-5">
-        <h2 className="mb-4 text-sm font-bold text-slate-700 dark:text-slate-200">Where the week went</h2>
+        <h2 className="mb-4 text-sm font-bold text-slate-700 dark:text-slate-200">
+          Where the week went
+        </h2>
         {board.projects.length === 0 ? (
           <EmptyState
             title="No cards on the board yet"
@@ -981,32 +1154,51 @@ function TeamPanel({ board, onPickWeek }: { board: MeetingBoardDetail; onPickWee
       </Card>
 
       <Card className="p-4 sm:p-5">
-        <h2 className="mb-4 text-sm font-bold text-slate-700 dark:text-slate-200">Per-member progress</h2>
+        <h2 className="mb-4 text-sm font-bold text-slate-700 dark:text-slate-200">
+          Per-member progress
+        </h2>
         {board.members.length === 0 ? (
-          <EmptyState title="Nobody has added anything yet" hint="Cards and mood check-ins will show up here." />
+          <EmptyState
+            title="Nobody has added anything yet"
+            hint="Cards and mood check-ins will show up here."
+          />
         ) : (
           <ul className="space-y-4">
             {board.members.map((m) => {
               const mood = m.mood ? MOOD_META[m.mood.mood] : null;
               return (
-                <li key={m.user.id} className="rounded-xl border border-slate-100 p-3 dark:border-[#2a2a2a]">
+                <li
+                  key={m.user.id}
+                  className="rounded-xl border border-slate-100 p-3 dark:border-[#2a2a2a]"
+                >
                   <div className="flex flex-wrap items-center gap-2.5">
                     <Avatar user={m.user} size="md" />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-slate-800 dark:text-white">{m.user.name}</p>
+                      <p className="truncate text-sm font-semibold text-slate-800 dark:text-white">
+                        {m.user.name}
+                      </p>
                       {m.mood && mood ? (
-                        <p className="mt-0.5 flex items-center gap-1 text-[11px]" style={{ color: mood.color }}>
+                        <p
+                          className="mt-0.5 flex items-center gap-1 text-[11px]"
+                          style={{ color: mood.color }}
+                        >
                           <span>{mood.emoji}</span>
                           <span className="font-semibold">{mood.label}</span>
                           {m.mood.note ? (
-                            <span className="truncate text-slate-400 dark:text-slate-500">— {m.mood.note}</span>
+                            <span className="truncate text-slate-400 dark:text-slate-500">
+                              — {m.mood.note}
+                            </span>
                           ) : null}
                         </p>
                       ) : (
-                        <p className="mt-0.5 text-[11px] text-slate-400 dark:text-slate-500">No mood check-in yet</p>
+                        <p className="mt-0.5 text-[11px] text-slate-400 dark:text-slate-500">
+                          No mood check-in yet
+                        </p>
                       )}
                     </div>
-                    <span className="text-lg font-bold text-slate-700 dark:text-slate-200">{m.progress.percent}%</span>
+                    <span className="text-lg font-bold text-slate-700 dark:text-slate-200">
+                      {m.progress.percent}%
+                    </span>
                   </div>
 
                   <div className="mt-3">
@@ -1014,10 +1206,12 @@ function TeamPanel({ board, onPickWeek }: { board: MeetingBoardDetail; onPickWee
                   </div>
 
                   <div className="mt-3 grid grid-cols-2 gap-3">
-                    {([
-                      { label: MEETING_SLOT_LABELS.FIRST, p: m.firstHalf },
-                      { label: MEETING_SLOT_LABELS.SECOND, p: m.secondHalf },
-                    ] as { label: string; p: BoardProgress }[]).map((h) => (
+                    {(
+                      [
+                        { label: MEETING_SLOT_LABELS.FIRST, p: m.firstHalf },
+                        { label: MEETING_SLOT_LABELS.SECOND, p: m.secondHalf },
+                      ] as { label: string; p: BoardProgress }[]
+                    ).map((h) => (
                       <div key={h.label}>
                         <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
                           {h.label} · {h.p.done}/{h.p.total}
@@ -1054,14 +1248,21 @@ function TeamPanel({ board, onPickWeek }: { board: MeetingBoardDetail; onPickWee
                     <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
                       Week of {monthDay(w.weekStart)}
                     </span>
-                    {w.title ? <span className="truncate text-xs text-slate-400 dark:text-slate-500">{w.title}</span> : null}
-                    <span className="ml-auto text-xs font-semibold text-slate-500 dark:text-slate-400">{w.progress.percent}%</span>
+                    {w.title ? (
+                      <span className="truncate text-xs text-slate-400 dark:text-slate-500">
+                        {w.title}
+                      </span>
+                    ) : null}
+                    <span className="ml-auto text-xs font-semibold text-slate-500 dark:text-slate-400">
+                      {w.progress.percent}%
+                    </span>
                   </div>
                   <div className="mt-1.5">
                     <ProgressBar progress={w.progress} size="sm" showLabel={false} />
                   </div>
                   <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
-                    {w.memberCount} member{w.memberCount === 1 ? '' : 's'} · {w.progress.total} cards
+                    {w.memberCount} member{w.memberCount === 1 ? '' : 's'} · {w.progress.total}{' '}
+                    cards
                     {w.isLocked ? ' · locked' : ''}
                   </p>
                 </button>
@@ -1102,7 +1303,9 @@ function NotesPanel({
 
   const guard = (p: Promise<unknown>) => {
     onError(null);
-    p.catch((e: unknown) => onError(e instanceof ApiRequestError ? e.message : 'Something went wrong'));
+    p.catch((e: unknown) =>
+      onError(e instanceof ApiRequestError ? e.message : 'Something went wrong'),
+    );
   };
 
   return (
@@ -1111,23 +1314,32 @@ function NotesPanel({
         <h2 className="mb-2 text-sm font-bold text-slate-700 dark:text-slate-200">Agenda</h2>
         {isAdmin ? (
           <div>
-          <textarea
-            value={agenda}
-            rows={4}
-            placeholder="What are we covering in this week's meeting?"
-            onChange={(e) => setAgenda(e.target.value)}
-            onBlur={() => {
-              const next = agenda.trim();
-              if (next !== (board.agenda ?? '')) {
-                guard(updateBoard.mutateAsync({ boardId: board.id, patch: { agenda: next === '' ? null : next } }));
-              }
-            }}
-            className="w-full resize-y rounded-lg border border-slate-200 bg-white/80 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 dark:border-[#2d2d2d] dark:bg-[#1a1a1a] dark:text-white dark:placeholder-slate-500"
-          />
-          <div className="mt-2"><TextLinkButton value={agenda} onChange={setAgenda} /></div>
+            <textarea
+              value={agenda}
+              rows={4}
+              placeholder="What are we covering in this week's meeting?"
+              onChange={(e) => setAgenda(e.target.value)}
+              onBlur={() => {
+                const next = agenda.trim();
+                if (next !== (board.agenda ?? '')) {
+                  guard(
+                    updateBoard.mutateAsync({
+                      boardId: board.id,
+                      patch: { agenda: next === '' ? null : next },
+                    }),
+                  );
+                }
+              }}
+              className="w-full resize-y rounded-lg border border-slate-200 bg-white/80 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 dark:border-[#2d2d2d] dark:bg-[#1a1a1a] dark:text-white dark:placeholder-slate-500"
+            />
+            <div className="mt-2">
+              <TextLinkButton value={agenda} onChange={setAgenda} />
+            </div>
           </div>
         ) : board.agenda ? (
-          <p className="whitespace-pre-wrap break-words text-sm text-slate-600 dark:text-slate-350">{linkify(board.agenda)}</p>
+          <p className="whitespace-pre-wrap break-words text-sm text-slate-600 dark:text-slate-350">
+            {linkify(board.agenda)}
+          </p>
         ) : (
           <p className="text-sm text-slate-400 dark:text-slate-500">No agenda set for this week.</p>
         )}
@@ -1151,8 +1363,12 @@ function NotesPanel({
                   <Avatar user={n.author} size="sm" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline gap-2">
-                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{n.author.name}</span>
-                      <span className="text-[10px] text-slate-400 dark:text-slate-500">{stamp(n.createdAt)}</span>
+                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                        {n.author.name}
+                      </span>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                        {stamp(n.createdAt)}
+                      </span>
                     </div>
                     {editingId === n.id ? (
                       <div className="mt-1.5">
@@ -1167,19 +1383,26 @@ function NotesPanel({
                             className="px-2.5 py-1 text-xs"
                             onClick={() => {
                               const body = editingBody.trim();
-                              if (body) guard(updateNote.mutateAsync({ noteId: n.id, patch: { body } }));
+                              if (body)
+                                guard(updateNote.mutateAsync({ noteId: n.id, patch: { body } }));
                               setEditingId(null);
                             }}
                           >
                             Save
                           </Button>
-                          <Button variant="ghost" className="px-2.5 py-1 text-xs" onClick={() => setEditingId(null)}>
+                          <Button
+                            variant="ghost"
+                            className="px-2.5 py-1 text-xs"
+                            onClick={() => setEditingId(null)}
+                          >
                             Cancel
                           </Button>
                         </div>
                       </div>
                     ) : (
-                      <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-slate-600 dark:text-slate-350">{linkify(n.body)}</p>
+                      <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-slate-600 dark:text-slate-350">
+                        {linkify(n.body)}
+                      </p>
                     )}
                     {(mine || isAdmin) && editingId !== n.id ? (
                       <div className="mt-1 flex gap-3 text-[11px] font-medium text-slate-400 dark:text-slate-500">
@@ -1227,14 +1450,20 @@ function NotesPanel({
               onClick={() => {
                 const body = draft.trim();
                 if (!body) return;
-                guard(createNote.mutateAsync({ boardId: board.id, input: { body } }).then(() => setDraft('')));
+                guard(
+                  createNote
+                    .mutateAsync({ boardId: board.id, input: { body } })
+                    .then(() => setDraft('')),
+                );
               }}
             >
               Post
             </Button>
           </div>
         ) : (
-          <p className="text-xs text-slate-400 dark:text-slate-500">This week is locked — notes are read-only.</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500">
+            This week is locked — notes are read-only.
+          </p>
         )}
       </Card>
     </div>

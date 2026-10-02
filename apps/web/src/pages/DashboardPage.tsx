@@ -574,7 +574,8 @@ function AdminView() {
       ? data.mostActiveWorkspace.id
       : '';
   const firstWorkspace = busiest || (workspaces ?? []).find((w) => !w.isArchived)?.id || '';
-  const selectedWorkspaceId = requestedWorkspace || filters.workspaceId || firstWorkspace;
+  const selectedWorkspaceId =
+    workspaceContextIds[0] || requestedWorkspace || filters.workspaceId || firstWorkspace;
   const hasWorkspaceScope = workspaceContextIds.length > 0;
   const metricFilters: MetricFilters = { ...filters, workspaceId: selectedWorkspaceId };
   const changeFilters = (next: MetricFilters) => {
