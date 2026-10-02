@@ -33,6 +33,7 @@ export function ProjectLanes({
   currentUserId,
   canWrite,
   onOpen,
+  onCreated,
   onError,
   onDragStart,
   onDropOnProject,
@@ -44,6 +45,7 @@ export function ProjectLanes({
   currentUserId?: string;
   canWrite: boolean;
   onOpen: (id: string) => void;
+  onCreated: (item: BoardItem) => void;
   onError: (m: string | null) => void;
   onDragStart: (id: string | null) => void;
   onDropOnProject: (projectId: string | null, day: string, slot: MeetingSlot) => void;
@@ -151,6 +153,7 @@ export function ProjectLanes({
                         currentUserId={currentUserId}
                         canWrite={canWrite}
                         onOpen={onOpen}
+                        onCreated={onCreated}
                         onError={onError}
                         onDragStart={onDragStart}
                         onDropOnProject={onDropOnProject}
@@ -183,6 +186,7 @@ function ProjectLaneCell({
   currentUserId,
   canWrite,
   onOpen,
+  onCreated,
   onError,
   onDragStart,
   onDropOnProject,
@@ -196,6 +200,7 @@ function ProjectLaneCell({
   currentUserId?: string;
   canWrite: boolean;
   onOpen: (id: string) => void;
+  onCreated: (item: BoardItem) => void;
   onError: (m: string | null) => void;
   onDragStart: (id: string | null) => void;
   onDropOnProject: (projectId: string | null, day: string, slot: MeetingSlot) => void;
@@ -245,7 +250,7 @@ function ProjectLaneCell({
         })}
       </div>
 
-      {canWrite ? (
+      {canWrite && projectId ? (
         <BoardCardComposer
           boardId={board.id}
           dayDate={day}
@@ -254,6 +259,7 @@ function ProjectLaneCell({
           lockProject
           size="sm"
           onError={onError}
+          onCreated={onCreated}
         />
       ) : null}
     </div>

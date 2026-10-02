@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { BoardItem, MeetingSlot } from '@task-tracker/shared';
+import { TASK_SIZE_LABELS, TASK_SIZES, type BoardItem, type MeetingSlot, type TaskSize } from '@task-tracker/shared';
 import { useCreateBoardItem } from '../hooks/useMeetings';
 import { ApiRequestError } from '../lib/api';
 import { BoardProjectSelect } from './BoardProjectSelect';
@@ -40,17 +40,29 @@ export function BoardCardComposer({
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState('');
   const [projectId, setProjectId] = useState(defaultProjectId);
+  const [dueDate, setDueDate] = useState('');
+  const [workScale, setWorkScale] = useState<TaskSize | ''>('');
   const createItem = useCreateBoardItem();
 
   const close = () => {
     setAdding(false);
     setDraft('');
     setProjectId(defaultProjectId);
+    setDueDate('');
+    setWorkScale('');
   };
 
   const submit = () => {
     const title = draft.trim();
     if (!title) return close();
+    if (!projectId) {
+      onError('Choose a project before adding a weekly task. This creates the linked task and opens its details.');
+      return;
+    }
+    if (!dueDate || !workScale) {
+      onError('Choose both a due date and work scale before adding a weekly task.');
+      return;
+    }
     onError(null);
     // Cleared up front so a blur landing before the POST resolves can't double-submit.
     setDraft('');
@@ -62,7 +74,9 @@ export function BoardCardComposer({
           slot,
           title,
           ...(ownerId ? { userId: ownerId } : {}),
-          ...(projectId ? { projectId } : {}),
+          projectId,
+          dueDate: new Date(`${dueDate}T12:00:00`).toISOString(),
+          size: workScale,
         },
       })
       .then((item) => onCreated?.(item))
@@ -131,9 +145,22 @@ export function BoardCardComposer({
           value={projectId}
           onChange={setProjectId}
           size="sm"
-          unfiledLabel="No project"
+          unfiledLabel="Choose project for task"
         />
       )}
+      <div className="grid grid-cols-2 gap-1.5">
+        <label className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+          Due date
+          <input aria-label="Due date" type="date" required value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="mt-0.5 w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-[11px] dark:border-[#3a3a3a] dark:bg-[#1a1a1a] dark:text-white" />
+        </label>
+        <label className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+          Work scale
+          <select aria-label="Work scale" required value={workScale} onChange={(e) => setWorkScale(e.target.value as TaskSize)} className="mt-0.5 w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-[11px] dark:border-[#3a3a3a] dark:bg-[#1a1a1a] dark:text-white">
+            <option value="" disabled>Choose scale</option>
+            {TASK_SIZES.map((s) => <option key={s} value={s}>{TASK_SIZE_LABELS[s]}</option>)}
+          </select>
+        </label>
+      </div>
     </div>
   );
 }

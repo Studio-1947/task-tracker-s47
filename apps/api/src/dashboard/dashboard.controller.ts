@@ -27,8 +27,8 @@ export class DashboardController {
   /** Cross-workspace stats for admins (PRD §3.6). */
   @Get('admin/dashboard')
   @Roles(Role.ADMIN)
-  admin() {
-    return this.dashboard.admin();
+  admin(@Query('workspaceId') workspaceId?: string) {
+    return this.dashboard.admin(workspaceId);
   }
 
   @Get('admin/reports/monthly.csv')

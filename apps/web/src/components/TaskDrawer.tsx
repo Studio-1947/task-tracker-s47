@@ -4,10 +4,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   PRIORITIES,
   TASK_STATUSES,
+  TASK_SIZES,
+  TASK_SIZE_LABELS,
   type LabelRef,
   type Priority,
   type SubtaskRef,
   type TaskStatus,
+  type TaskSize,
   type UpdateTaskInput,
   type UserRef,
 } from '@task-tracker/shared';
@@ -105,7 +108,7 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
     e.preventDefault();
     const title = subtaskTitle.trim();
     if (!title) return;
-    createSubtask.mutate({ title }, { onSuccess: () => setSubtaskTitle('') });
+    createSubtask.mutate({ title, size: 'SMALL' }, { onSuccess: () => setSubtaskTitle('') });
   };
 
   return (
@@ -137,7 +140,7 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-850 px-2 py-0.5 rounded text-center">{task.ref}</span>
                   <span className="truncate text-xs font-semibold text-slate-500 dark:text-slate-400">{task.projectName}</span>
-                  <SizeChip baseline={task.baselineEstimateMinutes} current={task.currentEstimateMinutes} />
+                  <SizeChip size={task.size} />
                   {task.isArchived ? (
                     <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
                       Archived
@@ -222,6 +225,22 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                     </option>
                   ))}
                 </select>
+              </label>
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
+                <span className="mb-1.5 block">Work scale</span>
+                <select
+                  aria-label="Work scale"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-800 px-3 py-2 bg-white dark:bg-[#252525] dark:text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all font-semibold text-sm"
+                  value={task.size}
+                  onChange={(e) => patch({ size: e.target.value as TaskSize })}
+                >
+                  {TASK_SIZES.map((s) => (
+                    <option key={s} value={s}>
+                      {TASK_SIZE_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 normal-case tracking-normal text-[11px] font-medium text-slate-400 dark:text-slate-500">A relative classification; use the effort forecast for actual time.</p>
               </label>
               <div className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
                 <span className="mb-1.5 block">Due date</span>

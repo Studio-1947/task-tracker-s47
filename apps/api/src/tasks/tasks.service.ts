@@ -262,6 +262,7 @@ export class TasksService {
       childScope: t.childScope as TaskListItem['childScope'],
       status: t.status as TaskListItem['status'],
       priority: t.priority as TaskListItem['priority'],
+      size: t.size as TaskListItem['size'],
       dueDate: t.dueDate ? t.dueDate.toISOString() : null,
       originalDueDate: t.originalDueDate ? t.originalDueDate.toISOString() : null,
       overdueWorkingMinutes: this.overdueWorkingMinutesFor(t.dueDate, t.status, calendar, now),
@@ -359,6 +360,7 @@ export class TasksService {
         title: r.task.title,
         status: r.task.status as TaskStatus,
         priority: r.task.priority as Priority,
+        size: r.task.size as import('@task-tracker/shared').TaskSize,
         assignees: assignees.get(r.task.id) ?? [],
         dueDate: r.task.dueDate ? r.task.dueDate.toISOString() : null,
       });
@@ -473,6 +475,7 @@ export class TasksService {
           childScope: input.childScope ?? 'REQUIRED',
           status: input.status ?? 'TODO',
           priority: input.priority ?? 'MEDIUM',
+          size: input.size,
           dueDate: input.dueDate ? new Date(input.dueDate) : null,
           originalDueDate: input.dueDate ? new Date(input.dueDate) : null,
           ownerId: input.ownerId ?? null,
@@ -503,6 +506,7 @@ export class TasksService {
             title: task.title,
             status: task.status,
             priority: task.priority,
+            size: task.size,
             dueDate: task.dueDate?.toISOString() ?? null,
             assigneeIds,
             ownerId: input.ownerId ?? null,
@@ -554,6 +558,7 @@ export class TasksService {
       projectId: parent.projectId,
       parentTaskId: parent.id,
       title: input.title,
+      size: 'SMALL',
       assigneeIds: input.assigneeIds,
       dueDate: input.dueDate,
     });
@@ -791,6 +796,10 @@ export class TasksService {
       if (input.priority !== undefined && input.priority !== current.priority) {
         patch.priority = input.priority;
         audits.push({ action: AuditAction.PRIORITY_CHANGED, before: current.priority, after: input.priority });
+      }
+      if (input.size !== undefined && input.size !== current.size) {
+        patch.size = input.size;
+        audits.push({ action: AuditAction.DESCRIPTION_CHANGED, before: { size: current.size }, after: { size: input.size } });
       }
       if (input.dueDate !== undefined) {
         const nextDue = input.dueDate ? new Date(input.dueDate) : null;

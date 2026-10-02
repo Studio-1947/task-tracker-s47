@@ -50,7 +50,7 @@ async function main() {
     const added = await call(token, 'POST', `/workspaces/${workspace.id}/members`, { add: [me.id, ...(other ? [other.id] : [])] });
     assert(added.status === 201, 'owner and reviewer added to the workspace', `${added.status} ${JSON.stringify(added.body)}`);
     const mk = async (extra) => {
-      const r = await call(token, 'POST', `/workspaces/${workspace.id}/tasks`, { projectId: project.id, ...extra });
+      const r = await call(token, 'POST', `/workspaces/${workspace.id}/tasks`, { projectId: project.id, size: 'SMALL', ...extra });
       assert(r.status === 201, `fixture task "${extra.title}" created`, `${r.status} ${JSON.stringify(r.body)}`);
       return r;
     };
@@ -189,7 +189,7 @@ async function main() {
 
     // ---- an estimate-less subtask must not erase the parent's estimates ----------------
     const par = await mk({ title: 'Parent with its own estimate', ownerId: me.id, baselineEstimateMinutes: 150 });
-    const kid = await call(token, 'POST', `/tasks/${par.body.id}/subtasks`, { title: 'Subtask with no estimate yet' });
+    const kid = await call(token, 'POST', `/tasks/${par.body.id}/subtasks`, { title: 'Subtask with no estimate yet', size: 'SMALL' });
     assert(kid.status === 201, 'subtask without an estimate created', JSON.stringify(kid.body));
     const parAfter = (await call(token, 'GET', `/tasks/${par.body.id}`)).body;
     assert(parAfter.baselineEstimateMinutes === 150 && parAfter.currentEstimateMinutes === 150 && parAfter.remainingEstimateMinutes === 150, 'the parent keeps its own estimates when its only subtask has none', `${parAfter.baselineEstimateMinutes}/${parAfter.currentEstimateMinutes}/${parAfter.remainingEstimateMinutes}`);

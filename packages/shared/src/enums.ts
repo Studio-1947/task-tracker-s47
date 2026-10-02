@@ -49,6 +49,20 @@ export const Priority = {
 export type Priority = (typeof Priority)[keyof typeof Priority];
 export const PRIORITIES = Object.values(Priority);
 
+export const TaskSize = {
+  SMALL: 'SMALL',
+  MEDIUM: 'MEDIUM',
+  LARGE: 'LARGE',
+} as const;
+export type TaskSize = (typeof TaskSize)[keyof typeof TaskSize];
+export const TASK_SIZES = Object.values(TaskSize);
+
+export const TASK_SIZE_LABELS: Record<TaskSize, string> = {
+  SMALL: 'Small',
+  MEDIUM: 'Medium',
+  LARGE: 'Large',
+};
+
 /** Leave request lifecycle. */
 export const LeaveStatus = {
   PENDING: 'PENDING',

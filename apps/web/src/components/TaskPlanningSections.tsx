@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TASK_SIZE_LABELS, taskSizeLabel, type TaskDetail } from '@task-tracker/shared';
+import { TASK_SIZE_LABELS, type TaskDetail } from '@task-tracker/shared';
 import {
   useAllocateTimeEntry,
   useReviseEstimate,
@@ -20,25 +20,14 @@ const h3Cls = 'text-xs font-bold uppercase tracking-wider text-slate-550 dark:te
 const linkBtn = 'text-xs font-semibold text-indigo-600 hover:underline dark:text-indigo-400';
 const errText = (e: unknown, fallback: string) => (e instanceof ApiRequestError ? e.message : fallback);
 
-/** Size is derived from minutes (spec §4): show the original label and, if the approved estimate moved it, the current one. */
-export function SizeChip({ baseline, current }: { baseline: number | null; current: number | null }) {
-  const original = taskSizeLabel(baseline);
-  const now = taskSizeLabel(current ?? baseline);
-  if (!now) {
-    return (
-      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-800">
-        No estimate
-      </span>
-    );
-  }
-  const moved = original && original !== now;
+/** Display the task's relative work scale; estimates remain the source of truth for duration. */
+export function SizeChip({ size }: { size: import('@task-tracker/shared').TaskSize }) {
+  if (!size) return null;
   return (
     <span
-      title={moved ? `Originally ${TASK_SIZE_LABELS[original]}` : undefined}
       className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-700 dark:bg-violet-950/40 dark:text-violet-300"
     >
-      {TASK_SIZE_LABELS[now]}
-      {moved ? ` (was ${TASK_SIZE_LABELS[original]})` : ''}
+      Scale: {TASK_SIZE_LABELS[size] ?? size}
     </span>
   );
 }

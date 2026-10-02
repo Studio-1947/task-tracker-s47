@@ -108,6 +108,7 @@ export class DashboardService {
           title: tasks.title,
           status: tasks.status,
           priority: tasks.priority,
+          size: tasks.size,
           dueDate: tasks.dueDate,
           workspaceId: tasks.workspaceId,
           workspaceName: workspaces.name,
@@ -130,6 +131,7 @@ export class DashboardService {
       title: r.title,
       status: r.status as TaskStatus,
       priority: r.priority as OverdueTaskRow['priority'],
+      size: r.size as import('@task-tracker/shared').TaskSize,
       dueDate: r.dueDate!.toISOString(),
       workspaceId: r.workspaceId,
       workspaceName: r.workspaceName,
@@ -141,7 +143,7 @@ export class DashboardService {
   }
 
   /** Tasks completed per day for the current Mon–Sun week (UTC), zero-filled. */
-  private async weeklyCompletion(): Promise<WeeklyCompletionPoint[]> {
+  private async weeklyCompletion(workspaceIds?: string[]): Promise<WeeklyCompletionPoint[]> {
     const now = new Date();
     const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     // getUTCDay(): Sun=0..Sat=6 — shift so the week starts on Monday.
@@ -153,7 +155,7 @@ export class DashboardService {
         c: count(),
       })
       .from(tasks)
-      .where(and(eq(tasks.isArchived, false), gte(tasks.completedAt, monday)))
+      .where(and(eq(tasks.isArchived, false), gte(tasks.completedAt, monday), ...(workspaceIds ? [inArray(tasks.workspaceId, workspaceIds)] : [])))
       .groupBy(sql`1`);
     const byDate = new Map(rows.map((r) => [r.day, Number(r.c)]));
 
@@ -167,7 +169,7 @@ export class DashboardService {
   }
 
   /** Open tasks currently assigned per user, busiest first. */
-  private async teamWorkload(): Promise<WorkloadEntry[]> {
+  private async teamWorkload(workspaceIds?: string[]): Promise<WorkloadEntry[]> {
     const rows = await this.db
       .select({
         id: users.id,
@@ -179,7 +181,7 @@ export class DashboardService {
       .from(taskAssignees)
       .innerJoin(tasks, eq(tasks.id, taskAssignees.taskId))
       .innerJoin(users, eq(users.id, taskAssignees.userId))
-      .where(and(eq(tasks.isArchived, false), ne(tasks.status, 'DONE'), eq(users.isActive, true)))
+      .where(and(eq(tasks.isArchived, false), ne(tasks.status, 'DONE'), eq(users.isActive, true), ...(workspaceIds ? [inArray(tasks.workspaceId, workspaceIds)] : [])))
       .groupBy(users.id, users.name, users.email, users.avatarKey)
       .orderBy(desc(count()))
       .limit(10);
@@ -190,7 +192,7 @@ export class DashboardService {
   }
 
   /** Per-workspace task totals + completion %, with a recent-activity flag. */
-  private async workspacePerformance(): Promise<WorkspacePerformance[]> {
+  private async workspacePerformance(workspaceIds?: string[]): Promise<WorkspacePerformance[]> {
     const [rows, activeRows, blockedRows, reviewRows, calendar, staleUpdates] = await Promise.all([
       this.db
         .select({
@@ -204,7 +206,7 @@ export class DashboardService {
         })
         .from(workspaces)
         .leftJoin(tasks, eq(tasks.workspaceId, workspaces.id))
-        .where(eq(workspaces.isArchived, false))
+        .where(and(eq(workspaces.isArchived, false), ...(workspaceIds ? [inArray(workspaces.id, workspaceIds)] : [])))
         .groupBy(workspaces.id, workspaces.name, workspaces.color)
         .orderBy(asc(workspaces.name)),
       this.db
@@ -276,7 +278,7 @@ export class DashboardService {
   }
 
   /** Open tasks due within the next 14 days, soonest first. */
-  private async upcomingDeadlines(): Promise<UpcomingDeadline[]> {
+  private async upcomingDeadlines(workspaceIds?: string[]): Promise<UpcomingDeadline[]> {
     const now = new Date();
     const horizon = new Date(now.getTime() + 14 * 86_400_000);
     const rows = await this.db
@@ -299,6 +301,7 @@ export class DashboardService {
           isNotNull(tasks.dueDate),
           gte(tasks.dueDate, now),
           lt(tasks.dueDate, horizon),
+          ...(workspaceIds ? [inArray(tasks.workspaceId, workspaceIds)] : []),
         ),
       )
       .orderBy(asc(tasks.dueDate))
@@ -314,10 +317,12 @@ export class DashboardService {
     }));
   }
 
-  async admin(): Promise<AdminDashboard> {
+  async admin(workspaceId?: string): Promise<AdminDashboard> {
+    if (workspaceId) await this.workspaceName(workspaceId);
+    const workspaceIds = workspaceId ? [workspaceId] : undefined;
     const [[{ totalWorkspaces } = { totalWorkspaces: 0 }], [{ totalUsers } = { totalUsers: 0 }]] =
       await Promise.all([
-        this.db.select({ totalWorkspaces: count() }).from(workspaces).where(eq(workspaces.isArchived, false)),
+        this.db.select({ totalWorkspaces: count() }).from(workspaces).where(and(eq(workspaces.isArchived, false), ...(workspaceIds ? [inArray(workspaces.id, workspaceIds)] : []))),
         this.db.select({ totalUsers: count() }).from(users).where(eq(users.isActive, true)),
       ]);
 
@@ -331,19 +336,20 @@ export class DashboardService {
       workspacePerformance,
       upcomingDeadlines,
     ] = await Promise.all([
-      this.statusCounts(),
-      this.overdueSummary(),
-      this.audit.globalActivity(1, 10),
+      this.statusCounts(workspaceIds),
+      this.overdueSummary(workspaceIds),
+      workspaceIds ? this.audit.workspaceActivity(workspaceId!, 1, 10) : this.audit.globalActivity(1, 10),
       this.db
         .select({ workspaceId: auditLogs.workspaceId, c: count() })
         .from(auditLogs)
+        .where(workspaceIds ? inArray(auditLogs.workspaceId, workspaceIds) : undefined)
         .groupBy(auditLogs.workspaceId)
         .orderBy(desc(count()))
         .limit(1),
-      this.weeklyCompletion(),
-      this.teamWorkload(),
-      this.workspacePerformance(),
-      this.upcomingDeadlines(),
+      this.weeklyCompletion(workspaceIds),
+      this.teamWorkload(workspaceIds),
+      this.workspacePerformance(workspaceIds),
+      this.upcomingDeadlines(workspaceIds),
     ]);
 
     let mostActiveWorkspace: AdminDashboard['mostActiveWorkspace'] = null;
@@ -386,6 +392,7 @@ export class DashboardService {
                 title: tasks.title,
                 status: tasks.status,
                 priority: tasks.priority,
+                size: tasks.size,
                 dueDate: tasks.dueDate,
                 workspaceId: tasks.workspaceId,
                 workspaceName: workspaces.name,
@@ -415,6 +422,7 @@ export class DashboardService {
             title: r.title,
             status: r.status as TaskStatus,
             priority: r.priority as MyTaskItem['priority'],
+            size: r.size as import('@task-tracker/shared').TaskSize,
             dueDate: r.dueDate ? r.dueDate.toISOString() : null,
             workspaceId: r.workspaceId,
             workspaceName: r.workspaceName,

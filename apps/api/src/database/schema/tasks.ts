@@ -14,7 +14,7 @@ import {
   varchar,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
-import { attachmentKindEnum, priorityEnum, taskStatusEnum } from './enums';
+import { attachmentKindEnum, priorityEnum, taskStatusEnum, taskSizeEnum } from './enums';
 import { projects } from './projects';
 import { users } from './users';
 import { workspaces } from './workspaces';
@@ -40,6 +40,7 @@ export const tasks = pgTable(
     childScope: varchar('child_scope', { length: 12 }).notNull().default('REQUIRED'),
     status: taskStatusEnum('status').notNull().default('TODO'),
     priority: priorityEnum('priority').notNull().default('MEDIUM'),
+    size: taskSizeEnum('size').notNull().default('SMALL'),
     dueDate: timestamp('due_date', { withTimezone: true }),
     originalDueDate: timestamp('original_due_date', { withTimezone: true }),
     ownerId: uuid('owner_id').references(() => users.id, { onDelete: 'set null' }),

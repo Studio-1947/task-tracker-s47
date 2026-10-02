@@ -205,7 +205,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
     e.preventDefault();
     if (!newTitle.trim() || !targetProjectId) return;
     createTask.mutate(
-      { projectId: targetProjectId, title: newTitle },
+      { projectId: targetProjectId, title: newTitle, size: 'SMALL' },
       { onSuccess: () => setNewTitle('') },
     );
   };

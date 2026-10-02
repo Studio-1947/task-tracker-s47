@@ -10,6 +10,7 @@ import type {
   Role,
   TaskStatus,
   NotificationType,
+  TaskSize,
 } from './enums';
 
 export type GenderType = 'MALE' | 'FEMALE' | 'OTHER' | 'UNSPECIFIED';
@@ -169,6 +170,7 @@ export interface TaskListItem {
   childScope: 'REQUIRED' | 'OPTIONAL' | 'CANCELLED';
   status: TaskStatus;
   priority: Priority;
+  size: TaskSize;
   dueDate: string | null;
   /** First committed due date; retained when the current due date is revised. */
   originalDueDate: string | null;
@@ -206,6 +208,7 @@ export interface SubtaskRef {
   title: string;
   status: TaskStatus;
   priority: Priority;
+  size: TaskSize;
   assignees: UserRef[];
   dueDate: string | null;
   acceptanceCriteria?: string | null;
@@ -302,6 +305,7 @@ export interface MyTaskItem {
   title: string;
   status: TaskStatus;
   priority: Priority;
+  size: TaskSize;
   dueDate: string | null;
   workspaceId: string;
   workspaceName: string;
@@ -366,6 +370,7 @@ export interface OverdueTaskRow {
   title: string;
   status: TaskStatus;
   priority: Priority;
+  size: TaskSize;
   dueDate: string;
   workspaceId: string;
   workspaceName: string;

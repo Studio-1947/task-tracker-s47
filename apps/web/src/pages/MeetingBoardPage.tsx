@@ -558,6 +558,9 @@ export function MeetingBoardPage() {
               canWrite={canWrite}
               defaultProjectId={composerProjectId}
               onOpen={openCardDetails}
+              onCreated={(item) => {
+                if (item.taskId && item.project) setOpenTask({ taskId: item.taskId, workspaceId: item.project.workspaceId });
+              }}
               onError={setError}
               onDragStart={setDragId}
               onDropOnMember={onDropOnMember}
@@ -571,6 +574,9 @@ export function MeetingBoardPage() {
               currentUserId={user?.id}
               canWrite={canWrite}
               onOpen={openCardDetails}
+              onCreated={(item) => {
+                if (item.taskId && item.project) setOpenTask({ taskId: item.taskId, workspaceId: item.project.workspaceId });
+              }}
               onError={setError}
               onDragStart={setDragId}
               onDropOnProject={onDropOnProject}

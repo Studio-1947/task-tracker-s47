@@ -55,7 +55,7 @@ async function main() {
     const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
     for (let i = 0; i < 3; i += 1) {
       const created = await call(token, 'POST', `/workspaces/${workspace.id}/tasks`, {
-        projectId: project.id, title: `Overdue metric task ${i + 1}`, dueDate: threeDaysAgo,
+        projectId: project.id, title: `Overdue metric task ${i + 1}`, dueDate: threeDaysAgo, size: 'SMALL',
       });
       assert(created.status === 201, `overdue task ${i + 1} created`, JSON.stringify(created.body));
       createdTaskIds.push(created.body.id);

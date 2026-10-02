@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   TASK_STATUSES,
   type AuditEntry,
@@ -404,21 +404,34 @@ function UpcomingDeadlinesCard({ items }: { items: UpcomingDeadline[] }) {
 type AdminData = NonNullable<ReturnType<typeof useAdminDashboard>['data']>;
 
 function AdminView() {
-  const { data, isLoading, error } = useAdminDashboard(true);
   const { data: workspaces } = useWorkspaces();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [filters, setFilters] = useState<MetricFilters>({ workspaceId: '', period: '30d', basis: 'ORIGINAL' });
+  const requestedWorkspaceId = searchParams.get('workspace') ?? '';
+  const activeWorkspaces = (workspaces ?? []).filter((w) => !w.isArchived);
+  const requestedWorkspace = activeWorkspaces.some((w) => w.id === requestedWorkspaceId) ? requestedWorkspaceId : '';
+  const { data, isLoading, error } = useAdminDashboard(true, requestedWorkspace || undefined);
   // Default the delivery metrics to the workspace people are actually working in, not whichever sorts first alphabetically.
-  const activeIds = new Set((workspaces ?? []).filter((w) => !w.isArchived).map((w) => w.id));
+  const activeIds = new Set(activeWorkspaces.map((w) => w.id));
   const busiest = data?.mostActiveWorkspace && activeIds.has(data.mostActiveWorkspace.id) ? data.mostActiveWorkspace.id : '';
   const firstWorkspace = busiest || (workspaces ?? []).find((w) => !w.isArchived)?.id || '';
-  const metricFilters: MetricFilters = { ...filters, workspaceId: filters.workspaceId || firstWorkspace };
+  const selectedWorkspaceId = requestedWorkspace || filters.workspaceId || firstWorkspace;
+  const metricFilters: MetricFilters = { ...filters, workspaceId: selectedWorkspaceId };
+  const changeFilters = (next: MetricFilters) => {
+    setFilters(next);
+    if (next.workspaceId !== selectedWorkspaceId) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set('workspace', next.workspaceId);
+      setSearchParams(nextParams, { replace: true });
+    }
+  };
   if (isLoading) return <Spinner />;
   if (error) return <div className="mt-6"><ErrorState message={error instanceof ApiRequestError ? error.message : 'Failed to load'} /></div>;
   if (!data) return null;
 
   return (
     <div className="mt-6 space-y-6 animate-fade-in">
-      <MetricFilterBar value={metricFilters} onChange={setFilters} />
+      <MetricFilterBar value={metricFilters} onChange={changeFilters} />
 
       {/* Exceptions first: what needs a decision today. */}
       <section aria-label="Needs attention" className="space-y-6">

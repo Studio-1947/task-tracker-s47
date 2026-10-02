@@ -2,10 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AdminDashboard, MemberDashboard } from '@task-tracker/shared';
 import { http } from '../lib/api';
 
-export function useAdminDashboard(enabled: boolean) {
+export function useAdminDashboard(enabled: boolean, workspaceId?: string) {
   return useQuery({
-    queryKey: ['dashboard', 'admin'],
-    queryFn: () => http.get<AdminDashboard>('/admin/dashboard'),
+    queryKey: ['dashboard', 'admin', workspaceId ?? 'all'],
+    queryFn: () => http.get<AdminDashboard>(`/admin/dashboard${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''}`),
     enabled,
   });
 }

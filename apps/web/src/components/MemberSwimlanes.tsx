@@ -34,6 +34,7 @@ export function MemberSwimlanes({
   canWrite,
   defaultProjectId = '',
   onOpen,
+  onCreated,
   onError,
   onDragStart,
   onDropOnMember,
@@ -47,6 +48,7 @@ export function MemberSwimlanes({
   /** Project new cards are filed under by default — the board's active filter. */
   defaultProjectId?: string;
   onOpen: (id: string) => void;
+  onCreated: (item: BoardItem) => void;
   onError: (m: string | null) => void;
   onDragStart: (id: string | null) => void;
   onDropOnMember: (userId: string, day: string, slot: MeetingSlot) => void;
@@ -154,6 +156,7 @@ export function MemberSwimlanes({
                       canWrite={canWrite}
                       defaultProjectId={defaultProjectId}
                       onOpen={onOpen}
+                      onCreated={onCreated}
                       onError={onError}
                       onDragStart={onDragStart}
                       onDropOnMember={onDropOnMember}
@@ -187,6 +190,7 @@ function SwimlaneCell({
   canWrite,
   defaultProjectId,
   onOpen,
+  onCreated,
   onError,
   onDragStart,
   onDropOnMember,
@@ -201,6 +205,7 @@ function SwimlaneCell({
   canWrite: boolean;
   defaultProjectId: string;
   onOpen: (id: string) => void;
+  onCreated: (item: BoardItem) => void;
   onError: (m: string | null) => void;
   onDragStart: (id: string | null) => void;
   onDropOnMember: (userId: string, day: string, slot: MeetingSlot) => void;
@@ -264,6 +269,7 @@ function SwimlaneCell({
           placeholder={isMine ? 'What are you working on?' : `Add for ${member.user.name.split(' ')[0]}…`}
           size="sm"
           onError={onError}
+          onCreated={onCreated}
         />
       ) : null}
     </div>

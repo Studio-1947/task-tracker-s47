@@ -6,6 +6,8 @@ import {
   type BoardItemStatus,
   type MeetingSlot,
   type MoodLevel,
+  TASK_SIZES,
+  type TaskSize,
 } from '../enums';
 
 const slotEnum = z.enum(MEETING_SLOTS as [MeetingSlot, ...MeetingSlot[]]);
@@ -43,6 +45,9 @@ export const createBoardItemSchema = z
      * project's workspace, so meeting work shows up alongside everything else.
      */
     projectId: z.string().uuid().nullable().optional(),
+    /** Required by the weekly-task UI when a card is mirrored into a task. */
+    dueDate: z.string().datetime().optional(),
+    size: z.enum(TASK_SIZES as [TaskSize, ...TaskSize[]]).optional(),
   })
   .strict();
 export type CreateBoardItemInput = z.infer<typeof createBoardItemSchema>;

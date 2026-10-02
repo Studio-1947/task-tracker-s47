@@ -779,7 +779,7 @@ export class MeetingsService {
   private async createMirrorTask(
     actor: Actor,
     project: ProjectRow,
-    card: { title: string; note: string | null; status: BoardItemStatus; userId: string; assigneeIds?: string[] },
+    card: { title: string; note: string | null; status: BoardItemStatus; userId: string; assigneeIds?: string[]; dueDate?: string; size?: import('@task-tracker/shared').TaskSize },
   ): Promise<string> {
     const requested = [...new Set(card.assigneeIds ?? [card.userId])];
     const allowed = await Promise.all(requested.map((id) => this.workspaces.isMember(project.workspaceId, id)));
@@ -787,6 +787,8 @@ export class MeetingsService {
     const task = await this.tasks.create(project.workspaceId, actor, {
       projectId: project.id,
       title: card.title,
+      size: card.size ?? 'SMALL',
+      ...(card.dueDate ? { dueDate: card.dueDate } : {}),
       ...(card.note ? { description: card.note } : {}),
       status: BOARD_STATUS_TO_TASK_STATUS[card.status],
       ...(requested.length ? { assigneeIds: requested } : {}),
@@ -878,6 +880,8 @@ export class MeetingsService {
           status,
           userId: ownerId,
           assigneeIds: input.assigneeIds,
+          dueDate: input.dueDate,
+          size: input.size,
         });
         const [linked] = await this.db
           .update(meetingBoardItems)

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { taskSizeLabel, TASK_SIZE_LABELS, PRIORITIES, TASK_STATUSES, type LabelRef, type Priority, type ProjectSummary, type TaskStatus, type UserRef } from '@task-tracker/shared';
+import { TASK_SIZE_LABELS, TASK_SIZES, PRIORITIES, TASK_STATUSES, type TaskSize, type LabelRef, type Priority, type ProjectSummary, type TaskStatus, type UserRef } from '@task-tracker/shared';
 import { useCreateTask } from '../hooks/useTasks';
 import { nonWorkingReason, useCalendar } from '../hooks/useCalendar';
 import { ApiRequestError } from '../lib/api';
@@ -33,7 +33,9 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
   const [acceptanceCriteria, setAcceptanceCriteria] = useState('');
   const { data: calendar } = useCalendar();
   const offDayReason = dueDate ? nonWorkingReason(dueDate, calendar) : null;
-  const sizeLabel = taskSizeLabel(estimateHours ? Math.round(Number(estimateHours) * 60) : null);
+  // A work scale is required, but must be chosen deliberately rather than
+  // silently defaulting every new task to Small.
+  const [size, setSize] = useState<TaskSize | ''>('');
   const [error, setError] = useState<string | null>(null);
 
   const toggleLabel = (id: string) =>
@@ -50,6 +52,10 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
       setError('Please set a due date');
       return;
     }
+    if (!size) {
+      setError('Please choose a work scale');
+      return;
+    }
     setError(null);
     try {
       await createTask.mutateAsync({
@@ -59,6 +65,7 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
         acceptanceCriteria: acceptanceCriteria.trim() || undefined,
         status,
         priority,
+        size,
         dueDate: dueDate ? new Date(dueDate).toISOString() : null,
         assigneeIds,
         ownerId: ownerId || null,
@@ -172,6 +179,24 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
                 ))}
               </select>
             </label>
+            <label className="text-sm">
+              <span className="mb-1 flex items-center gap-0.5 font-medium text-slate-600 dark:text-slate-300">Work scale<span className="text-red-500 ml-0.5">*</span></span>
+              <select
+                aria-label="Work scale"
+                className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white"
+                value={size}
+                onChange={(e) => setSize(e.target.value as TaskSize)}
+                required
+              >
+                <option value="" disabled>Choose work scale</option>
+                {TASK_SIZES.map((s) => (
+                  <option key={s} value={s}>
+                    {TASK_SIZE_LABELS[s]}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-[11px] text-slate-400 dark:text-slate-500">A quick relative classification. Set the effort estimate separately.</span>
+            </label>
             <div className="text-sm">
               <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Tag people</span>
               <p className="mb-1.5 text-xs text-slate-400 dark:text-slate-500">Select as many people as needed.</p>
@@ -203,7 +228,6 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
             <label className="text-sm">
               <span className="mb-1 flex items-center justify-between font-medium text-slate-600 dark:text-slate-300">
                 Baseline estimate (hours)
-                {sizeLabel ? <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">{TASK_SIZE_LABELS[sizeLabel]}</span> : null}
               </span>
               <input type="number" min="0" step="0.25" className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white" value={estimateHours} onChange={(e) => setEstimateHours(e.target.value)} />
             </label>

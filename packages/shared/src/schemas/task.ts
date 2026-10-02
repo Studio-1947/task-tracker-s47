@@ -1,8 +1,9 @@
 import { z } from 'zod';
-import { PRIORITIES, Priority, TASK_STATUSES, TaskStatus } from '../enums';
+import { PRIORITIES, Priority, TASK_STATUSES, TaskStatus, TASK_SIZES, TaskSize } from '../enums';
 
 const statusEnum = z.enum(TASK_STATUSES as [TaskStatus, ...TaskStatus[]]);
 const priorityEnum = z.enum(PRIORITIES as [Priority, ...Priority[]]);
+const sizeEnum = z.enum(TASK_SIZES as [TaskSize, ...TaskSize[]]);
 
 export const createTaskSchema = z.object({
   /** Project the task belongs to (must be a project of the target workspace). */
@@ -13,6 +14,7 @@ export const createTaskSchema = z.object({
   childScope: z.enum(['REQUIRED', 'OPTIONAL', 'CANCELLED']).optional(),
   status: statusEnum.optional(),
   priority: priorityEnum.optional(),
+  size: sizeEnum,
   /** ISO datetime string, or null for no due date. */
   dueDate: z.string().datetime().nullable().optional(),
   assigneeIds: z.array(z.string().uuid()).optional(),
@@ -30,6 +32,7 @@ export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 /** Lightweight create form used by the "+ Add subtask" quick-add under a task. */
 export const createSubtaskSchema = z.object({
   title: z.string().min(1).max(1000),
+  size: sizeEnum,
   assigneeIds: z.array(z.string().uuid()).optional(),
   dueDate: z.string().datetime().nullable().optional(),
 });
@@ -47,6 +50,7 @@ export const updateTaskSchema = z
     childScope: z.enum(['REQUIRED', 'OPTIONAL', 'CANCELLED']).optional(),
     status: statusEnum.optional(),
     priority: priorityEnum.optional(),
+    size: sizeEnum.optional(),
     dueDate: z.string().datetime().nullable().optional(),
     /** Required when an existing commitment date is moved or cleared (PRD §2); stored in the audit trail. */
     dueDateReason: z.string().trim().min(1).max(2000).optional(),
@@ -187,21 +191,3 @@ export const delegateReviewSchema = z.object({
 export type DelegateReviewInput = z.infer<typeof delegateReviewSchema>;
 
 
-export type TaskSizeLabel = 'SMALL' | 'SHORT' | 'BIG' | 'HUGE' | 'LARGER';
-export const TASK_SIZE_LABELS: Record<TaskSizeLabel, string> = {
-  SMALL: 'Small action',
-  SHORT: 'Short',
-  BIG: 'Big',
-  HUGE: 'Huge',
-  LARGER: 'Larger work',
-};
-
-/** PRD §4: size is derived from estimated minutes, never stored; priority is independent. */
-export function taskSizeLabel(minutes: number | null | undefined): TaskSizeLabel | null {
-  if (minutes === null || minutes === undefined) return null;
-  if (minutes < 10) return 'SMALL';
-  if (minutes <= 30) return 'SHORT';
-  if (minutes <= 60) return 'BIG';
-  if (minutes <= 120) return 'HUGE';
-  return 'LARGER';
-}
