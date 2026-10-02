@@ -4,6 +4,7 @@ import { Avatar } from './Avatar';
 import { GlobalSearch } from './GlobalSearch';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationCenter } from './NotificationCenter';
+import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 
 /** Desktop-only top header: global search, notifications, current user. */
 export function Topbar() {
@@ -11,6 +12,9 @@ export function Topbar() {
 
   return (
     <header className="sticky top-0 z-30 hidden items-center gap-4 border-b border-slate-100 bg-white/80 px-6 py-3 backdrop-blur-md md:flex dark:border-slate-800/40 dark:bg-[#121212]/80">
+      <div className="w-64">
+        <WorkspaceSwitcher />
+      </div>
       <div className="w-full max-w-md">
         <GlobalSearch bindShortcut />
       </div>
