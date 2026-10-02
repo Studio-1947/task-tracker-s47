@@ -1,5 +1,25 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, sql } from 'drizzle-orm';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  and,
+  asc,
+  count,
+  countDistinct,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  ne,
+  sql,
+} from 'drizzle-orm';
 import {
   TASK_STATUSES,
   workingDayUnits,
@@ -16,7 +36,18 @@ import {
   type WorkspacePerformance,
 } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
-import { auditLogs, projects, reportSnapshots, taskAssignees, taskBlockers, taskSubmissions, tasks, users, workspaceMembers, workspaces } from '../database/schema';
+import {
+  auditLogs,
+  projects,
+  reportSnapshots,
+  taskAssignees,
+  taskBlockers,
+  taskSubmissions,
+  tasks,
+  users,
+  workspaceMembers,
+  workspaces,
+} from '../database/schema';
 import { AuditService } from '../audit/audit.service';
 import { CalendarService } from '../calendar/calendar.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
@@ -40,21 +71,44 @@ export class DashboardService {
   private async assertReportManager(workspaceId: string, actor: { id: string; role: string }) {
     await this.workspaces.assertCanAccess(workspaceId, actor);
     if (actor.role !== 'ADMIN' && !(await this.workspaces.isManager(workspaceId, actor))) {
-      throw new ForbiddenException('Only an administrator or workspace manager can approve and distribute reports');
+      throw new ForbiddenException(
+        'Only an administrator or workspace manager can approve and distribute reports',
+      );
     }
   }
 
   private async workspaceName(workspaceId: string): Promise<string> {
-    const [row] = await this.db.select({ name: workspaces.name }).from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1);
+    const [row] = await this.db
+      .select({ name: workspaces.name })
+      .from(workspaces)
+      .where(eq(workspaces.id, workspaceId))
+      .limit(1);
     if (!row) throw new NotFoundException('Workspace not found');
     return row.name;
   }
 
-  private reportMarkdown(title: string, workspaceName: string, generatedAt: string, sections: Array<[string, unknown[]]>, notes: string) {
-    const lines = [`# ${title}`, '', `Workspace: ${workspaceName}`, `Generated: ${generatedAt}`, 'Scope: active tasks in this workspace', 'Metric version: 1.0', ''];
+  private reportMarkdown(
+    title: string,
+    workspaceName: string,
+    generatedAt: string,
+    sections: Array<[string, unknown[]]>,
+    notes: string,
+  ) {
+    const lines = [
+      `# ${title}`,
+      '',
+      `Workspace: ${workspaceName}`,
+      `Generated: ${generatedAt}`,
+      'Scope: active tasks in this workspace',
+      'Metric version: 1.0',
+      '',
+    ];
     for (const [heading, rows] of sections) {
       lines.push(`## ${heading}`, '');
-      if (rows.length) lines.push(...rows.map((row: any) => `- ${row.ref ? `${row.ref}: ` : ''}${row.title ?? row.id}`));
+      if (rows.length)
+        lines.push(
+          ...rows.map((row: any) => `- ${row.ref ? `${row.ref}: ` : ''}${row.title ?? row.id}`),
+        );
       else lines.push('- None');
       lines.push('');
     }
@@ -90,7 +144,9 @@ export class DashboardService {
    * disagree the way the source spec's "13 overdue in headline and 0 in
    * at-risk panel" finding described.
    */
-  private async overdueSummary(workspaceIds?: string[]): Promise<{ total: number; items: OverdueTaskRow[] }> {
+  private async overdueSummary(
+    workspaceIds?: string[],
+  ): Promise<{ total: number; items: OverdueTaskRow[] }> {
     if (workspaceIds && workspaceIds.length === 0) return { total: 0, items: [] };
     const conds = [
       eq(tasks.isArchived, false),
@@ -136,7 +192,12 @@ export class DashboardService {
       workspaceId: r.workspaceId,
       workspaceName: r.workspaceName,
       overdueWorkingMinutes: calendar.settings
-        ? workingMinutesElapsed(r.dueDate!.toISOString(), now.toISOString(), calendar.settings, calendar.exceptions)
+        ? workingMinutesElapsed(
+            r.dueDate!.toISOString(),
+            now.toISOString(),
+            calendar.settings,
+            calendar.exceptions,
+          )
         : null,
     }));
     return { total: rows.length ? Number(rows[0]!.total) : 0, items };
@@ -155,7 +216,13 @@ export class DashboardService {
         c: count(),
       })
       .from(tasks)
-      .where(and(eq(tasks.isArchived, false), gte(tasks.completedAt, monday), ...(workspaceIds ? [inArray(tasks.workspaceId, workspaceIds)] : [])))
+      .where(
+        and(
+          eq(tasks.isArchived, false),
+          gte(tasks.completedAt, monday),
+          ...(workspaceIds ? [inArray(tasks.workspaceId, workspaceIds)] : []),
+        ),
+      )
       .groupBy(sql`1`);
     const byDate = new Map(rows.map((r) => [r.day, Number(r.c)]));
 
@@ -181,7 +248,14 @@ export class DashboardService {
       .from(taskAssignees)
       .innerJoin(tasks, eq(tasks.id, taskAssignees.taskId))
       .innerJoin(users, eq(users.id, taskAssignees.userId))
-      .where(and(eq(tasks.isArchived, false), ne(tasks.status, 'DONE'), eq(users.isActive, true), ...(workspaceIds ? [inArray(tasks.workspaceId, workspaceIds)] : [])))
+      .where(
+        and(
+          eq(tasks.isArchived, false),
+          ne(tasks.status, 'DONE'),
+          eq(users.isActive, true),
+          ...(workspaceIds ? [inArray(tasks.workspaceId, workspaceIds)] : []),
+        ),
+      )
       .groupBy(users.id, users.name, users.email, users.avatarKey)
       .orderBy(desc(count()))
       .limit(10);
@@ -206,7 +280,12 @@ export class DashboardService {
         })
         .from(workspaces)
         .leftJoin(tasks, eq(tasks.workspaceId, workspaces.id))
-        .where(and(eq(workspaces.isArchived, false), ...(workspaceIds ? [inArray(workspaces.id, workspaceIds)] : [])))
+        .where(
+          and(
+            eq(workspaces.isArchived, false),
+            ...(workspaceIds ? [inArray(workspaces.id, workspaceIds)] : []),
+          ),
+        )
         .groupBy(workspaces.id, workspaces.name, workspaces.color)
         .orderBy(asc(workspaces.name)),
       this.db
@@ -218,7 +297,13 @@ export class DashboardService {
         .select({ workspaceId: tasks.workspaceId, c: sql<number>`count(distinct ${tasks.id})` })
         .from(taskBlockers)
         .innerJoin(tasks, eq(tasks.id, taskBlockers.taskId))
-        .where(and(isNull(taskBlockers.unblockedAt), eq(tasks.isArchived, false), ne(tasks.status, 'DONE')))
+        .where(
+          and(
+            isNull(taskBlockers.unblockedAt),
+            eq(tasks.isArchived, false),
+            ne(tasks.status, 'DONE'),
+          ),
+        )
         .groupBy(tasks.workspaceId),
       this.db
         .select({ workspaceId: tasks.workspaceId, c: sql<number>`count(distinct ${tasks.id})` })
@@ -230,7 +315,8 @@ export class DashboardService {
       this.reminders.currentUpdateOverdue(),
     ]);
     const staleByWorkspace = new Map<string, number>();
-    for (const t of staleUpdates) staleByWorkspace.set(t.workspaceId, (staleByWorkspace.get(t.workspaceId) ?? 0) + 1);
+    for (const t of staleUpdates)
+      staleByWorkspace.set(t.workspaceId, (staleByWorkspace.get(t.workspaceId) ?? 0) + 1);
     const activeIds = new Set(activeRows.map((r) => r.workspaceId));
     const blocked = new Map(blockedRows.map((r) => [r.workspaceId, Number(r.c)]));
     const review = new Map(reviewRows.map((r) => [r.workspaceId, Number(r.c)]));
@@ -238,8 +324,11 @@ export class DashboardService {
     // Today's date in the office timezone; a non-working day is "Weekly off" rather than "Idle".
     let weeklyOff = false;
     if (calendar.settings) {
-      const today = new Intl.DateTimeFormat('en-CA', { timeZone: calendar.settings.timezone }).format(new Date());
-      weeklyOff = workingDayUnits(today, today, calendar.settings.workdays, calendar.exceptions) === 0;
+      const today = new Intl.DateTimeFormat('en-CA', {
+        timeZone: calendar.settings.timezone,
+      }).format(new Date());
+      weeklyOff =
+        workingDayUnits(today, today, calendar.settings.workdays, calendar.exceptions) === 0;
     }
 
     return rows.map((r) => {
@@ -317,13 +406,32 @@ export class DashboardService {
     }));
   }
 
-  async admin(workspaceId?: string): Promise<AdminDashboard> {
-    if (workspaceId) await this.workspaceName(workspaceId);
-    const workspaceIds = workspaceId ? [workspaceId] : undefined;
+  async admin(selectedWorkspaceIds: string[] = []): Promise<AdminDashboard> {
+    const workspaceIds = selectedWorkspaceIds.length
+      ? [...new Set(selectedWorkspaceIds)]
+      : undefined;
+    if (workspaceIds)
+      await Promise.all(workspaceIds.map((workspaceId) => this.workspaceName(workspaceId)));
     const [[{ totalWorkspaces } = { totalWorkspaces: 0 }], [{ totalUsers } = { totalUsers: 0 }]] =
       await Promise.all([
-        this.db.select({ totalWorkspaces: count() }).from(workspaces).where(and(eq(workspaces.isArchived, false), ...(workspaceIds ? [inArray(workspaces.id, workspaceIds)] : []))),
-        this.db.select({ totalUsers: count() }).from(users).where(eq(users.isActive, true)),
+        this.db
+          .select({ totalWorkspaces: count() })
+          .from(workspaces)
+          .where(
+            and(
+              eq(workspaces.isArchived, false),
+              ...(workspaceIds ? [inArray(workspaces.id, workspaceIds)] : []),
+            ),
+          ),
+        workspaceIds
+          ? this.db
+              .select({ totalUsers: countDistinct(users.id) })
+              .from(workspaceMembers)
+              .innerJoin(users, eq(users.id, workspaceMembers.userId))
+              .where(
+                and(inArray(workspaceMembers.workspaceId, workspaceIds), eq(users.isActive, true)),
+              )
+          : this.db.select({ totalUsers: count() }).from(users).where(eq(users.isActive, true)),
       ]);
 
     const [
@@ -338,7 +446,9 @@ export class DashboardService {
     ] = await Promise.all([
       this.statusCounts(workspaceIds),
       this.overdueSummary(workspaceIds),
-      workspaceIds ? this.audit.workspaceActivity(workspaceId!, 1, 10) : this.audit.globalActivity(1, 10),
+      workspaceIds
+        ? this.audit.workspaceActivityFor(workspaceIds, 1, 10)
+        : this.audit.globalActivity(1, 10),
       this.db
         .select({ workspaceId: auditLogs.workspaceId, c: count() })
         .from(auditLogs)
@@ -359,7 +469,8 @@ export class DashboardService {
         .from(workspaces)
         .where(eq(workspaces.id, activeRows[0].workspaceId))
         .limit(1);
-      if (ws) mostActiveWorkspace = { id: ws.id, name: ws.name, activityCount: Number(activeRows[0].c) };
+      if (ws)
+        mostActiveWorkspace = { id: ws.id, name: ws.name, activityCount: Number(activeRows[0].c) };
     }
 
     return {
@@ -433,12 +544,25 @@ export class DashboardService {
         .select({ c: sql<number>`count(distinct ${taskSubmissions.id})` })
         .from(taskSubmissions)
         .innerJoin(tasks, eq(tasks.id, taskSubmissions.taskId))
-        .where(and(eq(taskSubmissions.status, 'PENDING'), eq(tasks.reviewerId, userId), eq(tasks.isArchived, false))),
+        .where(
+          and(
+            eq(taskSubmissions.status, 'PENDING'),
+            eq(tasks.reviewerId, userId),
+            eq(tasks.isArchived, false),
+          ),
+        ),
       this.db
         .select({ c: sql<number>`count(distinct ${taskBlockers.id})` })
         .from(taskBlockers)
         .innerJoin(tasks, eq(tasks.id, taskBlockers.taskId))
-        .where(and(isNull(taskBlockers.unblockedAt), eq(taskBlockers.unblockerUserId, userId), eq(tasks.isArchived, false), ne(tasks.status, 'DONE'))),
+        .where(
+          and(
+            isNull(taskBlockers.unblockedAt),
+            eq(taskBlockers.unblockerUserId, userId),
+            eq(tasks.isArchived, false),
+            ne(tasks.status, 'DONE'),
+          ),
+        ),
       this.reminders.currentUpdateOverdue(),
     ]);
 
@@ -475,18 +599,31 @@ export class DashboardService {
       this.db
         .select({ id: tasks.id, title: tasks.title, status: tasks.status })
         .from(tasks)
-        .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.status, 'DONE'), eq(tasks.isArchived, false)))
+        .where(
+          and(
+            eq(tasks.workspaceId, workspaceId),
+            eq(tasks.status, 'DONE'),
+            eq(tasks.isArchived, false),
+          ),
+        )
         .limit(20),
       this.db
         .select({ id: tasks.id, title: tasks.title })
         .from(tasks)
-        .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.status, 'IN_PROGRESS'), eq(tasks.isArchived, false)))
+        .where(
+          and(
+            eq(tasks.workspaceId, workspaceId),
+            eq(tasks.status, 'IN_PROGRESS'),
+            eq(tasks.isArchived, false),
+          ),
+        )
         .limit(20),
       this.upcomingDeadlines(),
     ]);
 
     const generatedAt = new Date().toISOString();
-    const summaryNotes = 'Wednesday routine: commitments progressed, accepted deliverables, blocked work, decisions needed, next deadlines.';
+    const summaryNotes =
+      'Wednesday routine: commitments progressed, accepted deliverables, blocked work, decisions needed, next deadlines.';
     const payload = {
       reportType: 'WEDNESDAY_PROGRESS',
       generatedAt,
@@ -498,7 +635,21 @@ export class DashboardService {
       upcomingDeadlines: upcoming,
       summaryNotes,
     };
-    return { ...payload, summary: payload, markdown: this.reportMarkdown('Wednesday Mid-Week Progress', workspaceName, generatedAt, [['Accepted deliverables', accepted], ['Commitments progressed', blocked], ['Upcoming deadlines', upcoming]], summaryNotes) };
+    return {
+      ...payload,
+      summary: payload,
+      markdown: this.reportMarkdown(
+        'Wednesday Mid-Week Progress',
+        workspaceName,
+        generatedAt,
+        [
+          ['Accepted deliverables', accepted],
+          ['Commitments progressed', blocked],
+          ['Upcoming deadlines', upcoming],
+        ],
+        summaryNotes,
+      ),
+    };
   }
 
   async generateFridayReport(workspaceId: string, actor: { id: string; role: string }) {
@@ -508,17 +659,30 @@ export class DashboardService {
       this.db
         .select({ id: tasks.id, title: tasks.title, completedAt: tasks.completedAt })
         .from(tasks)
-        .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.status, 'DONE'), eq(tasks.isArchived, false)))
+        .where(
+          and(
+            eq(tasks.workspaceId, workspaceId),
+            eq(tasks.status, 'DONE'),
+            eq(tasks.isArchived, false),
+          ),
+        )
         .limit(20),
       this.db
         .select({ id: tasks.id, title: tasks.title, status: tasks.status, dueDate: tasks.dueDate })
         .from(tasks)
-        .where(and(eq(tasks.workspaceId, workspaceId), ne(tasks.status, 'DONE'), eq(tasks.isArchived, false)))
+        .where(
+          and(
+            eq(tasks.workspaceId, workspaceId),
+            ne(tasks.status, 'DONE'),
+            eq(tasks.isArchived, false),
+          ),
+        )
         .limit(20),
     ]);
 
     const generatedAt = new Date().toISOString();
-    const summaryNotes = 'Friday routine: accepted outcomes, carryover with reasons, review backlog, next week capacity & priorities.';
+    const summaryNotes =
+      'Friday routine: accepted outcomes, carryover with reasons, review backlog, next week capacity & priorities.';
     const payload = {
       reportType: 'FRIDAY_OUTCOMES',
       generatedAt,
@@ -529,45 +693,117 @@ export class DashboardService {
       carryoverTasks: carryover,
       summaryNotes,
     };
-    return { ...payload, summary: payload, markdown: this.reportMarkdown('Friday Outcomes', workspaceName, generatedAt, [['Accepted outcomes', accepted], ['Carryover', carryover]], summaryNotes) };
+    return {
+      ...payload,
+      summary: payload,
+      markdown: this.reportMarkdown(
+        'Friday Outcomes',
+        workspaceName,
+        generatedAt,
+        [
+          ['Accepted outcomes', accepted],
+          ['Carryover', carryover],
+        ],
+        summaryNotes,
+      ),
+    };
   }
 
-  async createReportDraft(workspaceId: string, reportType: 'WEDNESDAY_PROGRESS' | 'FRIDAY_OUTCOMES', actor: { id: string; role: string }) {
+  async createReportDraft(
+    workspaceId: string,
+    reportType: 'WEDNESDAY_PROGRESS' | 'FRIDAY_OUTCOMES',
+    actor: { id: string; role: string },
+  ) {
     await this.assertReportManager(workspaceId, actor);
-    const report = reportType === 'WEDNESDAY_PROGRESS'
-      ? await this.generateWednesdayReport(workspaceId, actor)
-      : await this.generateFridayReport(workspaceId, actor);
-    const [row] = await this.db.insert(reportSnapshots).values({ workspaceId, reportType, reportDate: report.reportDate, markdown: report.markdown, payload: report.summary, generatedById: actor.id }).returning();
+    const report =
+      reportType === 'WEDNESDAY_PROGRESS'
+        ? await this.generateWednesdayReport(workspaceId, actor)
+        : await this.generateFridayReport(workspaceId, actor);
+    const [row] = await this.db
+      .insert(reportSnapshots)
+      .values({
+        workspaceId,
+        reportType,
+        reportDate: report.reportDate,
+        markdown: report.markdown,
+        payload: report.summary,
+        generatedById: actor.id,
+      })
+      .returning();
     return row;
   }
 
-  async approveReport(reportId: string, recipientIds: string[] | undefined, actor: { id: string; role: string }) {
-    const [report] = await this.db.select().from(reportSnapshots).where(eq(reportSnapshots.id, reportId)).limit(1);
+  async approveReport(
+    reportId: string,
+    recipientIds: string[] | undefined,
+    actor: { id: string; role: string },
+  ) {
+    const [report] = await this.db
+      .select()
+      .from(reportSnapshots)
+      .where(eq(reportSnapshots.id, reportId))
+      .limit(1);
     if (!report) throw new NotFoundException('Report draft not found');
     await this.assertReportManager(report.workspaceId, actor);
-    if (report.status !== 'DRAFT') throw new BadRequestException('Only a draft report can be approved');
-    const members = await this.db.select({ userId: workspaceMembers.userId }).from(workspaceMembers).where(eq(workspaceMembers.workspaceId, report.workspaceId));
+    if (report.status !== 'DRAFT')
+      throw new BadRequestException('Only a draft report can be approved');
+    const members = await this.db
+      .select({ userId: workspaceMembers.userId })
+      .from(workspaceMembers)
+      .where(eq(workspaceMembers.workspaceId, report.workspaceId));
     const allowed = new Set(members.map((m) => m.userId));
     const recipients = recipientIds?.length ? [...new Set(recipientIds)] : [...allowed];
-    if (recipients.some((id) => !allowed.has(id))) throw new BadRequestException('Every report recipient must belong to the workspace');
-    const [updated] = await this.db.update(reportSnapshots).set({ status: 'APPROVED', recipientIds: recipients, approvedById: actor.id, approvedAt: new Date() }).where(eq(reportSnapshots.id, reportId)).returning();
+    if (recipients.some((id) => !allowed.has(id)))
+      throw new BadRequestException('Every report recipient must belong to the workspace');
+    const [updated] = await this.db
+      .update(reportSnapshots)
+      .set({
+        status: 'APPROVED',
+        recipientIds: recipients,
+        approvedById: actor.id,
+        approvedAt: new Date(),
+      })
+      .where(eq(reportSnapshots.id, reportId))
+      .returning();
     return updated;
   }
 
   async distributeReport(reportId: string, actor: { id: string; role: string }) {
-    const [report] = await this.db.select().from(reportSnapshots).where(eq(reportSnapshots.id, reportId)).limit(1);
+    const [report] = await this.db
+      .select()
+      .from(reportSnapshots)
+      .where(eq(reportSnapshots.id, reportId))
+      .limit(1);
     if (!report) throw new NotFoundException('Report not found');
     await this.assertReportManager(report.workspaceId, actor);
-    if (report.status !== 'APPROVED') throw new BadRequestException('The report must be approved before distribution');
+    if (report.status !== 'APPROVED')
+      throw new BadRequestException('The report must be approved before distribution');
     for (const userId of report.recipientIds) {
-      await this.notifications.createNotification(userId, actor.id, 'REPORT_SHARED', report.reportType === 'WEDNESDAY_PROGRESS' ? 'Wednesday progress report' : 'Friday outcomes report', 'A manager-approved workspace report is ready to review.', { reportId: report.id, workspaceId: report.workspaceId, reportType: report.reportType });
+      await this.notifications.createNotification(
+        userId,
+        actor.id,
+        'REPORT_SHARED',
+        report.reportType === 'WEDNESDAY_PROGRESS'
+          ? 'Wednesday progress report'
+          : 'Friday outcomes report',
+        'A manager-approved workspace report is ready to review.',
+        { reportId: report.id, workspaceId: report.workspaceId, reportType: report.reportType },
+      );
     }
-    const [updated] = await this.db.update(reportSnapshots).set({ status: 'DISTRIBUTED', distributedAt: new Date() }).where(eq(reportSnapshots.id, reportId)).returning();
+    const [updated] = await this.db
+      .update(reportSnapshots)
+      .set({ status: 'DISTRIBUTED', distributedAt: new Date() })
+      .where(eq(reportSnapshots.id, reportId))
+      .returning();
     return { ...updated, delivered: report.recipientIds.length };
   }
 
   async listReportSnapshots(workspaceId: string, actor: { id: string; role: string }) {
     await this.workspaces.assertCanAccess(workspaceId, actor);
-    return this.db.select().from(reportSnapshots).where(eq(reportSnapshots.workspaceId, workspaceId)).orderBy(desc(reportSnapshots.createdAt));
+    return this.db
+      .select()
+      .from(reportSnapshots)
+      .where(eq(reportSnapshots.workspaceId, workspaceId))
+      .orderBy(desc(reportSnapshots.createdAt));
   }
 }

@@ -2,10 +2,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AdminDashboard, MemberDashboard } from '@task-tracker/shared';
 import { http } from '../lib/api';
 
-export function useAdminDashboard(enabled: boolean, workspaceId?: string) {
+export function useAdminDashboard(enabled: boolean, workspaceIds: string[] = []) {
   return useQuery({
-    queryKey: ['dashboard', 'admin', workspaceId ?? 'all'],
-    queryFn: () => http.get<AdminDashboard>(`/admin/dashboard${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''}`),
+    queryKey: ['dashboard', 'admin', workspaceIds],
+    queryFn: () =>
+      http.get<AdminDashboard>(
+        `/admin/dashboard${workspaceIds.length ? `?workspaceIds=${encodeURIComponent(workspaceIds.join(','))}` : ''}`,
+      ),
     enabled,
   });
 }
@@ -40,7 +43,8 @@ export interface OperationalReportSnapshot {
 export function useWednesdayReport(workspaceId: string | null) {
   return useQuery({
     queryKey: ['reports', 'wednesday', workspaceId],
-    queryFn: () => http.get<OperationalDraftReport>(`/reports/wednesday?workspaceId=${workspaceId}`),
+    queryFn: () =>
+      http.get<OperationalDraftReport>(`/reports/wednesday?workspaceId=${workspaceId}`),
     enabled: !!workspaceId,
   });
 }
@@ -56,9 +60,12 @@ export function useFridayReport(workspaceId: string | null) {
 export function useCreateReportDraft() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { workspaceId: string; reportType: 'WEDNESDAY_PROGRESS' | 'FRIDAY_OUTCOMES' }) =>
-      http.post<OperationalReportSnapshot>('/reports/drafts', input),
-    onSuccess: (row) => qc.invalidateQueries({ queryKey: ['reports', 'snapshots', row.workspaceId] }),
+    mutationFn: (input: {
+      workspaceId: string;
+      reportType: 'WEDNESDAY_PROGRESS' | 'FRIDAY_OUTCOMES';
+    }) => http.post<OperationalReportSnapshot>('/reports/drafts', input),
+    onSuccess: (row) =>
+      qc.invalidateQueries({ queryKey: ['reports', 'snapshots', row.workspaceId] }),
   });
 }
 
@@ -66,14 +73,17 @@ export function useApproveReport() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => http.post<OperationalReportSnapshot>(`/reports/${id}/approve`, {}),
-    onSuccess: (row) => qc.invalidateQueries({ queryKey: ['reports', 'snapshots', row.workspaceId] }),
+    onSuccess: (row) =>
+      qc.invalidateQueries({ queryKey: ['reports', 'snapshots', row.workspaceId] }),
   });
 }
 
 export function useDistributeReport() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => http.post<OperationalReportSnapshot & { delivered: number }>(`/reports/${id}/distribute`, {}),
-    onSuccess: (row) => qc.invalidateQueries({ queryKey: ['reports', 'snapshots', row.workspaceId] }),
+    mutationFn: (id: string) =>
+      http.post<OperationalReportSnapshot & { delivered: number }>(`/reports/${id}/distribute`, {}),
+    onSuccess: (row) =>
+      qc.invalidateQueries({ queryKey: ['reports', 'snapshots', row.workspaceId] }),
   });
 }

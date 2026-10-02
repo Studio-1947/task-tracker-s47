@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ApiRequestError } from '../lib/api';
 import { useCreateWorkspace, useWorkspaces } from '../hooks/useWorkspaces';
 import { useAuth } from '../stores/auth';
+import { useWorkspaceContext } from '../stores/workspace-context';
 import { Button, Card, EmptyState, ErrorState, Input, Spinner } from '../components/ui';
 import { AuthImage } from '../components/AuthImage';
 
@@ -20,6 +21,7 @@ export function WorkspacesPage() {
   const isAdmin = user?.role === 'ADMIN';
   const { data, isLoading, error } = useWorkspaces();
   const createWorkspace = useCreateWorkspace();
+  const workspaceIds = useWorkspaceContext((state) => state.workspaceIds);
   const [name, setName] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -37,14 +39,18 @@ export function WorkspacesPage() {
   return (
     <div className="animate-fade-in">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">Workspaces</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+          Workspaces
+        </h1>
       </div>
 
       {isAdmin ? (
         <Card className="mt-6 p-6 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
           <form className="flex items-end gap-3.5" onSubmit={onCreate}>
             <div className="flex-1">
-              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">New workspace</label>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                New workspace
+              </label>
               <Input
                 placeholder="e.g. Engineering"
                 value={name}
@@ -52,11 +58,17 @@ export function WorkspacesPage() {
                 required
               />
             </div>
-            <Button type="submit" className="px-6 py-3 font-semibold" disabled={createWorkspace.isPending}>
+            <Button
+              type="submit"
+              className="px-6 py-3 font-semibold"
+              disabled={createWorkspace.isPending}
+            >
               {createWorkspace.isPending ? 'Creating…' : 'Create'}
             </Button>
           </form>
-          {formError ? <p className="mt-2 text-sm text-red-650 dark:text-red-400 font-medium">{formError}</p> : null}
+          {formError ? (
+            <p className="mt-2 text-sm text-red-650 dark:text-red-400 font-medium">{formError}</p>
+          ) : null}
         </Card>
       ) : null}
 
@@ -64,66 +76,95 @@ export function WorkspacesPage() {
         {isLoading ? (
           <Spinner />
         ) : error ? (
-          <ErrorState message={error instanceof ApiRequestError ? error.message : 'Failed to load'} />
-        ) : data && data.length > 0 ? (
+          <ErrorState
+            message={error instanceof ApiRequestError ? error.message : 'Failed to load'}
+          />
+        ) : data &&
+          data.filter((w) => workspaceIds.length === 0 || workspaceIds.includes(w.id)).length >
+            0 ? (
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {data.map((w) => (
-              <Link key={w.id} to={`/workspaces/${w.id}`} className="block">
-                <Card className="p-6 transition-all duration-200 hover:-translate-y-1.5 hover:border-indigo-500 dark:hover:border-indigo-500/50 hover:shadow-lg hover:shadow-indigo-500/[0.02] bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex min-w-0 flex-1 items-center gap-3">
-                      {/* Logo (falls back to initials) */}
-                      <div
-                        className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-sm font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-300"
-                        style={w.color ? { backgroundColor: `${w.color}22`, color: w.color } : undefined}
-                      >
-                        {w.logoKey ? (
-                          <AuthImage
-                            path={`/files/${w.logoKey}`}
-                            alt=""
-                            className="h-full w-full object-cover"
-                            fallback={initialsOf(w.name)}
-                          />
-                        ) : (
-                          initialsOf(w.name)
-                        )}
+            {data
+              .filter((w) => workspaceIds.length === 0 || workspaceIds.includes(w.id))
+              .map((w) => (
+                <Link key={w.id} to={`/workspaces/${w.id}`} className="block">
+                  <Card className="p-6 transition-all duration-200 hover:-translate-y-1.5 hover:border-indigo-500 dark:hover:border-indigo-500/50 hover:shadow-lg hover:shadow-indigo-500/[0.02] bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        {/* Logo (falls back to initials) */}
+                        <div
+                          className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-sm font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-300"
+                          style={
+                            w.color
+                              ? { backgroundColor: `${w.color}22`, color: w.color }
+                              : undefined
+                          }
+                        >
+                          {w.logoKey ? (
+                            <AuthImage
+                              path={`/files/${w.logoKey}`}
+                              alt=""
+                              className="h-full w-full object-cover"
+                              fallback={initialsOf(w.name)}
+                            />
+                          ) : (
+                            initialsOf(w.name)
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-bold text-slate-800 dark:text-slate-100 text-lg truncate">
+                            {w.name}
+                          </div>
+                          {w.subtitle ? (
+                            <div className="text-sm font-medium text-slate-500 dark:text-slate-400 truncate">
+                              {w.subtitle}
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <div className="font-bold text-slate-800 dark:text-slate-100 text-lg truncate">{w.name}</div>
-                        {w.subtitle ? (
-                          <div className="text-sm font-medium text-slate-500 dark:text-slate-400 truncate">{w.subtitle}</div>
-                        ) : null}
-                      </div>
+                      {w.isArchived ? (
+                        <span className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 border border-amber-100/50 dark:border-amber-900/30">
+                          Archived
+                        </span>
+                      ) : (
+                        <span className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-100/50 dark:border-emerald-900/30">
+                          Active
+                        </span>
+                      )}
                     </div>
-                    {w.isArchived ? (
-                      <span className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 border border-amber-100/50 dark:border-amber-900/30">
-                        Archived
-                      </span>
-                    ) : (
-                      <span className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-100/50 dark:border-emerald-900/30">
-                        Active
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-4 inline-block bg-slate-100 dark:bg-slate-800 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded text-slate-500 dark:text-slate-455">
-                    {w.projectCount ?? 0} project{(w.projectCount ?? 0) === 1 ? '' : 's'}
-                  </div>
-                  {w.description ? <p className="mt-4 text-sm text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-2">{w.description}</p> : null}
-                  <div className="mt-6 text-xs font-semibold text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                      <circle cx="9" cy="7" r="4" />
-                    </svg>
-                    {w.memberCount ?? 0} members
-                  </div>
-                </Card>
-              </Link>
-            ))}
+                    <div className="mt-4 inline-block bg-slate-100 dark:bg-slate-800 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded text-slate-500 dark:text-slate-455">
+                      {w.projectCount ?? 0} project{(w.projectCount ?? 0) === 1 ? '' : 's'}
+                    </div>
+                    {w.description ? (
+                      <p className="mt-4 text-sm text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-2">
+                        {w.description}
+                      </p>
+                    ) : null}
+                    <div className="mt-6 text-xs font-semibold text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                      </svg>
+                      {w.memberCount ?? 0} members
+                    </div>
+                  </Card>
+                </Link>
+              ))}
           </div>
         ) : (
           <EmptyState
             title="No workspaces yet"
-            hint={isAdmin ? 'Create your first workspace above.' : 'Ask an admin to add you to a workspace.'}
+            hint={
+              isAdmin
+                ? 'Create your first workspace above.'
+                : 'Ask an admin to add you to a workspace.'
+            }
           />
         )}
       </div>

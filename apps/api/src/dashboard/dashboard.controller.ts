@@ -1,4 +1,15 @@
-import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Res, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { Role } from '@task-tracker/shared';
 import { CurrentUser, type RequestUser } from '../common/decorators/current-user.decorator';
@@ -20,15 +31,16 @@ export class DashboardController {
   private reportMonth(month?: string): string {
     const fallback = new Date().toISOString().slice(0, 7);
     const value = month ?? fallback;
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) throw new BadRequestException('month must use YYYY-MM');
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(value))
+      throw new BadRequestException('month must use YYYY-MM');
     return value;
   }
 
   /** Cross-workspace stats for admins (PRD §3.6). */
   @Get('admin/dashboard')
   @Roles(Role.ADMIN)
-  admin(@Query('workspaceId') workspaceId?: string) {
-    return this.dashboard.admin(workspaceId);
+  admin(@Query('workspaceIds') workspaceIds?: string) {
+    return this.dashboard.admin(workspaceIds?.split(',').filter(Boolean) ?? []);
   }
 
   @Get('admin/reports/monthly.csv')
@@ -36,7 +48,10 @@ export class DashboardController {
   async monthlyCsv(@Query('month') month: string | undefined, @Res() res: Response): Promise<void> {
     const selectedMonth = this.reportMonth(month);
     res.type('text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="task-tracker-report-${selectedMonth}.csv"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="task-tracker-report-${selectedMonth}.csv"`,
+    );
     res.send(await this.monthlyReports.csv(selectedMonth));
   }
 
@@ -45,7 +60,10 @@ export class DashboardController {
   async monthlyPdf(@Query('month') month: string | undefined, @Res() res: Response): Promise<void> {
     const selectedMonth = this.reportMonth(month);
     res.type('application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="task-tracker-report-${selectedMonth}.pdf"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="task-tracker-report-${selectedMonth}.pdf"`,
+    );
     res.send(await this.monthlyReports.pdf(selectedMonth));
   }
 
@@ -68,8 +86,12 @@ export class DashboardController {
   }
 
   @Post('reports/drafts')
-  createReportDraft(@Body() body: { workspaceId: string; reportType: 'WEDNESDAY_PROGRESS' | 'FRIDAY_OUTCOMES' }, @CurrentUser() user: RequestUser) {
-    if (!body.workspaceId || !['WEDNESDAY_PROGRESS', 'FRIDAY_OUTCOMES'].includes(body.reportType)) throw new BadRequestException('workspaceId and a valid reportType are required');
+  createReportDraft(
+    @Body() body: { workspaceId: string; reportType: 'WEDNESDAY_PROGRESS' | 'FRIDAY_OUTCOMES' },
+    @CurrentUser() user: RequestUser,
+  ) {
+    if (!body.workspaceId || !['WEDNESDAY_PROGRESS', 'FRIDAY_OUTCOMES'].includes(body.reportType))
+      throw new BadRequestException('workspaceId and a valid reportType are required');
     return this.dashboard.createReportDraft(body.workspaceId, body.reportType, user);
   }
 
@@ -80,7 +102,11 @@ export class DashboardController {
   }
 
   @Post('reports/:id/approve')
-  approveReport(@Param('id', ParseUUIDPipe) id: string, @Body() body: { recipientIds?: string[] }, @CurrentUser() user: RequestUser) {
+  approveReport(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { recipientIds?: string[] },
+    @CurrentUser() user: RequestUser,
+  ) {
     return this.dashboard.approveReport(id, body.recipientIds, user);
   }
 
@@ -103,11 +129,14 @@ export class DashboardController {
     @Query('basis') basis: string | undefined,
     @CurrentUser() user: RequestUser,
   ) {
-    if (!workspaceId || !from || !to) throw new BadRequestException('workspaceId, from and to are required');
-    return this.metrics.workspaceMetrics(workspaceId, from, to, user, this.basis(basis)).catch((e: Error) => {
-      if (e.message === 'Invalid metric period') throw new BadRequestException(e.message);
-      throw e;
-    });
+    if (!workspaceId || !from || !to)
+      throw new BadRequestException('workspaceId, from and to are required');
+    return this.metrics
+      .workspaceMetrics(workspaceId, from, to, user, this.basis(basis))
+      .catch((e: Error) => {
+        if (e.message === 'Invalid metric period') throw new BadRequestException(e.message);
+        throw e;
+      });
   }
 
   /** The same figures as `metrics/workspace`, as an export built from that exact object. */
@@ -120,13 +149,19 @@ export class DashboardController {
     @CurrentUser() user: RequestUser,
     @Res() res: Response,
   ): Promise<void> {
-    if (!workspaceId || !from || !to) throw new BadRequestException('workspaceId, from and to are required');
-    const m = await this.metrics.workspaceMetrics(workspaceId, from, to, user, this.basis(basis)).catch((e: Error) => {
-      if (e.message === 'Invalid metric period') throw new BadRequestException(e.message);
-      throw e;
-    });
+    if (!workspaceId || !from || !to)
+      throw new BadRequestException('workspaceId, from and to are required');
+    const m = await this.metrics
+      .workspaceMetrics(workspaceId, from, to, user, this.basis(basis))
+      .catch((e: Error) => {
+        if (e.message === 'Invalid metric period') throw new BadRequestException(e.message);
+        throw e;
+      });
     res.type('text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="workspace-metrics-${m.scope.from.slice(0, 10)}.csv"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="workspace-metrics-${m.scope.from.slice(0, 10)}.csv"`,
+    );
     res.send(await this.metrics.workspaceMetricsCsv(m));
   }
 }
