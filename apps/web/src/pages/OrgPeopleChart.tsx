@@ -813,6 +813,7 @@ function PersonTeamMemberships({
   onError: (text: string) => void;
 }) {
   const qc = useQueryClient();
+  const [newTeam, setNewTeam] = useState('');
   const initial = useMemo(
     () =>
       new Set(
@@ -840,6 +841,23 @@ function PersonTeamMemberships({
     onError: (error) =>
       onError(
         error instanceof ApiRequestError ? error.message : 'Could not update team memberships',
+      ),
+  });
+
+  const createTeam = useMutation({
+    mutationFn: () => http.post<{ id: string }>('/organisation/teams', { name: newTeam.trim() }),
+    onSuccess: (data) => {
+      setNewTeam('');
+      setSelected((current) => {
+        const next = new Set(current);
+        next.add(data.id);
+        return next;
+      });
+      void qc.invalidateQueries({ queryKey: ['org-tree'] });
+    },
+    onError: (error) =>
+      onError(
+        error instanceof ApiRequestError ? error.message : 'Could not create team',
       ),
   });
 
@@ -875,9 +893,25 @@ function PersonTeamMemberships({
           </label>
         ))}
       </div>
+      <div className="mt-3 flex gap-2">
+        <Input
+          placeholder="Or create a new team…"
+          value={newTeam}
+          onChange={(e) => setNewTeam(e.target.value)}
+          className="h-7 text-xs"
+        />
+        <Button
+          variant="ghost"
+          className="px-2 py-1 text-xs"
+          disabled={!newTeam.trim() || createTeam.isPending}
+          onClick={() => createTeam.mutate()}
+        >
+          {createTeam.isPending ? 'Adding…' : 'Add'}
+        </Button>
+      </div>
       <Button
         variant="ghost"
-        className="mt-2 px-3 py-1.5 text-xs"
+        className="mt-2 w-full justify-center px-3 py-1.5 text-xs border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-[#2a2a2a]"
         disabled={!changed || save.isPending}
         onClick={() => save.mutate()}
       >

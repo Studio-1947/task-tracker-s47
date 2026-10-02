@@ -199,6 +199,7 @@ export class OrganisationService {
   }
 
   private async inheritManagerTeams(personId: string, managerId: string): Promise<string[]> {
+    console.log(`[DEBUG] inheritManagerTeams called with personId=${personId}, managerId=${managerId}`);
     const [ledTeams, membershipTeams] = await Promise.all([
       this.db
         .select({ id: teams.id })
@@ -215,6 +216,7 @@ export class OrganisationService {
         ...membershipTeams.map((team) => team.teamId),
       ]),
     ];
+    console.log(`[DEBUG] teamIds=${teamIds.length}`, teamIds);
     if (teamIds.length) {
       const descendants = await this.getDescendants([personId]);
       const allUserIds = [personId, ...descendants];
@@ -225,12 +227,14 @@ export class OrganisationService {
           insertValues.push({ teamId: tId, userId: uId });
         }
       }
+      console.log(`[DEBUG] insertValues=`, insertValues);
       
       if (insertValues.length) {
         await this.db
           .insert(teamMembers)
           .values(insertValues)
           .onConflictDoNothing();
+        console.log(`[DEBUG] Inserted teamMembers successfully.`);
       }
     }
     return teamIds;
