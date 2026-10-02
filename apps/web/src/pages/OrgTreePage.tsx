@@ -96,11 +96,16 @@ function TeamEditor({ team, ctx, onDone }: { team: OrgTreeTeam; ctx: Ctx; onDone
   const previousManager = useRef(manager);
   useEffect(() => {
     if (manager && manager !== previousManager.current) {
-      const reports = [...ctx.people.values()].filter((p) => p.reportsToId === manager);
-      if (reports.length > 0) {
+      const getDesc = (mId: string): string[] => {
+        const direct = [...ctx.people.values()].filter((p) => p.reportsToId === mId).map((p) => p.id);
+        return [...direct, ...direct.flatMap(getDesc)];
+      };
+      const descendants = getDesc(manager);
+      if (descendants.length > 0) {
         setMembers((cur) => {
           const next = new Set(cur);
-          reports.forEach((r) => next.add(r.id));
+          next.add(manager);
+          descendants.forEach((r) => next.add(r));
           return next;
         });
       }
@@ -150,7 +155,26 @@ function TeamEditor({ team, ctx, onDone }: { team: OrgTreeTeam; ctx: Ctx; onDone
             <input
               type="checkbox"
               checked={members.has(p.id)}
-              onChange={(e) => setMembers((cur) => { const n = new Set(cur); if (e.target.checked) n.add(p.id); else n.delete(p.id); return n; })}
+              onChange={(e) =>
+                setMembers((cur) => {
+                  const n = new Set(cur);
+                  const getDesc = (mId: string): string[] => {
+                    const direct = [...ctx.people.values()]
+                      .filter((person) => person.reportsToId === mId)
+                      .map((person) => person.id);
+                    return [...direct, ...direct.flatMap(getDesc)];
+                  };
+                  const desc = getDesc(p.id);
+                  if (e.target.checked) {
+                    n.add(p.id);
+                    desc.forEach((d) => n.add(d));
+                  } else {
+                    n.delete(p.id);
+                    desc.forEach((d) => n.delete(d));
+                  }
+                  return n;
+                })
+              }
             />
             <span className="truncate">{p.name}</span>
           </label>

@@ -180,6 +180,24 @@ export class OrganisationService {
 
   /** A reporting-line move into a team also gives the person that team's membership.
    * This keeps the People chart and Team chart from telling contradictory stories. */
+  private async getDescendants(personIds: string[]): Promise<string[]> {
+    if (!personIds.length) return [];
+    const allUsers = await this.db.select({ id: users.id, reportsToId: users.reportsToId }).from(users);
+    const result = new Set<string>();
+    const queue = [...personIds];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const children = allUsers.filter((u) => u.reportsToId === current).map((u) => u.id);
+      for (const child of children) {
+        if (!result.has(child)) {
+          result.add(child);
+          queue.push(child);
+        }
+      }
+    }
+    return Array.from(result);
+  }
+
   private async inheritManagerTeams(personId: string, managerId: string): Promise<string[]> {
     const [ledTeams, membershipTeams] = await Promise.all([
       this.db
@@ -198,10 +216,22 @@ export class OrganisationService {
       ]),
     ];
     if (teamIds.length) {
-      await this.db
-        .insert(teamMembers)
-        .values(teamIds.map((teamId) => ({ teamId, userId: personId })))
-        .onConflictDoNothing();
+      const descendants = await this.getDescendants([personId]);
+      const allUserIds = [personId, ...descendants];
+      
+      const insertValues = [];
+      for (const tId of teamIds) {
+        for (const uId of allUserIds) {
+          insertValues.push({ teamId: tId, userId: uId });
+        }
+      }
+      
+      if (insertValues.length) {
+        await this.db
+          .insert(teamMembers)
+          .values(insertValues)
+          .onConflictDoNothing();
+      }
     }
     return teamIds;
   }
@@ -451,17 +481,15 @@ export class OrganisationService {
     try {
       const [updated] = await this.db.update(teams).set(patch).where(eq(teams.id, id)).returning();
       
-      // If the manager changed, automatically add their direct reports to this team
+      // If the manager changed, automatically add them and all their descendants to this team
       if (patch.managerId) {
-        const reports = await this.db
-          .select({ id: users.id })
-          .from(users)
-          .where(and(eq(users.reportsToId, patch.managerId), eq(users.isActive, true)));
+        const descendants = await this.getDescendants([patch.managerId]);
+        const allUserIds = [patch.managerId, ...descendants];
           
-        if (reports.length > 0) {
+        if (allUserIds.length > 0) {
           await this.db
             .insert(teamMembers)
-            .values(reports.map((r) => ({ teamId: id, userId: r.id })))
+            .values(allUserIds.map((uId) => ({ teamId: id, userId: uId })))
             .onConflictDoNothing();
         }
       }
@@ -477,12 +505,19 @@ export class OrganisationService {
   async setTeamMembers(id: string, userIds: string[]) {
     const [team] = await this.db.select({ id: teams.id }).from(teams).where(eq(teams.id, id));
     if (!team) throw new NotFoundException('Team not found');
+    
+    let finalUserIds = userIds;
+    if (userIds.length > 0) {
+      const descendants = await this.getDescendants(userIds);
+      finalUserIds = [...new Set([...userIds, ...descendants])];
+    }
+    
     await this.db.transaction(async (tx) => {
       await tx.delete(teamMembers).where(eq(teamMembers.teamId, id));
-      if (userIds.length)
-        await tx.insert(teamMembers).values(userIds.map((userId) => ({ teamId: id, userId })));
+      if (finalUserIds.length)
+        await tx.insert(teamMembers).values(finalUserIds.map((userId) => ({ teamId: id, userId })));
     });
-    return { teamId: id, userIds };
+    return { teamId: id, userIds: finalUserIds };
   }
   async teamMemberIds(id: string) {
     return (
