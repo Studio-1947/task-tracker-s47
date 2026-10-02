@@ -103,3 +103,19 @@ describe('staffing clashes', () => {
   });
   it('ignores empty teams', () => expect(staffingBreaches([{ date: '2026-10-05', onLeave: 0, members: 0 }], 10)).toEqual([]));
 });
+
+describe('carry-forward policy', () => {
+  const base: LeaveBalanceRules = { annualAllotment: 12, accrualPerMonth: 0, carryForwardMax: 3, carryForwardExpiryMonths: null };
+  const asOf = '2027-02-01';
+  it('lapses the cap-limited balance by default and carries up to the cap', () => {
+    expect(computeLeaveBalance(base, '2026-01-01', asOf, []).carriedForward).toBe(3);
+  });
+  it('NO_CARRY_FORWARD carries nothing even when a cap is set', () => {
+    expect(computeLeaveBalance({ ...base, carryForwardPolicy: 'NO_CARRY_FORWARD' }, '2026-01-01', asOf, []).carriedForward).toBe(0);
+  });
+  it('CARRY_FORWARD carries the whole unused balance, ignoring the cap', () => {
+    const b = computeLeaveBalance({ ...base, carryForwardPolicy: 'CARRY_FORWARD' }, '2026-01-01', asOf, [{ startDate: '2026-03-02', days: 2 }]);
+    expect(b.carriedForward).toBe(10);
+    expect(b.remaining).toBe(22);
+  });
+});

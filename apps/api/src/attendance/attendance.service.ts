@@ -26,9 +26,11 @@ import type {
   UpdateLeaveTypeInput,
   OrganisationPolicyInput,
 } from '@task-tracker/shared';
+import type { LeaveBalanceRules } from '@task-tracker/shared';
 import { calculatePayableIndicator, computeLeaveBalance, dateRange, staffingBreaches, workingDayUnits } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
 import { CalendarService } from '../calendar/calendar.service';
+import { TasksService } from '../tasks/tasks.service';
 import {
   attendanceRecords,
   attendanceCorrections,
@@ -54,7 +56,7 @@ function localDateStr(d = new Date()): string {
 
 @Injectable()
 export class AttendanceService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database, private readonly calendar: CalendarService) {}
+  constructor(@Inject(DRIZZLE) private readonly db: Database, private readonly calendar: CalendarService, private readonly tasks: TasksService) {}
 
   /* ── mappers ── */
   private toLeaveType(t: LeaveTypeRow): LeaveType {
@@ -225,6 +227,7 @@ export class AttendanceService {
       checkedIn: !!row,
       checkedOut: !!row?.checkOutAt,
       record: row ? this.toAttendance(row) : null,
+      runningTimer: await this.tasks.findRunningTimer(userId),
     };
   }
 
@@ -250,6 +253,16 @@ export class AttendanceService {
     const existing = await this.findToday(userId);
     if (!existing) throw new BadRequestException('Check in before checking out');
     if (existing.checkOutAt) throw new ConflictException('You have already checked out today');
+
+    // A running timer must be resolved explicitly; the attendance interval never becomes task effort.
+    const timer = await this.tasks.findRunningTimer(userId);
+    if (timer && !geo.timerAction) {
+      throw new ConflictException(`A timer is still running on "${timer.taskTitle}". Stop it or keep it running before checking out.`);
+    }
+    if (timer && geo.timerAction === 'STOP') {
+      const [u] = await this.db.select({ role: users.role }).from(users).where(eq(users.id, userId)).limit(1);
+      await this.tasks.stopTimer(timer.taskId, { id: userId, role: u?.role ?? 'MEMBER' });
+    }
     const [row] = await this.db
       .update(attendanceRecords)
       .set({
@@ -481,6 +494,7 @@ export class AttendanceService {
           accrualPerMonth: Number(t.accrualPerMonth),
           carryForwardMax: Number(t.carryForwardMax),
           carryForwardExpiryMonths: t.carryForwardExpiryMonths,
+          carryForwardPolicy: t.carryForwardPolicy as LeaveBalanceRules['carryForwardPolicy'],
         },
         joinedOn,
         asOf,

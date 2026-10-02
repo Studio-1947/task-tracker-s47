@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   Logger,
@@ -182,6 +183,11 @@ export class UsersService {
       if (input.role !== undefined && input.role !== current.role) {
         throw new BadRequestException('You cannot change your own role');
       }
+    }
+
+    // Gender unlocks gender-specific leave types, so a person may set it once but only an admin can change it.
+    if (actorId === id && current.role !== 'ADMIN' && input.gender !== undefined && input.gender !== current.gender && current.gender !== 'UNSPECIFIED') {
+      throw new ForbiddenException('Gender is already set. Ask an admin to change it.');
     }
 
     const patch: Partial<UserRow> = { updatedAt: new Date() };

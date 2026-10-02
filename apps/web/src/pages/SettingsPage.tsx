@@ -24,6 +24,7 @@ function ProfileCard() {
   const [gender, setGender] = useState(user?.gender ?? 'UNSPECIFIED');
 
   if (!user) return null;
+  const genderLocked = user.role !== 'ADMIN' && (user.gender ?? 'UNSPECIFIED') !== 'UNSPECIFIED';
 
   const afterChange = (updated: AuthUser) => {
     setUser(updated);
@@ -132,7 +133,7 @@ function ProfileCard() {
               </div>
               <div>
                 <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">Gender</label>
-                <select className="w-full rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1a1a1a] px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:text-white" value={gender} onChange={e => setGender(e.target.value as any)}>
+                <select className="w-full rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1a1a1a] px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:text-white" value={gender} disabled={genderLocked} title={genderLocked ? 'Already set. Ask an admin to change it.' : undefined} onChange={e => setGender(e.target.value as any)}>
                   <option value="UNSPECIFIED">Unspecified</option>
                   <option value="MALE">Male</option>
                   <option value="FEMALE">Female</option>

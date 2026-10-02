@@ -18,6 +18,11 @@ export interface LeaveBalanceRules {
   carryForwardMax: number;
   /** Carried-forward days lapse this many months into the year (null = never). */
   carryForwardExpiryMonths: number | null;
+  /**
+   * NO_CARRY_FORWARD: nothing rolls over. LAPSE_AFTER_YEAR (default): up to the cap rolls over and lapses after the
+   * expiry months. CARRY_FORWARD: the whole unused balance rolls over, no cap and no expiry.
+   */
+  carryForwardPolicy?: 'LAPSE_AFTER_YEAR' | 'NO_CARRY_FORWARD' | 'CARRY_FORWARD';
 }
 
 export interface LeaveTaken {
@@ -55,7 +60,14 @@ function expiryDate(year: number, months: number | null): string | null {
   return `${y}-${String(m).padStart(2, '0')}-01`;
 }
 
-export function computeLeaveBalance(rules: LeaveBalanceRules, joinedOn: string, asOf: string, taken: LeaveTaken[]): LeaveBalanceResult {
+export function computeLeaveBalance(input: LeaveBalanceRules, joinedOn: string, asOf: string, taken: LeaveTaken[]): LeaveBalanceResult {
+  const policy = input.carryForwardPolicy ?? 'LAPSE_AFTER_YEAR';
+  const rules: LeaveBalanceRules =
+    policy === 'NO_CARRY_FORWARD'
+      ? { ...input, carryForwardMax: 0, carryForwardExpiryMonths: null }
+      : policy === 'CARRY_FORWARD'
+        ? { ...input, carryForwardMax: Number.POSITIVE_INFINITY, carryForwardExpiryMonths: null }
+        : input;
   const join = parts(joinedOn);
   const now = parts(asOf);
   const firstYear = Math.min(join.y, now.y);

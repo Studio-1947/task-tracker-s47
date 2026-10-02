@@ -546,6 +546,8 @@ export interface AttendanceToday {
   checkedIn: boolean;
   checkedOut: boolean;
   record: AttendanceRecordItem | null;
+  /** A task timer still running; checking out must say what to do with it. */
+  runningTimer: { taskId: string; taskTitle: string; startedAt: string; isPaused: boolean } | null;
 }
 
 /* ── Chat ── */

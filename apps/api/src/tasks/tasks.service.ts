@@ -1678,6 +1678,18 @@ export class TasksService {
     return entry;
   }
 
+  /** The caller's open timer, if any (used by attendance check-out). */
+  async findRunningTimer(userId: string) {
+    const [row] = await this.db
+      .select({ taskId: taskTimeEntries.taskId, taskTitle: tasks.title, startedAt: taskTimeEntries.startedAt, isPaused: taskTimeEntries.isPaused })
+      .from(taskTimeEntries)
+      .innerJoin(tasks, eq(tasks.id, taskTimeEntries.taskId))
+      .where(and(eq(taskTimeEntries.userId, userId), isNull(taskTimeEntries.endedAt)))
+      .limit(1);
+    if (!row || !row.startedAt) return null;
+    return { taskId: row.taskId, taskTitle: row.taskTitle, startedAt: row.startedAt.toISOString(), isPaused: row.isPaused };
+  }
+
   private async loadRunningTimer(taskId: string, actor: Actor) {
     const task = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(task.workspaceId, actor);

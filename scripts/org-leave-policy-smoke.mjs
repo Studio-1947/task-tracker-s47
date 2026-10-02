@@ -124,10 +124,11 @@ async function main() {
     assert(fReq.status === 201, 'a woman can request it', `${fReq.status} ${JSON.stringify(fReq.body)}`);
     if (fReq.status === 201) await call(female.token, 'POST', `/leaves/${fReq.body.id}/cancel`);
 
-    // Self-service gender edits gate which leave types apply. Today a member CAN change their own gender (an open policy
-    // decision, not asserted either way) - record it so the behaviour is visible, then restore the fixture.
+    // Gender gates which leave types apply: a member may set it once (while unspecified), only an admin changes it after.
     const selfEdit = await call(male.token, 'PATCH', '/me', { gender: 'FEMALE' });
-    console.log(`NOTE a member changing their own gender via /me returned ${selfEdit.status} (gender=${selfEdit.body?.gender}); this unlocks gender-specific leave types.`);
+    assert(selfEdit.status === 403, 'a member cannot change a gender that is already set', String(selfEdit.status));
+    const selfSame = await call(male.token, 'PATCH', '/me', { gender: 'MALE', name: 'Org Smoke Male' });
+    assert(selfSame.status === 200, 'a member can still save their profile with the same gender', String(selfSame.status));
     await call(admin, 'PATCH', `/users/${male.id}`, { gender: 'MALE' });
   } finally {
     await call(admin, 'DELETE', `/leave-types/${lt.body.id}`).catch(() => null);

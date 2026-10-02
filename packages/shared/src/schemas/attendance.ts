@@ -88,7 +88,12 @@ const geoPunchSchema = z.object({
   lng: z.number().min(-180).max(180).optional(),
   accuracy: z.number().min(0).optional(),
 });
-export const attendancePunchSchema = geoPunchSchema.strict();
+export const attendancePunchSchema = geoPunchSchema
+  .extend({
+    /** Required on check-out while a task timer is running. Attendance time never becomes task time. */
+    timerAction: z.enum(['STOP', 'KEEP']).optional(),
+  })
+  .strict();
 export type AttendancePunchInput = z.infer<typeof attendancePunchSchema>;
 
 export const createCorrectionSchema = z

@@ -23,6 +23,7 @@
     "test:manager": "node scripts/workspace-manager-smoke.mjs",
     "test:time": "node scripts/time-entry-smoke.mjs",
     "test:corrections": "node scripts/attendance-corrections-smoke.mjs",
+    "test:checkout": "node scripts/checkout-timer-smoke.mjs",
     "test:capacity": "node scripts/capacity-smoke.mjs",
     "test:reports": "node scripts/reports-smoke.mjs",
     "test:integrity": "node scripts/completion-integrity-smoke.mjs",

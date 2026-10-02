@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AttendanceService } from './attendance.service';
 
 // The parser reads text only; it needs no database or calendar.
-const service = new AttendanceService(null as never, null as never);
+const service = new AttendanceService(null as never, null as never, null as never);
 const parse = (t: string) => service.parseLeavePolicyPdfText(t);
 
 describe('parseLeavePolicyPdfText', () => {

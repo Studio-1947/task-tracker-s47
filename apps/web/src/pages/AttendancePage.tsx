@@ -164,14 +164,20 @@ function CheckInCard({ onOpenCorrection }: { onOpenCorrection?: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
 
-  const punch = async (kind: 'in' | 'out') => {
+  const [askTimer, setAskTimer] = useState(false);
+
+  const punch = async (kind: 'in' | 'out', timerAction?: 'STOP' | 'KEEP') => {
     setError(null);
+    setAskTimer(false);
     setLocating(true);
     const geo = await getGeo();
     setLocating(false);
     const m = kind === 'in' ? checkIn : checkOut;
-    m.mutate(geo, { onError: (e) => setError(e instanceof ApiRequestError ? e.message : 'Something went wrong') });
+    m.mutate(timerAction ? { ...geo, timerAction } : geo, {
+      onError: (e) => setError(e instanceof ApiRequestError ? e.message : 'Something went wrong'),
+    });
   };
+  const timer = data?.runningTimer ?? null;
 
   const rec = data?.record;
   const busy = locating || checkIn.isPending || checkOut.isPending;
@@ -198,7 +204,7 @@ function CheckInCard({ onOpenCorrection }: { onOpenCorrection?: () => void }) {
                 {busy ? 'Locating…' : 'Check in'}
               </Button>
             ) : !data?.checkedOut ? (
-              <Button variant="danger" disabled={busy} onClick={() => void punch('out')} className="px-6 py-3 font-semibold">
+              <Button variant="danger" disabled={busy} onClick={() => (timer ? setAskTimer(true) : void punch('out'))} className="px-6 py-3 font-semibold">
                 {busy ? 'Locating…' : 'Check out'}
               </Button>
             ) : (
@@ -212,6 +218,27 @@ function CheckInCard({ onOpenCorrection }: { onOpenCorrection?: () => void }) {
           </div>
         </div>
       )}
+      {askTimer && timer ? (
+        <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-500/40 dark:bg-amber-500/10" role="alertdialog" aria-label="Timer still running">
+          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+            A timer is still running on “{timer.taskTitle}”{timer.isPaused ? ' (paused)' : ''}.
+          </p>
+          <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">
+            Checking out never turns your attendance hours into task time. Choose what happens to the timer.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="danger" disabled={busy} onClick={() => void punch('out', 'STOP')} className="px-4 py-2 text-xs font-semibold">
+              Stop timer &amp; check out
+            </Button>
+            <Button variant="ghost" disabled={busy} onClick={() => void punch('out', 'KEEP')} className="px-4 py-2 text-xs font-semibold">
+              Keep timer running &amp; check out
+            </Button>
+            <Button variant="ghost" onClick={() => setAskTimer(false)} className="px-4 py-2 text-xs font-semibold">
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : null}
       {error ? <p className="mt-3 text-sm font-medium text-red-600 dark:text-red-400">{error}</p> : null}
       <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
         Your location is captured at check-in/out when you allow it — admins can see it. Denying still records the time.
@@ -1034,6 +1061,7 @@ function LeaveTypesTab() {
                   Unit
                   <select
                     className="w-20 rounded-md border border-slate-300 dark:border-slate-700 px-2 py-1 text-sm bg-white dark:bg-[#252525] dark:text-white"
+                    title="Label only: balances and requests are counted in days"
                     defaultValue={t.entitlementUnit ?? 'DAYS'}
                     onChange={(e) => update.mutate({ id: t.id, patch: { entitlementUnit: e.target.value as EntitlementUnitType } })}
                   >
@@ -1057,6 +1085,7 @@ function LeaveTypesTab() {
                 <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
                   WFH Days
                   <input
+                    title="Reference figure only: work-from-home days are not tracked or deducted"
                     type="number"
                     min={0}
                     max={365}
