@@ -1161,14 +1161,23 @@ export class TasksService {
         'Only the accountable owner or a tagged contributor can submit this task',
       );
     }
-    const [evidence] = await this.db
-      .select({ id: taskAttachments.id })
-      .from(taskAttachments)
-      .where(
-        and(eq(taskAttachments.id, input.evidenceAttachmentId), eq(taskAttachments.taskId, taskId)),
-      )
-      .limit(1);
-    if (!evidence) throw new BadRequestException('Select evidence attached to this task');
+    const evidence = input.evidenceAttachmentId
+      ? (
+          await this.db
+            .select({ id: taskAttachments.id })
+            .from(taskAttachments)
+            .where(
+              and(
+                eq(taskAttachments.id, input.evidenceAttachmentId),
+                eq(taskAttachments.taskId, taskId),
+              ),
+            )
+            .limit(1)
+        )[0]
+      : null;
+    if (input.evidenceAttachmentId && !evidence) {
+      throw new BadRequestException('The selected evidence is not attached to this task');
+    }
     const [pending] = await this.db
       .select({ id: taskSubmissions.id })
       .from(taskSubmissions)
@@ -1182,7 +1191,7 @@ export class TasksService {
         .values({
           taskId,
           submitterId: actor.id,
-          evidenceAttachmentId: evidence.id,
+          evidenceAttachmentId: evidence?.id ?? null,
           note: input.note,
         })
         .returning();
@@ -1198,7 +1207,7 @@ export class TasksService {
           action: AuditAction.SUBMITTED,
           afterValue: {
             submissionId: created!.id,
-            evidenceAttachmentId: evidence.id,
+            evidenceAttachmentId: evidence?.id ?? null,
             note: input.note,
           },
         },
@@ -1385,7 +1394,9 @@ export class TasksService {
       if (ok) visible.push(r);
     }
     const visibleTaskIds = visible.map((r) => r.task.id);
-    const evidenceIds = visible.map((r) => r.sub.evidenceAttachmentId);
+    const evidenceIds = visible
+      .map((r) => r.sub.evidenceAttachmentId)
+      .filter((id): id is string => Boolean(id));
     const [people, cal, evidenceRows, returnedRows] = await Promise.all([
       this.userRefs(
         visible.flatMap((r) => [
@@ -1457,7 +1468,9 @@ export class TasksService {
         projectName: r.projectName,
         dueDate: r.task.dueDate ? r.task.dueDate.toISOString() : null,
         deliveryNote: r.sub.note,
-        evidence: evidenceById.get(r.sub.evidenceAttachmentId) ?? null,
+        evidence: r.sub.evidenceAttachmentId
+          ? (evidenceById.get(r.sub.evidenceAttachmentId) ?? null)
+          : null,
         priorReturns: returnsByTask.get(r.task.id) ?? [],
       };
     });

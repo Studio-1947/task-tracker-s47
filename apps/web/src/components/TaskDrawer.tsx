@@ -773,9 +773,9 @@ function ReviewWorkflow({
           className="mt-3 space-y-2"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!note.trim() || !evidenceAttachmentId) return;
+            if (!note.trim()) return;
             submit.mutate(
-              { note: note.trim(), evidenceAttachmentId },
+              { note: note.trim(), ...(evidenceAttachmentId ? { evidenceAttachmentId } : {}) },
               {
                 onSuccess: () => {
                   setNote('');
@@ -790,9 +790,8 @@ function ReviewWorkflow({
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800 dark:bg-[#252525] dark:text-white"
             value={evidenceAttachmentId}
             onChange={(e) => setEvidenceAttachmentId(e.target.value)}
-            required
           >
-            <option value="">Select attached evidence</option>
+            <option value="">No attachment — physical/offline review</option>
             {(attachments ?? []).map((a) => (
               <option key={a.id} value={a.id}>
                 {a.fileName}
@@ -803,12 +802,12 @@ function ReviewWorkflow({
             aria-label="Delivery note"
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800 dark:bg-[#252525] dark:text-white"
             rows={2}
-            placeholder="Delivery note and acceptance details"
+            placeholder="Delivery note (required; record what was reviewed for a physical/offline review)"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             required
           />
-          <Button type="submit" disabled={!reviewerId || submit.isPending || !attachments?.length}>
+          <Button type="submit" disabled={!reviewerId || submit.isPending || !note.trim()}>
             Submit for review
           </Button>
         </form>

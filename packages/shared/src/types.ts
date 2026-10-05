@@ -235,7 +235,7 @@ export interface TaskSubmission {
   taskId: string;
   note: string;
   status: 'PENDING' | 'ACCEPTED' | 'RETURNED';
-  evidenceAttachmentId: string;
+  evidenceAttachmentId: string | null;
   submitter: UserRef;
   reviewer: UserRef | null;
   reviewNote: string | null;

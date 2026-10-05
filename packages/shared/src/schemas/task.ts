@@ -68,7 +68,8 @@ export const updateTaskSchema = z
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
 
 export const submitTaskSchema = z.object({
-  evidenceAttachmentId: z.string().uuid(),
+  /** Optional for an in-person/physical review documented in the delivery note. */
+  evidenceAttachmentId: z.string().uuid().nullable().optional(),
   note: z.string().trim().min(1).max(4000),
 });
 export type SubmitTaskInput = z.infer<typeof submitTaskSchema>;

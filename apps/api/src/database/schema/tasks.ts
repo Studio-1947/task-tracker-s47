@@ -31,7 +31,9 @@ export const tasks = pgTable(
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
     /** Parent task, when this is a subtask. Single level only (a subtask can't itself have subtasks). */
-    parentTaskId: uuid('parent_task_id').references((): AnyPgColumn => tasks.id, { onDelete: 'cascade' }),
+    parentTaskId: uuid('parent_task_id').references((): AnyPgColumn => tasks.id, {
+      onDelete: 'cascade',
+    }),
     /** Per-project sequential number backing the human-readable ref (e.g. 12 in WEB-12). */
     number: integer('number').notNull(),
     title: varchar('title', { length: 1000 }).notNull(),
@@ -63,9 +65,18 @@ export const tasks = pgTable(
     index('tasks_parent_task_idx').on(t.parentTaskId),
     index('tasks_owner_idx').on(t.ownerId),
     index('tasks_reviewer_idx').on(t.reviewerId),
-    check('tasks_baseline_estimate_nonnegative', sql`${t.baselineEstimateMinutes} IS NULL OR ${t.baselineEstimateMinutes} >= 0`),
-    check('tasks_current_estimate_nonnegative', sql`${t.currentEstimateMinutes} IS NULL OR ${t.currentEstimateMinutes} >= 0`),
-    check('tasks_remaining_estimate_nonnegative', sql`${t.remainingEstimateMinutes} IS NULL OR ${t.remainingEstimateMinutes} >= 0`),
+    check(
+      'tasks_baseline_estimate_nonnegative',
+      sql`${t.baselineEstimateMinutes} IS NULL OR ${t.baselineEstimateMinutes} >= 0`,
+    ),
+    check(
+      'tasks_current_estimate_nonnegative',
+      sql`${t.currentEstimateMinutes} IS NULL OR ${t.currentEstimateMinutes} >= 0`,
+    ),
+    check(
+      'tasks_remaining_estimate_nonnegative',
+      sql`${t.remainingEstimateMinutes} IS NULL OR ${t.remainingEstimateMinutes} >= 0`,
+    ),
   ],
 );
 
@@ -149,9 +160,15 @@ export const taskSubmissions = pgTable(
   'task_submissions',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    taskId: uuid('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
-    submitterId: uuid('submitter_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
-    evidenceAttachmentId: uuid('evidence_attachment_id').notNull().references(() => taskAttachments.id, { onDelete: 'restrict' }),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    submitterId: uuid('submitter_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    evidenceAttachmentId: uuid('evidence_attachment_id').references(() => taskAttachments.id, {
+      onDelete: 'restrict',
+    }),
     note: text('note').notNull(),
     status: varchar('status', { length: 12 }).notNull().default('PENDING'),
     reviewerId: uuid('reviewer_id').references(() => users.id, { onDelete: 'set null' }),
@@ -161,7 +178,9 @@ export const taskSubmissions = pgTable(
   },
   (t) => [
     index('task_submissions_task_idx').on(t.taskId),
-    uniqueIndex('task_submissions_one_pending_uq').on(t.taskId).where(sql`${t.status} = 'PENDING'`),
+    uniqueIndex('task_submissions_one_pending_uq')
+      .on(t.taskId)
+      .where(sql`${t.status} = 'PENDING'`),
     check('task_submissions_status_check', sql`${t.status} IN ('PENDING', 'ACCEPTED', 'RETURNED')`),
   ],
 );
@@ -204,67 +223,122 @@ export const taskTimeEntries = pgTable(
   (t) => [
     index('task_time_entries_task_idx').on(t.taskId),
     index('task_time_entries_user_idx').on(t.userId),
-    uniqueIndex('task_time_entries_one_running_timer_uq').on(t.userId).where(sql`${t.endedAt} IS NULL`),
-    check('task_time_entries_category_check', sql`${t.category} IN ('EXECUTION', 'REVIEW', 'REWORK')`),
+    uniqueIndex('task_time_entries_one_running_timer_uq')
+      .on(t.userId)
+      .where(sql`${t.endedAt} IS NULL`),
+    check(
+      'task_time_entries_category_check',
+      sql`${t.category} IN ('EXECUTION', 'REVIEW', 'REWORK')`,
+    ),
   ],
 );
 
-export const taskEstimateRevisions = pgTable('task_estimate_revisions', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  taskId: uuid('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
-  previousEstimateMinutes: integer('previous_estimate_minutes').notNull(),
-  revisedEstimateMinutes: integer('revised_estimate_minutes').notNull(),
-  reason: text('reason').notNull(),
-  classification: varchar('classification', { length: 24 }).notNull(),
-  actorId: uuid('actor_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index('task_estimate_revisions_task_idx').on(t.taskId)]);
+export const taskEstimateRevisions = pgTable(
+  'task_estimate_revisions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    previousEstimateMinutes: integer('previous_estimate_minutes').notNull(),
+    revisedEstimateMinutes: integer('revised_estimate_minutes').notNull(),
+    reason: text('reason').notNull(),
+    classification: varchar('classification', { length: 24 }).notNull(),
+    actorId: uuid('actor_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('task_estimate_revisions_task_idx').on(t.taskId)],
+);
 
-export const taskReopenings = pgTable('task_reopenings', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  taskId: uuid('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
-  reason: text('reason').notNull(),
-  actorId: uuid('actor_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
-  reopenedAt: timestamp('reopened_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index('task_reopenings_task_idx').on(t.taskId)]);
+export const taskReopenings = pgTable(
+  'task_reopenings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    reason: text('reason').notNull(),
+    actorId: uuid('actor_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    reopenedAt: timestamp('reopened_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('task_reopenings_task_idx').on(t.taskId)],
+);
 
-export const reviewerDelegations = pgTable('reviewer_delegations', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  taskId: uuid('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
-  delegatorId: uuid('delegator_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
-  delegateId: uuid('delegate_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
-  effectiveFrom: timestamp('effective_from', { withTimezone: true }).notNull(),
-  effectiveTo: timestamp('effective_to', { withTimezone: true }).notNull(),
-  reason: text('reason').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index('reviewer_delegations_task_effective_idx').on(t.taskId, t.effectiveFrom, t.effectiveTo)]);
+export const reviewerDelegations = pgTable(
+  'reviewer_delegations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    delegatorId: uuid('delegator_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    delegateId: uuid('delegate_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    effectiveFrom: timestamp('effective_from', { withTimezone: true }).notNull(),
+    effectiveTo: timestamp('effective_to', { withTimezone: true }).notNull(),
+    reason: text('reason').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('reviewer_delegations_task_effective_idx').on(t.taskId, t.effectiveFrom, t.effectiveTo),
+  ],
+);
 
-export const capacityAllocations = pgTable('capacity_allocations', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
-  taskId: uuid('task_id').references(() => tasks.id, { onDelete: 'cascade' }),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  periodStart: date('period_start').notNull(),
-  periodEnd: date('period_end').notNull(),
-  allocatedMinutes: integer('allocated_minutes').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index('capacity_allocations_workspace_period_idx').on(t.workspaceId, t.periodStart, t.periodEnd)]);
+export const capacityAllocations = pgTable(
+  'capacity_allocations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    taskId: uuid('task_id').references(() => tasks.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    periodStart: date('period_start').notNull(),
+    periodEnd: date('period_end').notNull(),
+    allocatedMinutes: integer('allocated_minutes').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('capacity_allocations_workspace_period_idx').on(
+      t.workspaceId,
+      t.periodStart,
+      t.periodEnd,
+    ),
+  ],
+);
 
 /** Time a person has set aside (meetings, training…) that reduces planned-work capacity. */
-export const reservedTimeBlocks = pgTable('reserved_time_blocks', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  kind: varchar('kind', { length: 12 }).notNull().default('MEETING'),
-  title: varchar('title', { length: 200 }).notNull(),
-  startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
-  endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
-  createdById: uuid('created_by_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [
-  index('reserved_time_blocks_user_range_idx').on(t.userId, t.startsAt, t.endsAt),
-  check('reserved_time_blocks_kind_check', sql`${t.kind} IN ('MEETING', 'TRAINING', 'OTHER')`),
-  check('reserved_time_blocks_range_check', sql`${t.endsAt} > ${t.startsAt}`),
-]);
+export const reservedTimeBlocks = pgTable(
+  'reserved_time_blocks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    kind: varchar('kind', { length: 12 }).notNull().default('MEETING'),
+    title: varchar('title', { length: 200 }).notNull(),
+    startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+    endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+    createdById: uuid('created_by_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('reserved_time_blocks_user_range_idx').on(t.userId, t.startsAt, t.endsAt),
+    check('reserved_time_blocks_kind_check', sql`${t.kind} IN ('MEETING', 'TRAINING', 'OTHER')`),
+    check('reserved_time_blocks_range_check', sql`${t.endsAt} > ${t.startsAt}`),
+  ],
+);
 
 export type TaskTimeEntryRow = typeof taskTimeEntries.$inferSelect;
 
@@ -307,5 +381,3 @@ export const taskDependencies = pgTable(
 );
 
 export type TaskDependencyRow = typeof taskDependencies.$inferSelect;
-
-
