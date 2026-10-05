@@ -58,16 +58,16 @@ export type TaskSize = (typeof TaskSize)[keyof typeof TaskSize];
 export const TASK_SIZES = Object.values(TaskSize);
 
 export const TASK_SIZE_LABELS: Record<TaskSize, string> = {
-  SMALL: 'Small (about 20 min)',
-  MEDIUM: 'Medium (about 50 min)',
-  LARGE: 'Large (about 1–2 hours)',
+  SMALL: 'Short task (≤ 20 min)',
+  MEDIUM: 'Medium task (> 20–50 min)',
+  LARGE: 'Big task (> 50–100 min)',
 };
 
 /** Default effort forecast associated with the work-scale selector. */
 export const TASK_SIZE_ESTIMATE_MINUTES: Record<TaskSize, number> = {
   SMALL: 20,
-  MEDIUM: 50,
-  LARGE: 90,
+  MEDIUM: 35,
+  LARGE: 75,
 };
 
 /** Leave request lifecycle. */
