@@ -387,7 +387,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
             <button
               type="button"
               onClick={() => setShowEditProject(true)}
-              className="shrink-0 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:border-indigo-500 hover:text-indigo-600 dark:border-slate-800 dark:text-slate-300 dark:hover:text-indigo-400"
+              className="shrink-0 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:border-indigo-500 hover:text-indigo-600 dark:border-[#3a3a3a] dark:text-slate-300 dark:hover:text-indigo-400"
             >
               Edit project
             </button>
@@ -396,7 +396,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
             <button
               type="button"
               onClick={() => setShowCreateProject(true)}
-              className="shrink-0 rounded-full border border-dashed border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+              className="shrink-0 rounded-full border border-dashed border-slate-300 dark:border-[#3a3a3a] px-3 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
             >
               + New project
             </button>
@@ -727,11 +727,11 @@ function ProjectPill({
 }) {
   const lifecycleStyle =
     lifecycle === 'ACTIVE'
-      ? 'border-l-emerald-500'
+      ? '!border-l-emerald-500'
       : lifecycle === 'UPCOMING'
-        ? 'border-l-indigo-500'
+        ? '!border-l-indigo-500'
         : lifecycle === 'PAST'
-          ? 'border-l-amber-500'
+          ? '!border-l-amber-500'
           : '';
   return (
     <button
@@ -739,8 +739,8 @@ function ProjectPill({
       onClick={onClick}
       className={`shrink-0 flex items-center gap-1.5 rounded-full border border-l-[4px] px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${lifecycleStyle} ${
         active
-          ? 'border-indigo-500 bg-indigo-50/70 text-indigo-700 dark:border-indigo-500/50 dark:bg-indigo-950/30 dark:text-indigo-300'
-          : 'border-slate-200 bg-white/60 text-slate-600 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300 dark:hover:border-slate-700'
+          ? 'border-indigo-500 bg-indigo-50/70 text-indigo-700 dark:border-indigo-500/50 dark:bg-indigo-500/10 dark:text-indigo-300'
+          : 'border-slate-200 bg-white/60 text-slate-600 hover:border-slate-300 dark:border-[#3a3a3a] dark:bg-[#1f1f1f] dark:text-slate-300 dark:hover:border-[#4a4a4a]'
       }`}
     >
       <span className="truncate max-w-[10rem]">{label}</span>
@@ -748,7 +748,7 @@ function ProjectPill({
         <span className="font-mono text-[10px] text-slate-400 dark:text-slate-500">{prefix}</span>
       ) : null}
       {count !== undefined ? (
-        <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+        <span className="rounded-full bg-slate-100 dark:bg-[#2a2a2a] px-1.5 text-[10px] text-slate-500 dark:text-slate-400">
           {count}
         </span>
       ) : null}
