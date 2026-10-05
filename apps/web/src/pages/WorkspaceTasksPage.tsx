@@ -101,7 +101,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
   const [showEditProject, setShowEditProject] = useState(false);
   const [projectQuery, setProjectQuery] = useState('');
   const [projectLifecycle, setProjectLifecycle] = useState<'ALL' | 'ACTIVE' | 'UPCOMING' | 'PAST'>(
-    'ACTIVE',
+    'ALL',
   );
   const [showSettings, setShowSettings] = useState(false);
   const [showPlanning, setShowPlanning] = useState(false);
@@ -301,7 +301,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
         </div>
 
         {/* Project scope selector */}
-        <div className="mt-5 flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+        <div className="mt-5 flex flex-wrap items-center gap-2">
           <div className="relative shrink-0">
             <svg
               className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
@@ -321,50 +321,52 @@ function Board({ workspaceId }: { workspaceId: string }) {
               placeholder="Search projects…"
               value={projectQuery}
               onChange={(e) => setProjectQuery(e.target.value)}
-              className="w-40 rounded-full border border-slate-200 bg-white/60 py-1.5 pl-8 pr-3 text-xs text-slate-700 outline-none focus:border-indigo-500 sm:w-52 dark:border-slate-800 dark:bg-slate-900/40 dark:text-white"
+              className="w-52 rounded-full border border-slate-200 bg-white/60 py-2 pl-8 pr-8 text-xs text-slate-700 outline-none focus:border-indigo-500 sm:w-60 dark:border-slate-800 dark:bg-slate-900/40 dark:text-white"
             />
+            {projectQuery ? (
+              <button
+                type="button"
+                aria-label="Clear project search"
+                onClick={() => setProjectQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+              >
+                ×
+              </button>
+            ) : null}
           </div>
+          <div
+            className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-900/50"
+            aria-label="Project timeline filters"
+          >
+            {(
+              [
+                ['ALL', 'All projects', 'text-slate-600 dark:text-slate-300'],
+                ['ACTIVE', 'Active', 'text-emerald-700 dark:text-emerald-300'],
+                ['UPCOMING', 'Upcoming', 'text-indigo-700 dark:text-indigo-300'],
+                ['PAST', 'Past', 'text-amber-700 dark:text-amber-300'],
+              ] as const
+            ).map(([value, label, tone]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => {
+                  setProjectLifecycle(value);
+                  selectProject('');
+                }}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${projectLifecycle === value ? `bg-white shadow-sm dark:bg-slate-800 ${tone}` : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <span className="w-full text-[11px] text-slate-400 dark:text-slate-500">
+            Choose a timeline to filter projects, then choose a project to focus its tasks.
+          </span>
           <ProjectPill
             active={!selectedProjectId}
             onClick={() => selectProject('')}
-            label="All projects"
+            label="All shown projects"
           />
-          <select
-            aria-label="Filter projects by timeline"
-            value={projectLifecycle}
-            onChange={(e) => setProjectLifecycle(e.target.value as typeof projectLifecycle)}
-            className={`shrink-0 rounded-full border-2 bg-white/60 px-3 py-1.5 text-xs font-semibold outline-none dark:bg-slate-900/40 ${
-              projectLifecycle === 'ACTIVE'
-                ? 'border-emerald-400 text-emerald-700 focus:border-emerald-500 dark:border-emerald-700 dark:text-emerald-300'
-                : projectLifecycle === 'UPCOMING'
-                  ? 'border-indigo-400 text-indigo-700 focus:border-indigo-500 dark:border-indigo-600 dark:text-indigo-300'
-                  : projectLifecycle === 'PAST'
-                    ? 'border-amber-400 text-amber-700 focus:border-amber-500 dark:border-amber-700 dark:text-amber-300'
-                    : 'border-slate-300 text-slate-600 focus:border-slate-500 dark:border-slate-700 dark:text-slate-300'
-            }`}
-          >
-            <option value="ACTIVE">Active / ongoing</option>
-            <option value="UPCOMING">Upcoming</option>
-            <option value="PAST">Past</option>
-            <option value="ALL">All timelines</option>
-          </select>
-          <div
-            className="flex shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white/60 px-3 py-1.5 text-[10px] font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400"
-            aria-label="Project timeline colour guide"
-          >
-            <span className="inline-flex items-center gap-1">
-              <i className="h-2 w-2 rounded-full bg-emerald-500" />
-              Active
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <i className="h-2 w-2 rounded-full bg-indigo-500" />
-              Upcoming
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <i className="h-2 w-2 rounded-full bg-amber-500" />
-              Past
-            </span>
-          </div>
           {visibleProjects.map((p) => (
             <ProjectPill
               key={p.id}
