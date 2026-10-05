@@ -98,6 +98,8 @@ export interface UserSummary {
   workspaceIds?: string[];
   /** Projects the person has assigned work in, busiest first. Omitted on writes. */
   projects?: UserProjectTag[];
+  /** Projects the person is explicitly blocked from within their workspaces. */
+  restrictedProjectIds?: string[];
 }
 
 /**

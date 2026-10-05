@@ -28,6 +28,7 @@ import {
   users,
   workspaceMembers,
   workspaces,
+  projectBlockedUsers,
   type UserRow,
 } from '../database/schema';
 import { generateTempPassword } from '../common/util/password';
@@ -50,6 +51,7 @@ export class UsersService {
     workspaceCount?: number,
     userProjects?: UserProjectTag[],
     workspaceIds?: string[],
+    restrictedProjectIds?: string[],
   ): UserSummary {
     return {
       id: u.id,
@@ -65,6 +67,7 @@ export class UsersService {
       ...(workspaceCount !== undefined ? { workspaceCount } : {}),
       ...(userProjects !== undefined ? { projects: userProjects } : {}),
       ...(workspaceIds !== undefined ? { workspaceIds } : {}),
+      ...(restrictedProjectIds !== undefined ? { restrictedProjectIds } : {}),
     };
   }
 
@@ -119,10 +122,11 @@ export class UsersService {
   }
 
   async list(): Promise<UserSummary[]> {
-    const [rows, memberships, projectTags] = await Promise.all([
+    const [rows, memberships, projectTags, restrictedProjects] = await Promise.all([
       this.db.select().from(users).orderBy(users.createdAt),
       this.db.select({ userId: workspaceMembers.userId, workspaceId: workspaceMembers.workspaceId }).from(workspaceMembers),
       this.projectTagsByUser(),
+      this.db.select({ userId: projectBlockedUsers.userId, projectId: projectBlockedUsers.projectId }).from(projectBlockedUsers),
     ]);
     const membersByUser = new Map<string, string[]>();
     for (const m of memberships) {
@@ -130,9 +134,16 @@ export class UsersService {
       existing.push(m.workspaceId);
       membersByUser.set(m.userId, existing);
     }
+    const restrictedByUser = new Map<string, string[]>();
+    for (const r of restrictedProjects) {
+      const existing = restrictedByUser.get(r.userId) ?? [];
+      existing.push(r.projectId);
+      restrictedByUser.set(r.userId, existing);
+    }
     return rows.map((u) => {
       const wIds = membersByUser.get(u.id) ?? [];
-      return this.toSummary(u, wIds.length, projectTags.get(u.id) ?? [], wIds);
+      const restricted = restrictedByUser.get(u.id) ?? [];
+      return this.toSummary(u, wIds.length, projectTags.get(u.id) ?? [], wIds, restricted);
     });
   }
 
@@ -228,12 +239,27 @@ export class UsersService {
             .onConflictDoNothing();
         }
       }
+      
+      if (input.restrictedProjectIds) {
+        await tx.delete(projectBlockedUsers).where(eq(projectBlockedUsers.userId, id));
+        if (input.restrictedProjectIds.length > 0) {
+          await tx
+            .insert(projectBlockedUsers)
+            .values(input.restrictedProjectIds.map((projectId) => ({ projectId, userId: id, blockedById: actorId })))
+            .onConflictDoNothing();
+        }
+      }
+      
       return row;
     });
 
-    const wMemberships = await this.db.select({ workspaceId: workspaceMembers.workspaceId }).from(workspaceMembers).where(eq(workspaceMembers.userId, id));
+    const [wMemberships, rProjects] = await Promise.all([
+      this.db.select({ workspaceId: workspaceMembers.workspaceId }).from(workspaceMembers).where(eq(workspaceMembers.userId, id)),
+      this.db.select({ projectId: projectBlockedUsers.projectId }).from(projectBlockedUsers).where(eq(projectBlockedUsers.userId, id))
+    ]);
     const wIds = wMemberships.map(m => m.workspaceId);
-    return this.toSummary(updated!, wIds.length, undefined, wIds);
+    const rIds = rProjects.map(p => p.projectId);
+    return this.toSummary(updated!, wIds.length, undefined, wIds, rIds);
   }
 
   /**

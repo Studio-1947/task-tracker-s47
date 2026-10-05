@@ -2,7 +2,7 @@ import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nest
 import { and, asc, count, eq } from 'drizzle-orm';
 import type { CreateProjectInput, ProjectSummary, UpdateProjectInput } from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
-import { projects, tasks, type ProjectRow } from '../database/schema';
+import { projects, tasks, projectBlockedUsers, type ProjectRow } from '../database/schema';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 
 type Actor = { id: string; role: string };
@@ -45,12 +45,16 @@ export class ProjectsService {
   async assertCanAccess(projectId: string, actor: Actor): Promise<ProjectRow> {
     const project = await this.loadOrThrow(projectId);
     await this.workspaces.assertCanAccess(project.workspaceId, actor);
+    if (actor.role !== 'ADMIN') {
+      const [block] = await this.db.select().from(projectBlockedUsers).where(and(eq(projectBlockedUsers.projectId, projectId), eq(projectBlockedUsers.userId, actor.id))).limit(1);
+      if (block) throw new ForbiddenException('You have been blocked from accessing this project');
+    }
     return project;
   }
 
   async list(workspaceId: string, actor: Actor): Promise<ProjectSummary[]> {
     await this.workspaces.assertCanAccess(workspaceId, actor);
-    const [rows, taskCounts] = await Promise.all([
+    const [rows, taskCounts, blocks] = await Promise.all([
       this.db
         .select()
         .from(projects)
@@ -61,9 +65,16 @@ export class ProjectsService {
         .from(tasks)
         .where(eq(tasks.isArchived, false))
         .groupBy(tasks.projectId),
+      actor.role !== 'ADMIN' 
+        ? this.db.select({ projectId: projectBlockedUsers.projectId }).from(projectBlockedUsers).where(eq(projectBlockedUsers.userId, actor.id))
+        : Promise.resolve([]),
     ]);
+    
+    const blockedIds = new Set(blocks.map(b => b.projectId));
+    const allowedRows = rows.filter(r => !blockedIds.has(r.id));
+    
     const countBy = new Map(taskCounts.map((r) => [r.projectId, Number(r.c)]));
-    return rows.map((p) => this.toSummary(p, countBy.get(p.id) ?? 0));
+    return allowedRows.map((p) => this.toSummary(p, countBy.get(p.id) ?? 0));
   }
 
   async getOne(projectId: string, actor: Actor): Promise<ProjectSummary> {

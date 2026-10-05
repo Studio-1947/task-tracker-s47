@@ -1,4 +1,4 @@
-import { boolean, index, integer, pgTable, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, pgTable, primaryKey, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { users } from './users';
 import { workspaces } from './workspaces';
 
@@ -36,3 +36,20 @@ export const projects = pgTable(
 
 export type ProjectRow = typeof projects.$inferSelect;
 export type NewProjectRow = typeof projects.$inferInsert;
+
+/** Explicit list of users blocked from seeing a project within their workspace. */
+export const projectBlockedUsers = pgTable(
+  'project_blocked_users',
+  {
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    blockedById: uuid('blocked_by_id')
+      .references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.userId] })],
+);

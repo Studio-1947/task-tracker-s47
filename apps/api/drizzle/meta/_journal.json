@@ -309,6 +309,13 @@
       "when": 1812300000000,
       "tag": "0043_optional_review_evidence",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1791201893132,
+      "tag": "0044_rich_santa_claus",
+      "breakpoints": true
     }
   ]
 }

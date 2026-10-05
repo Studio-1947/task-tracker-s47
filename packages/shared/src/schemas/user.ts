@@ -20,6 +20,7 @@ export const updateUserSchema = z
     gender: z.enum(['MALE', 'FEMALE', 'OTHER', 'UNSPECIFIED']).optional(),
     isActive: z.boolean().optional(),
     workspaceIds: z.array(z.string().uuid()).optional(),
+    restrictedProjectIds: z.array(z.string().uuid()).optional(),
   })
   .strict();
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;

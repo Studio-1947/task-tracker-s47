@@ -16,6 +16,7 @@ import {
   gte,
   ilike,
   inArray,
+  notInArray,
   isNull,
   lt,
   lte,
@@ -89,6 +90,7 @@ import {
   tasks,
   users,
   workspaceMembers,
+  projectBlockedUsers,
   workspaces,
   type TaskAttachmentRow,
   type TaskRow,
@@ -655,6 +657,12 @@ export class TasksService {
     });
   }
 
+  private async getBlockedProjectIds(actor: Actor): Promise<string[]> {
+    if (actor.role === 'ADMIN') return [];
+    const blocks = await this.db.select({ projectId: projectBlockedUsers.projectId }).from(projectBlockedUsers).where(eq(projectBlockedUsers.userId, actor.id));
+    return blocks.map(b => b.projectId);
+  }
+
   async list(
     workspaceId: string,
     actor: Actor,
@@ -664,6 +672,11 @@ export class TasksService {
 
     // Subtasks are shown nested under their parent (in the drawer), never as their own board row.
     const conds = [eq(tasks.workspaceId, workspaceId), isNull(tasks.parentTaskId)];
+    
+    const blockedProjects = await this.getBlockedProjectIds(actor);
+    if (blockedProjects.length > 0) {
+      conds.push(notInArray(tasks.projectId, blockedProjects));
+    }
     if (query.projectId) conds.push(eq(tasks.projectId, query.projectId));
     if (!query.includeArchived) conds.push(eq(tasks.isArchived, false));
     if (query.status) conds.push(eq(tasks.status, query.status));
@@ -790,6 +803,13 @@ export class TasksService {
   async getOne(taskId: string, actor: Actor): Promise<TaskDetail> {
     const task = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(task.workspaceId, actor);
+    
+    if (actor.role !== 'ADMIN') {
+      const blocked = await this.getBlockedProjectIds(actor);
+      if (blocked.includes(task.projectId)) {
+        throw new ForbiddenException('You have been blocked from accessing this project');
+      }
+    }
     const [rel, people, calendar] = await Promise.all([
       this.loadRelations([taskId]),
       this.userRefs([task.ownerId, task.reviewerId]),

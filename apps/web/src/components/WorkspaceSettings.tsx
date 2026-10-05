@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { useUsers } from '../hooks/useUsers';
+import { useUsers, useUpdateUser } from '../hooks/useUsers';
 import { useWorkspace, useWorkspaceMembers } from '../hooks/useTasks';
 import {
   useRemoveWorkspaceLogo,
@@ -16,6 +16,7 @@ import { AuthImage } from './AuthImage';
 import { CreateProjectModal } from './CreateProjectModal';
 import { UserPicker } from './UserPicker';
 import { Badge, Button, Input, Spinner } from './ui';
+import { EditUserDrawer } from './EditUserDrawer';
 
 const IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif';
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
@@ -45,6 +46,8 @@ export function WorkspaceSettings({ workspaceId, onClose }: Props) {
   const [description, setDescription] = useState<string | null>(null);
   const [addUserId, setAddUserId] = useState('');
   const [showCreateProject, setShowCreateProject] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const updateUser = useUpdateUser();
   const [error, setError] = useState<string | null>(null);
   const [imgError, setImgError] = useState<string | null>(null);
   const logoInput = useRef<HTMLInputElement>(null);
@@ -343,6 +346,14 @@ export function WorkspaceSettings({ workspaceId, onClose }: Props) {
                         <option value="MANAGER">MANAGER</option>
                       </select>
                       <Button
+                        variant="ghost"
+                        className="py-1 px-2 text-xs"
+                        disabled={!allUsers}
+                        onClick={() => setEditingUserId(m.id)}
+                      >
+                        Manage
+                      </Button>
+                      <Button
                         variant="danger"
                         disabled={updateMembers.isPending}
                         onClick={() => updateMembers.mutate({ remove: [m.id] })}
@@ -408,6 +419,16 @@ export function WorkspaceSettings({ workspaceId, onClose }: Props) {
 
       {showCreateProject ? (
         <CreateProjectModal workspaceId={workspaceId} onClose={() => setShowCreateProject(false)} />
+      ) : null}
+
+      {editingUserId && allUsers?.find(u => u.id === editingUserId) ? (
+        <EditUserDrawer
+          user={allUsers.find(u => u.id === editingUserId)!}
+          onClose={() => setEditingUserId(null)}
+          busy={updateUser.isPending}
+          onSave={(patch) => updateUser.mutate({ id: editingUserId, patch })}
+          isMe={false}
+        />
       ) : null}
     </div>
   );
