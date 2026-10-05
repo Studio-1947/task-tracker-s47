@@ -41,7 +41,15 @@ import {
 } from '../hooks/useTasks';
 import { useCreateLabel } from '../hooks/useLabels';
 import { useAuth } from '../stores/auth';
-import { describeAudit, formatDate, formatDateTime, isOverdue, priorityClasses, statusClasses, statusLabel } from '../lib/format';
+import {
+  describeAudit,
+  formatDate,
+  formatDateTime,
+  isOverdue,
+  priorityClasses,
+  statusClasses,
+  statusLabel,
+} from '../lib/format';
 import { ApiRequestError } from '../lib/api';
 import { linkify } from '../lib/linkify';
 import { AssigneePicker } from './AssigneePicker';
@@ -50,7 +58,15 @@ import { Avatar } from './Avatar';
 import { Button, Spinner } from './ui';
 import { TextLinkButton } from './TextLinkButton';
 import { DueDateEditor } from './DueDateEditor';
-import { AcceptanceCriteriaSection, BreakupPrompt, DependenciesSection, EstimateRevisionForm, MoveTimeEntry, ReopenSection, SizeChip } from './TaskPlanningSections';
+import {
+  AcceptanceCriteriaSection,
+  BreakupPrompt,
+  DependenciesSection,
+  EstimateRevisionForm,
+  MoveTimeEntry,
+  ReopenSection,
+  SizeChip,
+} from './TaskPlanningSections';
 
 interface Props {
   workspaceId: string;
@@ -87,7 +103,8 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
     };
   }, []);
 
-  const patch = (p: Parameters<typeof update.mutate>[0]['patch']) => update.mutate({ id: taskId, patch: p });
+  const patch = (p: Parameters<typeof update.mutate>[0]['patch']) =>
+    update.mutate({ id: taskId, patch: p });
 
   /** Subtasks live under the parent's ['task', taskId] cache entry, so refresh that too. */
   const patchSubtask = (subtaskId: string, p: UpdateTaskInput) =>
@@ -100,7 +117,8 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
     patchSubtask(subtaskId, { status: currentStatus === 'DONE' ? 'TODO' : 'DONE' });
 
   const onDelete = () => {
-    if (!window.confirm(`Permanently delete "${task?.ref} ${task?.title}"? This cannot be undone.`)) return;
+    if (!window.confirm(`Permanently delete "${task?.ref} ${task?.title}"? This cannot be undone.`))
+      return;
     remove.mutate(taskId, { onSuccess: onClose });
   };
 
@@ -114,7 +132,10 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-[#090d16]/50 dark:bg-[#121212]/80 backdrop-blur-md animate-fade-in" onClick={onClose} />
+      <div
+        className="fixed inset-0 bg-[#090d16]/50 dark:bg-[#121212]/80 backdrop-blur-md animate-fade-in"
+        onClick={onClose}
+      />
 
       {/* Drawer content */}
       <div className="relative z-50 flex h-full w-[calc(100%-3rem)] sm:w-[36rem] max-w-xl flex-col overflow-y-auto border-l border-slate-100 dark:border-slate-800/80 bg-white dark:bg-[#181818] shadow-2xl animate-slide-in">
@@ -130,7 +151,14 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                     onClick={() => onOpenTask(task.parentTask!.id)}
                     className="mb-1.5 flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-indigo-600 dark:text-slate-500 dark:hover:text-indigo-400 transition-colors cursor-pointer"
                   >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                    >
                       <line x1="19" y1="12" x2="5" y2="12" />
                       <polyline points="12 19 5 12 12 5" />
                     </svg>
@@ -138,8 +166,12 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                   </button>
                 ) : null}
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-850 px-2 py-0.5 rounded text-center">{task.ref}</span>
-                  <span className="truncate text-xs font-semibold text-slate-500 dark:text-slate-400">{task.projectName}</span>
+                  <span className="font-mono text-xs font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-850 px-2 py-0.5 rounded text-center">
+                    {task.ref}
+                  </span>
+                  <span className="truncate text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    {task.projectName}
+                  </span>
                   <SizeChip size={task.size} />
                   {task.isArchived ? (
                     <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
@@ -155,7 +187,14 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                 className="shrink-0 rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors"
                 onClick={onClose}
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
@@ -164,29 +203,51 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
 
             <div className="flex flex-wrap items-center gap-2">
               {task.isArchived ? (
-                <Button variant="ghost" className="py-1.5 px-3 text-xs" disabled={restore.isPending} onClick={() => restore.mutate(taskId)}>
+                <Button
+                  variant="ghost"
+                  className="py-1.5 px-3 text-xs"
+                  disabled={restore.isPending}
+                  onClick={() => restore.mutate(taskId)}
+                >
                   Restore
                 </Button>
               ) : (
-                <Button variant="ghost" className="py-1.5 px-3 text-xs" disabled={archive.isPending} onClick={() => archive.mutate(taskId)}>
+                <Button
+                  variant="ghost"
+                  className="py-1.5 px-3 text-xs"
+                  disabled={archive.isPending}
+                  onClick={() => archive.mutate(taskId)}
+                >
                   Archive
                 </Button>
               )}
               {isAdmin ? (
-                <Button variant="danger" className="py-1.5 px-3 text-xs" disabled={remove.isPending} onClick={onDelete}>
+                <Button
+                  variant="danger"
+                  className="py-1.5 px-3 text-xs"
+                  disabled={remove.isPending}
+                  onClick={onDelete}
+                >
                   Delete permanently
                 </Button>
               ) : null}
               {remove.isError ? (
                 <span className="text-xs font-semibold text-red-500 dark:text-red-400">
-                  {remove.error instanceof ApiRequestError ? remove.error.message : 'Failed to delete task'}
+                  {remove.error instanceof ApiRequestError
+                    ? remove.error.message
+                    : 'Failed to delete task'}
                 </span>
               ) : null}
             </div>
 
             {update.error ? (
-              <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm font-medium text-red-700 dark:bg-red-950/30 dark:text-red-300">
-                {update.error instanceof ApiRequestError ? update.error.message : 'Could not save that change.'}
+              <p
+                role="alert"
+                className="rounded-lg bg-red-50 p-3 text-sm font-medium text-red-700 dark:bg-red-950/30 dark:text-red-300"
+              >
+                {update.error instanceof ApiRequestError
+                  ? update.error.message
+                  : 'Could not save that change.'}
               </p>
             ) : null}
 
@@ -200,14 +261,19 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                   onChange={(e) => patch({ status: e.target.value as TaskStatus })}
                 >
                   {TASK_STATUSES.map((s) => (
-                    <option key={s} value={s} disabled={!!task.reviewer && (s === 'IN_REVIEW' || s === 'DONE')}>
+                    <option
+                      key={s}
+                      value={s}
+                      disabled={!!task.reviewer && (s === 'IN_REVIEW' || s === 'DONE')}
+                    >
                       {statusLabel(s)}
                     </option>
                   ))}
                 </select>
                 {!task.reviewer && !task.parentTaskId ? (
                   <p className="mt-1.5 text-[11px] font-medium normal-case tracking-normal text-amber-600 dark:text-amber-400">
-                    No reviewer: whether this can be marked Done without evidence depends on the organisation policy. Assign a reviewer for deliverables.
+                    No reviewer: whether this can be marked Done without evidence depends on the
+                    organisation policy. Assign a reviewer for deliverables.
                   </p>
                 ) : null}
               </label>
@@ -240,7 +306,10 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                     </option>
                   ))}
                 </select>
-                <p className="mt-1 normal-case tracking-normal text-[11px] font-medium text-slate-400 dark:text-slate-500">A relative classification; use the effort forecast for actual time.</p>
+                <p className="mt-1 normal-case tracking-normal text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                  The scale includes a suggested time; use the effort forecast and time log for the
+                  recorded actual time.
+                </p>
               </label>
               <div className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
                 <span className="mb-1.5 block">Due date</span>
@@ -248,7 +317,9 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                   value={task.dueDate}
                   originalValue={task.originalDueDate}
                   overdueWorkingMinutes={task.overdueWorkingMinutes}
-                  onCommit={(dueDate, dueDateReason) => patch({ dueDate, ...(dueDateReason ? { dueDateReason } : {}) })}
+                  onCommit={(dueDate, dueDateReason) =>
+                    patch({ dueDate, ...(dueDateReason ? { dueDateReason } : {}) })
+                  }
                 />
               </div>
               {/* A task can have any number of assignees (task_assignees is M2M). */}
@@ -262,22 +333,40 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                   pluralLabel="people tagged"
                 />
               </div>
-              <PersonSelect label="Accountable owner" value={task.owner?.id ?? ''} members={members} onChange={(ownerId) => patch({ ownerId: ownerId || null })} />
-              <PersonSelect label="Reviewer" value={task.reviewer?.id ?? ''} members={members} onChange={(reviewerId) => patch({ reviewerId: reviewerId || null })} />
+              <PersonSelect
+                label="Accountable owner"
+                value={task.owner?.id ?? ''}
+                members={members}
+                onChange={(ownerId) => patch({ ownerId: ownerId || null })}
+              />
+              <PersonSelect
+                label="Reviewer"
+                value={task.reviewer?.id ?? ''}
+                members={members}
+                onChange={(reviewerId) => patch({ reviewerId: reviewerId || null })}
+              />
             </div>
 
             <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
               <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">Effort forecast</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
+                  Effort forecast
+                </h3>
                 <span className="text-xs text-slate-400">Stored in minutes</span>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <MinuteField label="Baseline" value={task.baselineEstimateMinutes} disabled />
                 <MinuteField label="Approved" value={task.currentEstimateMinutes} disabled />
-                <MinuteField label="Remaining" value={task.remainingEstimateMinutes} onChange={(remainingEstimateMinutes) => patch({ remainingEstimateMinutes })} />
+                <MinuteField
+                  label="Remaining"
+                  value={task.remainingEstimateMinutes}
+                  onChange={(remainingEstimateMinutes) => patch({ remainingEstimateMinutes })}
+                />
               </div>
               {task.originalDueDate && task.dueDate !== task.originalDueDate ? (
-                <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">Original commitment: {formatDate(task.originalDueDate)}</p>
+                <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
+                  Original commitment: {formatDate(task.originalDueDate)}
+                </p>
               ) : null}
               <EstimateRevisionForm task={task} workspaceId={workspaceId} />
             </section>
@@ -289,12 +378,18 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
               onScopeChange={(childScope) => patch({ childScope })}
             />
 
-            <TimeTrackingSection taskId={taskId} workspaceId={workspaceId} subtasks={task.subtasks} />
+            <TimeTrackingSection
+              taskId={taskId}
+              workspaceId={workspaceId}
+              subtasks={task.subtasks}
+            />
             <BlockerSection taskId={taskId} workspaceId={workspaceId} members={members} />
             <DependenciesSection task={task} workspaceId={workspaceId} />
 
             <div>
-              <div className="mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">Description</div>
+              <div className="mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
+                Description
+              </div>
               <DescriptionEditor
                 key={task.id}
                 value={task.description ?? ''}
@@ -312,7 +407,10 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
             {!task.parentTaskId ? (
               <section>
                 <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
-                  Subtasks{task.subtasks.length ? ` (${task.subtasks.filter((s) => s.status === 'DONE').length}/${task.subtasks.length})` : ''}
+                  Subtasks
+                  {task.subtasks.length
+                    ? ` (${task.subtasks.filter((s) => s.status === 'DONE').length}/${task.subtasks.length})`
+                    : ''}
                 </h3>
                 <div className="space-y-2">
                   {task.subtasks.length ? (
@@ -327,7 +425,9 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                       />
                     ))
                   ) : (
-                    <p className="text-sm text-slate-400 dark:text-slate-500 py-1">No subtasks yet.</p>
+                    <p className="text-sm text-slate-400 dark:text-slate-500 py-1">
+                      No subtasks yet.
+                    </p>
                   )}
                 </div>
                 <form className="mt-3 flex gap-2" onSubmit={onAddSubtask}>
@@ -337,7 +437,12 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                     value={subtaskTitle}
                     onChange={(e) => setSubtaskTitle(e.target.value)}
                   />
-                  <Button type="submit" variant="ghost" className="py-2 px-4 text-xs" disabled={createSubtask.isPending}>
+                  <Button
+                    type="submit"
+                    variant="ghost"
+                    className="py-2 px-4 text-xs"
+                    disabled={createSubtask.isPending}
+                  >
                     Add
                   </Button>
                 </form>
@@ -351,23 +456,44 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
               canReopen={
                 isAdmin ||
                 task.reviewer?.id === user?.id ||
-                (members as Array<UserRef & { workspaceRole?: string }>).find((m) => m.id === user?.id)?.workspaceRole === 'MANAGER'
+                (members as Array<UserRef & { workspaceRole?: string }>).find(
+                  (m) => m.id === user?.id,
+                )?.workspaceRole === 'MANAGER'
               }
             />
-            <ReviewWorkflow taskId={taskId} workspaceId={workspaceId} reviewerId={task.reviewer?.id ?? null} status={task.status} members={members} />
+            <ReviewWorkflow
+              taskId={taskId}
+              workspaceId={workspaceId}
+              reviewerId={task.reviewer?.id ?? null}
+              status={task.status}
+              members={members}
+            />
 
             <section>
-              <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">Comments</h3>
+              <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
+                Comments
+              </h3>
               <div className="space-y-3">
                 {comments?.length ? (
                   comments.map((c) => (
-                    <div key={c.id} className="rounded-xl bg-slate-50/50 dark:bg-[#222222]/50 p-4 border border-slate-100 dark:border-slate-800/40 text-sm">
+                    <div
+                      key={c.id}
+                      className="rounded-xl bg-slate-50/50 dark:bg-[#222222]/50 p-4 border border-slate-100 dark:border-slate-800/40 text-sm"
+                    >
                       <div className="flex items-center justify-between gap-2">
                         <span className="flex min-w-0 items-center gap-2">
-                          <Avatar user={c.user} size="sm" className="ring-2 ring-white dark:ring-slate-850" />
-                          <span className="truncate font-semibold text-slate-700 dark:text-slate-200">{c.user.name}</span>
+                          <Avatar
+                            user={c.user}
+                            size="sm"
+                            className="ring-2 ring-white dark:ring-slate-850"
+                          />
+                          <span className="truncate font-semibold text-slate-700 dark:text-slate-200">
+                            {c.user.name}
+                          </span>
                         </span>
-                        <span className="shrink-0 text-[11px] font-medium text-slate-400 dark:text-slate-500">{formatDateTime(c.createdAt)}</span>
+                        <span className="shrink-0 text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                          {formatDateTime(c.createdAt)}
+                        </span>
                       </div>
                       <p className="mt-2 whitespace-pre-wrap break-words text-slate-650 dark:text-slate-300 leading-relaxed">
                         {linkify(c.body)}
@@ -375,7 +501,9 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-slate-400 dark:text-slate-500 py-1.5">No comments recorded yet.</p>
+                  <p className="text-sm text-slate-400 dark:text-slate-500 py-1.5">
+                    No comments recorded yet.
+                  </p>
                 )}
               </div>
               <form
@@ -400,13 +528,17 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
             </section>
 
             <section>
-              <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">History Log</h3>
+              <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
+                History Log
+              </h3>
               <ol className="space-y-3.5 border-l-2 border-slate-100 dark:border-slate-800/80 pl-4">
                 {history?.map((h) => (
                   <li key={h.id} className="relative text-xs font-medium leading-relaxed">
                     <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-indigo-500 dark:bg-indigo-650" />
                     <span className="text-slate-600 dark:text-slate-350">{describeAudit(h)}</span>
-                    <span className="ml-2.5 text-[10px] text-slate-400 dark:text-slate-500 font-semibold">{formatDateTime(h.createdAt)}</span>
+                    <span className="ml-2.5 text-[10px] text-slate-400 dark:text-slate-500 font-semibold">
+                      {formatDateTime(h.createdAt)}
+                    </span>
                   </li>
                 ))}
               </ol>
@@ -415,8 +547,16 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
             <div className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-800/40 pt-4 mt-2">
               Created by {task.createdBy.name} · {formatDate(task.createdAt)}
               <span className="mx-2">·</span>
-              <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${statusClasses[task.status]}`}>{statusLabel(task.status)}</span>
-              <span className={`ml-1.5 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${priorityClasses[task.priority]}`}>{task.priority}</span>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${statusClasses[task.status]}`}
+              >
+                {statusLabel(task.status)}
+              </span>
+              <span
+                className={`ml-1.5 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${priorityClasses[task.priority]}`}
+              >
+                {task.priority}
+              </span>
             </div>
           </div>
         )}
@@ -425,7 +565,26 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
   );
 }
 
-function DelegationPanel({ taskId, reviewerId, members, delegations, canDelegate }: { taskId: string; reviewerId: string; members: UserRef[]; delegations: { id: string; delegate: UserRef; delegator: UserRef; effectiveFrom: string; effectiveTo: string; reason: string }[]; canDelegate: boolean }) {
+function DelegationPanel({
+  taskId,
+  reviewerId,
+  members,
+  delegations,
+  canDelegate,
+}: {
+  taskId: string;
+  reviewerId: string;
+  members: UserRef[];
+  delegations: {
+    id: string;
+    delegate: UserRef;
+    delegator: UserRef;
+    effectiveFrom: string;
+    effectiveTo: string;
+    reason: string;
+  }[];
+  canDelegate: boolean;
+}) {
   const delegate = useDelegateReview(taskId);
   const [open, setOpen] = useState(false);
   const [delegateId, setDelegateId] = useState('');
@@ -435,43 +594,123 @@ function DelegationPanel({ taskId, reviewerId, members, delegations, canDelegate
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     delegate.mutate(
-      { delegateId, effectiveFrom: new Date(from).toISOString(), effectiveTo: new Date(to).toISOString(), reason: reason.trim() },
-      { onSuccess: () => { setOpen(false); setDelegateId(''); setFrom(''); setTo(''); setReason(''); } },
+      {
+        delegateId,
+        effectiveFrom: new Date(from).toISOString(),
+        effectiveTo: new Date(to).toISOString(),
+        reason: reason.trim(),
+      },
+      {
+        onSuccess: () => {
+          setOpen(false);
+          setDelegateId('');
+          setFrom('');
+          setTo('');
+          setReason('');
+        },
+      },
     );
   };
-  const field = 'w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800 dark:bg-[#252525] dark:text-white';
+  const field =
+    'w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800 dark:bg-[#252525] dark:text-white';
   return (
     <div className="mt-4 border-t border-slate-200 pt-3 dark:border-slate-800">
       <div className="flex items-center justify-between">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Review delegation</h4>
-        {canDelegate ? <button type="button" className="text-xs font-semibold text-indigo-600 hover:underline dark:text-indigo-400" onClick={() => setOpen((o) => !o)}>{open ? 'Cancel' : 'Delegate'}</button> : null}
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          Review delegation
+        </h4>
+        {canDelegate ? (
+          <button
+            type="button"
+            className="text-xs font-semibold text-indigo-600 hover:underline dark:text-indigo-400"
+            onClick={() => setOpen((o) => !o)}
+          >
+            {open ? 'Cancel' : 'Delegate'}
+          </button>
+        ) : null}
       </div>
-      {delegations.length === 0 ? <p className="mt-1 text-xs text-slate-500">No delegation for this task.</p> : null}
+      {delegations.length === 0 ? (
+        <p className="mt-1 text-xs text-slate-500">No delegation for this task.</p>
+      ) : null}
       {delegations.map((d) => (
         <p key={d.id} className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-          {d.delegate.name} · {formatDateTime(d.effectiveFrom)} → {formatDateTime(d.effectiveTo)} · {d.reason}
+          {d.delegate.name} · {formatDateTime(d.effectiveFrom)} → {formatDateTime(d.effectiveTo)} ·{' '}
+          {d.reason}
         </p>
       ))}
       {open ? (
         <form onSubmit={submit} className="mt-3 space-y-2">
-          <select aria-label="Delegate" className={field} value={delegateId} onChange={(e) => setDelegateId(e.target.value)} required>
+          <select
+            aria-label="Delegate"
+            className={field}
+            value={delegateId}
+            onChange={(e) => setDelegateId(e.target.value)}
+            required
+          >
             <option value="">Choose a delegate…</option>
-            {members.filter((m) => m.id !== reviewerId).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            {members
+              .filter((m) => m.id !== reviewerId)
+              .map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
           </select>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <input aria-label="Delegation start" type="datetime-local" className={field} value={from} onChange={(e) => setFrom(e.target.value)} required />
-            <input aria-label="Delegation end" type="datetime-local" className={field} value={to} onChange={(e) => setTo(e.target.value)} required />
+            <input
+              aria-label="Delegation start"
+              type="datetime-local"
+              className={field}
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              required
+            />
+            <input
+              aria-label="Delegation end"
+              type="datetime-local"
+              className={field}
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              required
+            />
           </div>
-          <input aria-label="Delegation reason" className={field} placeholder="Reason (e.g. on leave)" value={reason} onChange={(e) => setReason(e.target.value)} required />
-          <Button type="submit" disabled={delegate.isPending}>Save delegation</Button>
-          {delegate.error ? <p className="text-sm text-red-600">{delegate.error instanceof ApiRequestError ? delegate.error.message : 'Could not delegate'}</p> : null}
+          <input
+            aria-label="Delegation reason"
+            className={field}
+            placeholder="Reason (e.g. on leave)"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            required
+          />
+          <Button type="submit" disabled={delegate.isPending}>
+            Save delegation
+          </Button>
+          {delegate.error ? (
+            <p className="text-sm text-red-600">
+              {delegate.error instanceof ApiRequestError
+                ? delegate.error.message
+                : 'Could not delegate'}
+            </p>
+          ) : null}
         </form>
       ) : null}
     </div>
   );
 }
 
-function ReviewWorkflow({ taskId, workspaceId, reviewerId, status, members }: { taskId: string; workspaceId: string; reviewerId: string | null; status: TaskStatus; members: UserRef[] }) {
+function ReviewWorkflow({
+  taskId,
+  workspaceId,
+  reviewerId,
+  status,
+  members,
+}: {
+  taskId: string;
+  workspaceId: string;
+  reviewerId: string | null;
+  status: TaskStatus;
+  members: UserRef[];
+}) {
   const { user } = useAuth();
   const { data: attachments } = useTaskAttachments(taskId);
   const { data: submissions } = useTaskSubmissions(taskId);
@@ -483,69 +722,197 @@ function ReviewWorkflow({ taskId, workspaceId, reviewerId, status, members }: { 
   const pending = submissions?.find((s) => s.status === 'PENDING');
   const { data: delegations } = useTaskDelegations(taskId);
   const nowMs = Date.now();
-  const activeDelegation = delegations?.find((d) => new Date(d.effectiveFrom).getTime() <= nowMs && new Date(d.effectiveTo).getTime() >= nowMs);
-  const canReview = user?.role === 'ADMIN' || user?.id === reviewerId || user?.id === activeDelegation?.delegate.id;
+  const activeDelegation = delegations?.find(
+    (d) =>
+      new Date(d.effectiveFrom).getTime() <= nowMs && new Date(d.effectiveTo).getTime() >= nowMs,
+  );
+  const canReview =
+    user?.role === 'ADMIN' || user?.id === reviewerId || user?.id === activeDelegation?.delegate.id;
   const canDelegate = user?.role === 'ADMIN' || user?.id === reviewerId;
   const error = submit.error ?? review.error;
   return (
     <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">Submission and review</h3>
-      {!reviewerId ? <p className="mt-2 text-sm text-amber-600 dark:text-amber-400">Assign a reviewer before submitting.</p> : null}
+      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
+        Submission and review
+      </h3>
+      {!reviewerId ? (
+        <p className="mt-2 text-sm text-amber-600 dark:text-amber-400">
+          Assign a reviewer before submitting.
+        </p>
+      ) : null}
       {!pending && status !== 'DONE' ? (
-        <form className="mt-3 space-y-2" onSubmit={(e) => {
-          e.preventDefault();
-          if (!note.trim() || !evidenceAttachmentId) return;
-          submit.mutate({ note: note.trim(), evidenceAttachmentId }, { onSuccess: () => { setNote(''); setEvidenceAttachmentId(''); } });
-        }}>
-          <select aria-label="Submission evidence" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800 dark:bg-[#252525] dark:text-white" value={evidenceAttachmentId} onChange={(e) => setEvidenceAttachmentId(e.target.value)} required>
+        <form
+          className="mt-3 space-y-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!note.trim() || !evidenceAttachmentId) return;
+            submit.mutate(
+              { note: note.trim(), evidenceAttachmentId },
+              {
+                onSuccess: () => {
+                  setNote('');
+                  setEvidenceAttachmentId('');
+                },
+              },
+            );
+          }}
+        >
+          <select
+            aria-label="Submission evidence"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800 dark:bg-[#252525] dark:text-white"
+            value={evidenceAttachmentId}
+            onChange={(e) => setEvidenceAttachmentId(e.target.value)}
+            required
+          >
             <option value="">Select attached evidence</option>
-            {(attachments ?? []).map((a) => <option key={a.id} value={a.id}>{a.fileName}</option>)}
+            {(attachments ?? []).map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.fileName}
+              </option>
+            ))}
           </select>
-          <textarea aria-label="Delivery note" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800 dark:bg-[#252525] dark:text-white" rows={2} placeholder="Delivery note and acceptance details" value={note} onChange={(e) => setNote(e.target.value)} required />
-          <Button type="submit" disabled={!reviewerId || submit.isPending || !(attachments?.length)}>Submit for review</Button>
+          <textarea
+            aria-label="Delivery note"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800 dark:bg-[#252525] dark:text-white"
+            rows={2}
+            placeholder="Delivery note and acceptance details"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            required
+          />
+          <Button type="submit" disabled={!reviewerId || submit.isPending || !attachments?.length}>
+            Submit for review
+          </Button>
         </form>
       ) : null}
       {pending ? (
         <div className="mt-3 rounded-lg bg-indigo-50 p-3 text-sm dark:bg-indigo-950/20">
-          <p className="font-semibold text-slate-700 dark:text-slate-200">Awaiting review from {pending.submitter.name}</p>
-          <p className="mt-1 whitespace-pre-wrap text-slate-600 dark:text-slate-300">{pending.note}</p>
-          {canReview ? <div className="mt-3 space-y-2">
-            <textarea aria-label="Review note" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800 dark:bg-[#252525] dark:text-white" rows={2} placeholder="Review note (required when returning)" value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} />
-            <div className="flex gap-2">
-              <Button onClick={() => review.mutate({ submissionId: pending.id, input: { decision: 'ACCEPTED', note: reviewNote || undefined } })}>Accept</Button>
-              <Button variant="danger" disabled={!reviewNote.trim()} onClick={() => review.mutate({ submissionId: pending.id, input: { decision: 'RETURNED', note: reviewNote.trim() } })}>Return</Button>
+          <p className="font-semibold text-slate-700 dark:text-slate-200">
+            Awaiting review from {pending.submitter.name}
+          </p>
+          <p className="mt-1 whitespace-pre-wrap text-slate-600 dark:text-slate-300">
+            {pending.note}
+          </p>
+          {canReview ? (
+            <div className="mt-3 space-y-2">
+              <textarea
+                aria-label="Review note"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800 dark:bg-[#252525] dark:text-white"
+                rows={2}
+                placeholder="Review note (required when returning)"
+                value={reviewNote}
+                onChange={(e) => setReviewNote(e.target.value)}
+              />
+              <div className="flex gap-2">
+                <Button
+                  onClick={() =>
+                    review.mutate({
+                      submissionId: pending.id,
+                      input: { decision: 'ACCEPTED', note: reviewNote || undefined },
+                    })
+                  }
+                >
+                  Accept
+                </Button>
+                <Button
+                  variant="danger"
+                  disabled={!reviewNote.trim()}
+                  onClick={() =>
+                    review.mutate({
+                      submissionId: pending.id,
+                      input: { decision: 'RETURNED', note: reviewNote.trim() },
+                    })
+                  }
+                >
+                  Return
+                </Button>
+              </div>
             </div>
-          </div> : null}
+          ) : null}
         </div>
       ) : null}
-      {submissions?.filter((s) => s.status !== 'PENDING').map((s) => (
-        <div key={s.id} className="mt-2 border-t border-slate-100 pt-2 text-xs dark:border-slate-800">
-          <span className={s.status === 'ACCEPTED' ? 'font-bold text-emerald-600' : 'font-bold text-amber-600'}>{s.status}</span>
-          <span className="ml-2 text-slate-500">{formatDateTime(s.decidedAt ?? s.submittedAt)}{s.reviewer ? ` by ${s.reviewer.name}` : ''}</span>
-          {s.reviewNote ? <p className="mt-1 text-slate-600 dark:text-slate-300">{s.reviewNote}</p> : null}
-        </div>
-      ))}
+      {submissions
+        ?.filter((s) => s.status !== 'PENDING')
+        .map((s) => (
+          <div
+            key={s.id}
+            className="mt-2 border-t border-slate-100 pt-2 text-xs dark:border-slate-800"
+          >
+            <span
+              className={
+                s.status === 'ACCEPTED' ? 'font-bold text-emerald-600' : 'font-bold text-amber-600'
+              }
+            >
+              {s.status}
+            </span>
+            <span className="ml-2 text-slate-500">
+              {formatDateTime(s.decidedAt ?? s.submittedAt)}
+              {s.reviewer ? ` by ${s.reviewer.name}` : ''}
+            </span>
+            {s.reviewNote ? (
+              <p className="mt-1 text-slate-600 dark:text-slate-300">{s.reviewNote}</p>
+            ) : null}
+          </div>
+        ))}
       {reviewerId ? (
-        <DelegationPanel taskId={taskId} reviewerId={reviewerId} members={members} delegations={delegations ?? []} canDelegate={canDelegate} />
+        <DelegationPanel
+          taskId={taskId}
+          reviewerId={reviewerId}
+          members={members}
+          delegations={delegations ?? []}
+          canDelegate={canDelegate}
+        />
       ) : null}
-      {error ? <p className="mt-2 text-sm text-red-600">{error instanceof ApiRequestError ? error.message : 'Review action failed'}</p> : null}
+      {error ? (
+        <p className="mt-2 text-sm text-red-600">
+          {error instanceof ApiRequestError ? error.message : 'Review action failed'}
+        </p>
+      ) : null}
     </section>
   );
 }
 
-function PersonSelect({ label, value, members, onChange }: { label: string; value: string; members: UserRef[]; onChange: (id: string) => void }) {
+function PersonSelect({
+  label,
+  value,
+  members,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  members: UserRef[];
+  onChange: (id: string) => void;
+}) {
   return (
     <label className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
       <span className="mb-1.5 block">{label}</span>
-      <select className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold outline-none dark:border-slate-800 dark:bg-[#252525] dark:text-white" value={value} onChange={(e) => onChange(e.target.value)}>
+      <select
+        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold outline-none dark:border-slate-800 dark:bg-[#252525] dark:text-white"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
         <option value="">Not assigned</option>
-        {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+        {members.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.name}
+          </option>
+        ))}
       </select>
     </label>
   );
 }
 
-function MinuteField({ label, value, disabled, onChange }: { label: string; value: number | null; disabled?: boolean; onChange?: (value: number | null) => void }) {
+function MinuteField({
+  label,
+  value,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: number | null;
+  disabled?: boolean;
+  onChange?: (value: number | null) => void;
+}) {
   const [draft, setDraft] = useState(value === null ? '' : String(value));
   useEffect(() => setDraft(value === null ? '' : String(value)), [value]);
   return (
@@ -685,7 +1052,14 @@ function SubtaskRow({
         }`}
       >
         {done ? (
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3.5"
+          >
             <polyline points="20 6 9 17 4 12" />
           </svg>
         ) : null}
@@ -713,7 +1087,14 @@ function SubtaskRow({
             aria-label="Save subtask title"
             className="shrink-0 rounded-md p-1 text-indigo-600 transition-colors hover:bg-indigo-50 disabled:opacity-40 dark:text-indigo-400 dark:hover:bg-indigo-950/30 cursor-pointer"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+            >
               <polyline points="20 6 9 17 4 12" />
             </svg>
           </button>
@@ -723,7 +1104,14 @@ function SubtaskRow({
             aria-label="Cancel editing"
             className="shrink-0 rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 cursor-pointer"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+            >
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -748,8 +1136,11 @@ function SubtaskRow({
             selected={subtask.assignees}
             onChange={(assigneeIds) => onPatch({ assigneeIds })}
           />
-          
-          <label className="relative shrink-0 cursor-pointer text-slate-400 hover:text-indigo-650 dark:hover:text-indigo-400 transition-colors flex items-center gap-1.5 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800" title="Set due date">
+
+          <label
+            className="relative shrink-0 cursor-pointer text-slate-400 hover:text-indigo-650 dark:hover:text-indigo-400 transition-colors flex items-center gap-1.5 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+            title="Set due date"
+          >
             <input
               type="date"
               className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
@@ -761,15 +1152,32 @@ function SubtaskRow({
                 if (dueDateReason) onPatch({ dueDate, dueDateReason });
               }}
             />
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={subtask.dueDate ? "text-indigo-500 dark:text-indigo-400" : "text-slate-400 dark:text-slate-500"}>
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              className={
+                subtask.dueDate
+                  ? 'text-indigo-500 dark:text-indigo-400'
+                  : 'text-slate-400 dark:text-slate-500'
+              }
+            >
               <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
               <line x1="16" y1="2" x2="16" y2="6" />
               <line x1="8" y1="2" x2="8" y2="6" />
               <line x1="3" y1="10" x2="21" y2="10" />
             </svg>
             {subtask.dueDate ? (
-              <span className={`text-[10px] font-bold ${isOverdue(subtask.dueDate) && subtask.status !== 'DONE' ? 'text-red-500' : 'text-slate-500 dark:text-slate-400'}`}>
-                {new Date(subtask.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+              <span
+                className={`text-[10px] font-bold ${isOverdue(subtask.dueDate) && subtask.status !== 'DONE' ? 'text-red-500' : 'text-slate-500 dark:text-slate-400'}`}
+              >
+                {new Date(subtask.dueDate).toLocaleDateString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                })}
               </span>
             ) : null}
           </label>
@@ -779,11 +1187,20 @@ function SubtaskRow({
             aria-label="Rename subtask"
             className="shrink-0 rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300 cursor-pointer"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+            >
               <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z" />
             </svg>
           </button>
-          <span className="shrink-0 font-mono text-[10px] text-slate-400 dark:text-slate-500">{subtask.ref}</span>
+          <span className="shrink-0 font-mono text-[10px] text-slate-400 dark:text-slate-500">
+            {subtask.ref}
+          </span>
         </>
       )}
     </div>
@@ -829,9 +1246,13 @@ function LabelPicker({
 
   return (
     <div>
-      <div className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">Labels</div>
+      <div className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
+        Labels
+      </div>
       <div className="flex flex-wrap items-center gap-1.5">
-        {allLabels.length === 0 ? <span className="text-sm text-slate-400 dark:text-slate-500 py-1">No labels yet.</span> : null}
+        {allLabels.length === 0 ? (
+          <span className="text-sm text-slate-400 dark:text-slate-500 py-1">No labels yet.</span>
+        ) : null}
         {allLabels.map((l) => {
           const on = selectedIds.has(l.id);
           return (
@@ -840,9 +1261,15 @@ function LabelPicker({
               type="button"
               onClick={() => toggle(l.id)}
               className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold transition cursor-pointer ${
-                on ? 'border-transparent' : 'border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:border-slate-350 dark:hover:border-slate-700 hover:bg-slate-50/50'
+                on
+                  ? 'border-transparent'
+                  : 'border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:border-slate-350 dark:hover:border-slate-700 hover:bg-slate-50/50'
               }`}
-              style={on ? { backgroundColor: `${l.color ?? '#64748b'}1a`, color: l.color ?? '#64748b' } : undefined}
+              style={
+                on
+                  ? { backgroundColor: `${l.color ?? '#64748b'}1a`, color: l.color ?? '#64748b' }
+                  : undefined
+              }
             >
               {l.name}
             </button>
@@ -856,7 +1283,12 @@ function LabelPicker({
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
         />
-        <Button type="submit" variant="ghost" className="py-1.5 px-3 text-xs" disabled={createLabel.isPending}>
+        <Button
+          type="submit"
+          variant="ghost"
+          className="py-1.5 px-3 text-xs"
+          disabled={createLabel.isPending}
+        >
           Add
         </Button>
       </form>
@@ -872,7 +1304,10 @@ function parseInline(text: string): ReactNode {
         if (part.startsWith('`') && part.endsWith('`')) {
           const code = part.slice(1, -1);
           return (
-            <code key={i} className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800/80 text-pink-600 dark:text-pink-400 font-mono text-xs">
+            <code
+              key={i}
+              className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800/80 text-pink-600 dark:text-pink-400 font-mono text-xs"
+            >
               {code}
             </code>
           );
@@ -932,7 +1367,7 @@ function renderMarkdown(text: string): ReactNode {
 
   const lines = text.split('\n');
   const blocks: ReactNode[] = [];
-  
+
   let currentList: { type: 'ul' | 'ol'; items: string[] } | null = null;
   let currentParagraph: string[] = [];
   let currentQuote: string[] = [];
@@ -944,31 +1379,40 @@ function renderMarkdown(text: string): ReactNode {
       const ListTag = currentList.type;
       const listStyle = currentList.type === 'ul' ? 'list-disc' : 'list-decimal';
       blocks.push(
-        <ListTag key={`list-${key}`} className={`${listStyle} pl-5 space-y-1.5 my-3 text-slate-700 dark:text-slate-350`}>
+        <ListTag
+          key={`list-${key}`}
+          className={`${listStyle} pl-5 space-y-1.5 my-3 text-slate-700 dark:text-slate-350`}
+        >
           {currentList.items.map((item, i) => (
             <li key={i} className="marker:text-slate-400 dark:marker:text-slate-600">
               {parseInline(item)}
             </li>
           ))}
-        </ListTag>
+        </ListTag>,
       );
       currentList = null;
     }
     if (currentQuote.length > 0) {
       blocks.push(
-        <blockquote key={`quote-${key}`} className="border-l-4 border-slate-200 dark:border-slate-700 pl-4 italic text-slate-500 dark:text-slate-400 my-3 space-y-1">
+        <blockquote
+          key={`quote-${key}`}
+          className="border-l-4 border-slate-200 dark:border-slate-700 pl-4 italic text-slate-500 dark:text-slate-400 my-3 space-y-1"
+        >
           {currentQuote.map((quoteLine, i) => (
             <p key={i}>{parseInline(quoteLine)}</p>
           ))}
-        </blockquote>
+        </blockquote>,
       );
       currentQuote = [];
     }
     if (currentParagraph.length > 0) {
       blocks.push(
-        <p key={`p-${key}`} className="my-2.5 whitespace-pre-line leading-relaxed text-slate-700 dark:text-slate-300">
+        <p
+          key={`p-${key}`}
+          className="my-2.5 whitespace-pre-line leading-relaxed text-slate-700 dark:text-slate-300"
+        >
           {parseInline(currentParagraph.join('\n'))}
-        </p>
+        </p>,
       );
       currentParagraph = [];
     }
@@ -985,9 +1429,12 @@ function renderMarkdown(text: string): ReactNode {
         // End of code block
         inCodeBlock = false;
         blocks.push(
-          <pre key={`code-${i}`} className="overflow-x-auto rounded-lg bg-slate-50 dark:bg-[#1f1f1f] border border-slate-100 dark:border-slate-800/60 p-3.5 font-mono text-xs text-slate-750 dark:text-slate-350 leading-normal my-3 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
+          <pre
+            key={`code-${i}`}
+            className="overflow-x-auto rounded-lg bg-slate-50 dark:bg-[#1f1f1f] border border-slate-100 dark:border-slate-800/60 p-3.5 font-mono text-xs text-slate-750 dark:text-slate-350 leading-normal my-3 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800"
+          >
             <code>{codeBlockLines.join('\n')}</code>
-          </pre>
+          </pre>,
         );
         codeBlockLines = [];
       } else {
@@ -1055,7 +1502,7 @@ function DescriptionEditor({ value, onSave }: { value: string; onSave: (v: strin
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(value);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  
+
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [isLong, setIsLong] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -1100,7 +1547,15 @@ function DescriptionEditor({ value, onSave }: { value: string; onSave: (v: strin
           onClick={() => setEditing(true)}
           className="group flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-200 hover:border-indigo-400 dark:border-slate-800 dark:hover:border-indigo-500/50 p-4 text-sm text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-350 bg-slate-50/20 hover:bg-slate-50/50 dark:bg-[#1f1f1f]/20 dark:hover:bg-[#1f1f1f]/40 transition-all duration-200"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-slate-400 dark:text-slate-500 transition-colors group-hover:text-indigo-500">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            className="text-slate-400 dark:text-slate-500 transition-colors group-hover:text-indigo-500"
+          >
             <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z" />
           </svg>
           <span className="font-semibold text-xs tracking-wide uppercase">Add a description…</span>
@@ -1114,12 +1569,19 @@ function DescriptionEditor({ value, onSave }: { value: string; onSave: (v: strin
         onClick={() => setEditing(true)}
       >
         <div className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1.5 px-2 py-1 rounded bg-slate-100/90 dark:bg-slate-800/90 text-[10px] font-bold uppercase tracking-wider text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 shadow-sm border border-slate-200/50 dark:border-slate-700/50 z-10">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+          >
             <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z" />
           </svg>
           <span>Edit</span>
         </div>
-        
+
         <div className="relative">
           <div
             ref={contentRef}
@@ -1129,7 +1591,7 @@ function DescriptionEditor({ value, onSave }: { value: string; onSave: (v: strin
           >
             {renderMarkdown(value)}
           </div>
-          
+
           {/* Gradient Overlay for collapsed state */}
           {isCollapsed && isLong && (
             <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white dark:from-[#181818] to-transparent pointer-events-none" />
@@ -1149,14 +1611,28 @@ function DescriptionEditor({ value, onSave }: { value: string; onSave: (v: strin
               {isCollapsed ? (
                 <>
                   <span>Show more</span>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
                     <polyline points="6 9 12 15 18 9" />
                   </svg>
                 </>
               ) : (
                 <>
                   <span>Show less</span>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
                     <polyline points="18 15 12 9 6 15" />
                   </svg>
                 </>
@@ -1198,14 +1674,30 @@ function DescriptionEditor({ value, onSave }: { value: string; onSave: (v: strin
           <TextLinkButton value={text} onChange={setText} />
         </div>
         <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">
-          Press <kbd className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded border border-slate-200 dark:border-slate-700">Ctrl</kbd> + <kbd className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded border border-slate-200 dark:border-slate-700">Enter</kbd> to save
+          Press{' '}
+          <kbd className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+            Ctrl
+          </kbd>{' '}
+          +{' '}
+          <kbd className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+            Enter
+          </kbd>{' '}
+          to save
         </span>
       </div>
     </div>
   );
 }
 
-function TimeTrackingSection({ taskId, workspaceId, subtasks }: { taskId: string; workspaceId: string; subtasks: SubtaskRef[] }) {
+function TimeTrackingSection({
+  taskId,
+  workspaceId,
+  subtasks,
+}: {
+  taskId: string;
+  workspaceId: string;
+  subtasks: SubtaskRef[];
+}) {
   const { data: summary } = useTimeSummary(taskId);
   const logTime = useLogTimeEntry(taskId, workspaceId);
   const startTimer = useStartTimer(taskId, workspaceId);
@@ -1225,7 +1717,13 @@ function TimeTrackingSection({ taskId, workspaceId, subtasks }: { taskId: string
     e.preventDefault();
     const mins = Math.max(1, Math.round(Number(durationMinutes)));
     logTime.mutate(
-      { workDate, durationMinutes: mins, startedAt: startedAtLocal ? new Date(startedAtLocal).toISOString() : undefined, category, note: note.trim() || undefined },
+      {
+        workDate,
+        durationMinutes: mins,
+        startedAt: startedAtLocal ? new Date(startedAtLocal).toISOString() : undefined,
+        category,
+        note: note.trim() || undefined,
+      },
       {
         onSuccess: () => {
           setShowLogForm(false);
@@ -1290,15 +1788,22 @@ function TimeTrackingSection({ taskId, workspaceId, subtasks }: { taskId: string
           <span className="font-semibold text-indigo-700 dark:text-indigo-300">
             Live Timer active ({activeTimer.category}) started by {activeTimer.userName}
           </span>
-          <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">{activeTimer.isPaused ? 'Paused' : 'In progress…'}</span>
+          <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">
+            {activeTimer.isPaused ? 'Paused' : 'In progress…'}
+          </span>
         </div>
       ) : null}
 
       {showLogForm ? (
-        <form onSubmit={handleLogSubmit} className="mb-3 space-y-2 rounded-lg bg-slate-50 dark:bg-[#222] p-3 border border-slate-200 dark:border-slate-800">
+        <form
+          onSubmit={handleLogSubmit}
+          className="mb-3 space-y-2 rounded-lg bg-slate-50 dark:bg-[#222] p-3 border border-slate-200 dark:border-slate-800"
+        >
           <div className="grid grid-cols-2 gap-2 text-xs">
             <label>
-              <span className="mb-1 block font-semibold text-slate-600 dark:text-slate-400">Date</span>
+              <span className="mb-1 block font-semibold text-slate-600 dark:text-slate-400">
+                Date
+              </span>
               <input
                 type="date"
                 required
@@ -1308,7 +1813,9 @@ function TimeTrackingSection({ taskId, workspaceId, subtasks }: { taskId: string
               />
             </label>
             <label>
-              <span className="mb-1 block font-semibold text-slate-600 dark:text-slate-400">Duration (minutes)</span>
+              <span className="mb-1 block font-semibold text-slate-600 dark:text-slate-400">
+                Duration (minutes)
+              </span>
               <input
                 type="number"
                 min="1"
@@ -1320,7 +1827,9 @@ function TimeTrackingSection({ taskId, workspaceId, subtasks }: { taskId: string
             </label>
           </div>
           <label className="block text-xs">
-            <span className="mb-1 block font-semibold text-slate-600 dark:text-slate-400">Started at (optional — checked for overlap, split at midnight)</span>
+            <span className="mb-1 block font-semibold text-slate-600 dark:text-slate-400">
+              Started at (optional — checked for overlap, split at midnight)
+            </span>
             <input
               type="datetime-local"
               className="w-full rounded border border-slate-200 dark:border-slate-700 p-1.5 dark:bg-[#2c2c2c] dark:text-white"
@@ -1329,7 +1838,9 @@ function TimeTrackingSection({ taskId, workspaceId, subtasks }: { taskId: string
             />
           </label>
           <div className="text-xs">
-            <label className="mb-1 block font-semibold text-slate-600 dark:text-slate-400">Category</label>
+            <label className="mb-1 block font-semibold text-slate-600 dark:text-slate-400">
+              Category
+            </label>
             <select
               className="w-full rounded border border-slate-200 dark:border-slate-700 p-1.5 dark:bg-[#2c2c2c] dark:text-white"
               value={category}
@@ -1357,20 +1868,34 @@ function TimeTrackingSection({ taskId, workspaceId, subtasks }: { taskId: string
 
       {(() => {
         const err = logTime.error ?? startTimer.error ?? stopTimer.error ?? pauseResume.error;
-        return err ? <p className="mb-3 text-xs text-red-600">{err instanceof ApiRequestError ? err.message : 'Time action failed'}</p> : null;
+        return err ? (
+          <p className="mb-3 text-xs text-red-600">
+            {err instanceof ApiRequestError ? err.message : 'Time action failed'}
+          </p>
+        ) : null;
       })()}
 
       <div className="grid grid-cols-2 gap-2 text-xs mb-3">
         <div className="rounded-lg bg-slate-50 dark:bg-[#222] p-2.5 border border-slate-100 dark:border-slate-800">
-          <span className="text-slate-400 dark:text-slate-500 font-semibold block mb-0.5">Recorded Actual Effort</span>
-          <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{summary?.actualEffortMinutes ?? 0} mins</span>
+          <span className="text-slate-400 dark:text-slate-500 font-semibold block mb-0.5">
+            Recorded Actual Effort
+          </span>
+          <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
+            {summary?.actualEffortMinutes ?? 0} mins
+          </span>
         </div>
         <div className="rounded-lg bg-slate-50 dark:bg-[#222] p-2.5 border border-slate-100 dark:border-slate-800">
-          <span className="text-slate-400 dark:text-slate-500 font-semibold block mb-0.5">Forecast Total</span>
+          <span className="text-slate-400 dark:text-slate-500 font-semibold block mb-0.5">
+            Forecast Total
+          </span>
           <div className="flex items-center justify-between">
-            <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{summary?.forecastTotalMinutes ?? 0} mins</span>
+            <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
+              {summary?.forecastTotalMinutes ?? 0} mins
+            </span>
             {summary?.baselineEstimateMinutes ? (
-              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isOverrun ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'}`}>
+              <span
+                className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isOverrun ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'}`}
+              >
                 {isOverrun ? `+${variance}m overrun` : `${variance}m`}
               </span>
             ) : null}
@@ -1381,25 +1906,54 @@ function TimeTrackingSection({ taskId, workspaceId, subtasks }: { taskId: string
       {summary?.entries?.length ? (
         <div className="space-y-1.5 max-h-64 overflow-y-auto">
           {summary.entries.map((e) => (
-            <div key={e.id} className="flex flex-wrap items-center justify-between gap-x-2 text-xs py-1 px-2 rounded bg-slate-50/70 dark:bg-[#222]/70 border border-slate-100 dark:border-slate-800/50">
+            <div
+              key={e.id}
+              className="flex flex-wrap items-center justify-between gap-x-2 text-xs py-1 px-2 rounded bg-slate-50/70 dark:bg-[#222]/70 border border-slate-100 dark:border-slate-800/50"
+            >
               <div className="min-w-0 flex-1 truncate pr-2">
-                <span className="font-semibold text-slate-700 dark:text-slate-300">{e.userName}</span>
-                <span className="ml-1.5 text-[10px] font-bold uppercase px-1 py-0.2 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">{e.category}</span>
-                {e.note ? <span className="ml-1.5 text-slate-500 dark:text-slate-400 truncate">({e.note})</span> : null}
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  {e.userName}
+                </span>
+                <span className="ml-1.5 text-[10px] font-bold uppercase px-1 py-0.2 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                  {e.category}
+                </span>
+                {e.note ? (
+                  <span className="ml-1.5 text-slate-500 dark:text-slate-400 truncate">
+                    ({e.note})
+                  </span>
+                ) : null}
               </div>
-              <span className="font-mono font-bold text-slate-700 dark:text-slate-300 shrink-0">{e.durationMinutes}m</span>
-              <MoveTimeEntry taskId={taskId} workspaceId={workspaceId} entryId={e.id} entryMinutes={e.durationMinutes} subtasks={subtasks} />
+              <span className="font-mono font-bold text-slate-700 dark:text-slate-300 shrink-0">
+                {e.durationMinutes}m
+              </span>
+              <MoveTimeEntry
+                taskId={taskId}
+                workspaceId={workspaceId}
+                entryId={e.id}
+                entryMinutes={e.durationMinutes}
+                subtasks={subtasks}
+              />
             </div>
           ))}
         </div>
       ) : (
-        <p className="text-xs text-slate-400 dark:text-slate-500 py-1">No time entries recorded yet.</p>
+        <p className="text-xs text-slate-400 dark:text-slate-500 py-1">
+          No time entries recorded yet.
+        </p>
       )}
     </section>
   );
 }
 
-function BlockerSection({ taskId, workspaceId, members }: { taskId: string; workspaceId: string; members: UserRef[] }) {
+function BlockerSection({
+  taskId,
+  workspaceId,
+  members,
+}: {
+  taskId: string;
+  workspaceId: string;
+  members: UserRef[];
+}) {
   const addBlocker = useAddBlocker(taskId, workspaceId);
   const unblock = useUnblockTask(taskId, workspaceId);
   const { data: blockers = [] } = useTaskBlockers(taskId);
@@ -1413,73 +1967,153 @@ function BlockerSection({ taskId, workspaceId, members }: { taskId: string; work
 
   const active = blockers.filter((b) => !b.unblockedAt);
   const resolved = blockers.filter((b) => b.unblockedAt);
-  const field = 'w-full rounded border border-amber-300 dark:border-amber-800 p-1.5 text-xs bg-white dark:bg-[#222] dark:text-white';
+  const field =
+    'w-full rounded border border-amber-300 dark:border-amber-800 p-1.5 text-xs bg-white dark:bg-[#222] dark:text-white';
 
   const handleBlockSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!reason.trim() || !unblockerUserId) return;
     addBlocker.mutate(
-      { reason: reason.trim(), unblockerUserId, ...(followUp ? { nextFollowUpAt: new Date(followUp).toISOString() } : {}) },
-      { onSuccess: () => { setShowForm(false); setReason(''); setFollowUp(''); } },
+      {
+        reason: reason.trim(),
+        unblockerUserId,
+        ...(followUp ? { nextFollowUpAt: new Date(followUp).toISOString() } : {}),
+      },
+      {
+        onSuccess: () => {
+          setShowForm(false);
+          setReason('');
+          setFollowUp('');
+        },
+      },
     );
   };
 
   return (
     <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800 bg-white dark:bg-[#1a1a1a]">
       <div className="flex items-center justify-between gap-2 mb-2">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">Blockers</h3>
-        <Button variant="ghost" className="py-1 px-2.5 text-xs font-semibold text-amber-600 dark:text-amber-400" onClick={() => setShowForm(!showForm)}>
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
+          Blockers
+        </h3>
+        <Button
+          variant="ghost"
+          className="py-1 px-2.5 text-xs font-semibold text-amber-600 dark:text-amber-400"
+          onClick={() => setShowForm(!showForm)}
+        >
           {showForm ? 'Cancel' : '+ Mark as blocked'}
         </Button>
       </div>
 
       {showForm ? (
-        <form onSubmit={handleBlockSubmit} className="mb-3 space-y-2 rounded-lg bg-amber-50/60 dark:bg-amber-950/20 p-3 border border-amber-200 dark:border-amber-900/30 text-xs">
+        <form
+          onSubmit={handleBlockSubmit}
+          className="mb-3 space-y-2 rounded-lg bg-amber-50/60 dark:bg-amber-950/20 p-3 border border-amber-200 dark:border-amber-900/30 text-xs"
+        >
           <label className="block font-semibold text-amber-800 dark:text-amber-300">
             What is blocking this?
-            <textarea required rows={2} placeholder="State what is blocking this task…" className={`${field} mt-1 font-normal`} value={reason} onChange={(e) => setReason(e.target.value)} />
+            <textarea
+              required
+              rows={2}
+              placeholder="State what is blocking this task…"
+              className={`${field} mt-1 font-normal`}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
           </label>
           <label className="block font-semibold text-amber-800 dark:text-amber-300">
             Who is responsible for unblocking it?
-            <select aria-label="Responsible unblocker" className={`${field} mt-1 font-normal`} value={unblockerUserId} onChange={(e) => setPickedUnblocker(e.target.value)}>
-              {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            <select
+              aria-label="Responsible unblocker"
+              className={`${field} mt-1 font-normal`}
+              value={unblockerUserId}
+              onChange={(e) => setPickedUnblocker(e.target.value)}
+            >
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
             </select>
           </label>
           <label className="block font-semibold text-amber-800 dark:text-amber-300">
             Next follow-up
-            <input aria-label="Next follow-up" type="datetime-local" className={`${field} mt-1 font-normal`} value={followUp} onChange={(e) => setFollowUp(e.target.value)} />
+            <input
+              aria-label="Next follow-up"
+              type="datetime-local"
+              className={`${field} mt-1 font-normal`}
+              value={followUp}
+              onChange={(e) => setFollowUp(e.target.value)}
+            />
           </label>
-          <Button type="submit" variant="danger" className="w-full py-1.5 text-xs" disabled={addBlocker.isPending}>Record blocker</Button>
-          {addBlocker.error ? <p className="text-red-600">{addBlocker.error instanceof ApiRequestError ? addBlocker.error.message : 'Could not record the blocker'}</p> : null}
+          <Button
+            type="submit"
+            variant="danger"
+            className="w-full py-1.5 text-xs"
+            disabled={addBlocker.isPending}
+          >
+            Record blocker
+          </Button>
+          {addBlocker.error ? (
+            <p className="text-red-600">
+              {addBlocker.error instanceof ApiRequestError
+                ? addBlocker.error.message
+                : 'Could not record the blocker'}
+            </p>
+          ) : null}
         </form>
       ) : null}
 
-      {active.length === 0 ? <p className="text-xs text-slate-400 dark:text-slate-500 py-1">No active blockers for this task.</p> : null}
+      {active.length === 0 ? (
+        <p className="text-xs text-slate-400 dark:text-slate-500 py-1">
+          No active blockers for this task.
+        </p>
+      ) : null}
       <ul className="space-y-2">
         {active.map((b) => (
-          <li key={b.id} className="rounded-lg bg-amber-50 dark:bg-amber-950/30 p-2.5 text-xs border border-amber-200 dark:border-amber-900/40">
+          <li
+            key={b.id}
+            className="rounded-lg bg-amber-50 dark:bg-amber-950/30 p-2.5 text-xs border border-amber-200 dark:border-amber-900/40"
+          >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <span className="font-bold text-amber-800 dark:text-amber-300 block mb-0.5">Blocked since {formatDateTime(b.blockedAt)}</span>
+                <span className="font-bold text-amber-800 dark:text-amber-300 block mb-0.5">
+                  Blocked since {formatDateTime(b.blockedAt)}
+                </span>
                 <p className="text-amber-700 dark:text-amber-400 break-words">{b.reason}</p>
                 <p className="mt-1 text-amber-700/80 dark:text-amber-400/80">
-                  Unblocker: {b.unblocker?.name ?? 'unknown'}{b.nextFollowUpAt ? ` · follow-up ${formatDateTime(b.nextFollowUpAt)}` : ' · no follow-up set'}
+                  Unblocker: {b.unblocker?.name ?? 'unknown'}
+                  {b.nextFollowUpAt
+                    ? ` · follow-up ${formatDateTime(b.nextFollowUpAt)}`
+                    : ' · no follow-up set'}
                 </p>
               </div>
-              <Button variant="ghost" className="shrink-0 py-1 px-2.5 text-xs font-semibold" disabled={unblock.isPending} onClick={() => unblock.mutate(b.id)}>
+              <Button
+                variant="ghost"
+                className="shrink-0 py-1 px-2.5 text-xs font-semibold"
+                disabled={unblock.isPending}
+                onClick={() => unblock.mutate(b.id)}
+              >
                 Mark unblocked
               </Button>
             </div>
           </li>
         ))}
       </ul>
-      {unblock.error ? <p className="mt-2 text-xs text-red-600">{unblock.error instanceof ApiRequestError ? unblock.error.message : 'Could not unblock'}</p> : null}
+      {unblock.error ? (
+        <p className="mt-2 text-xs text-red-600">
+          {unblock.error instanceof ApiRequestError ? unblock.error.message : 'Could not unblock'}
+        </p>
+      ) : null}
       {resolved.length ? (
         <details className="mt-2 text-xs text-slate-500">
-          <summary className="cursor-pointer font-semibold">{resolved.length} resolved blocker{resolved.length === 1 ? '' : 's'}</summary>
+          <summary className="cursor-pointer font-semibold">
+            {resolved.length} resolved blocker{resolved.length === 1 ? '' : 's'}
+          </summary>
           <ul className="mt-1 space-y-1">
             {resolved.map((b) => (
-              <li key={b.id}>{formatDateTime(b.blockedAt)} → {formatDateTime(b.unblockedAt!)}: {b.reason}</li>
+              <li key={b.id}>
+                {formatDateTime(b.blockedAt)} → {formatDateTime(b.unblockedAt!)}: {b.reason}
+              </li>
             ))}
           </ul>
         </details>

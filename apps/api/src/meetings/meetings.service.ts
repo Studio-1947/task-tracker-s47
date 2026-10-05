@@ -30,6 +30,7 @@ import {
   type ReorderBoardItemsInput,
   type SetMoodInput,
   type TaskStatus,
+  type TaskSize,
   type UpdateBoardItemInput,
   type UpdateBoardNoteInput,
   type UpdateMeetingBoardInput,
@@ -68,6 +69,7 @@ type MirrorTask = {
   status: TaskStatus;
   title: string;
   description: string | null;
+  size: TaskSize;
   assigneeIds: string[];
 };
 
@@ -184,6 +186,7 @@ export class MeetingsService {
         status: tasks.status,
         title: tasks.title,
         description: tasks.description,
+        size: tasks.size,
         prefix: projects.taskPrefix,
       })
       .from(tasks)
@@ -203,6 +206,7 @@ export class MeetingsService {
         status: r.status as TaskStatus,
         title: r.title,
         description: r.description,
+        size: r.size as TaskSize,
         assigneeIds: assigneeIds.get(r.id) ?? [],
       });
     }
@@ -231,6 +235,7 @@ export class MeetingsService {
       project: row.projectId ? (projectRefs.get(row.projectId) ?? null) : null,
       taskId: row.taskId,
       taskRef: mirror?.ref ?? null,
+      size: mirror?.size ?? null,
       // Only the synthetic clones in `carryOver` ever carry a source day.
       carriedFrom: null,
       rolledOver: row.rolledOver,

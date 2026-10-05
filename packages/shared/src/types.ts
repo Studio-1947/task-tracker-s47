@@ -689,6 +689,8 @@ export interface BoardItem {
   taskId: string | null;
   /** Human-readable ref of the mirror task, e.g. "WEB-12". */
   taskRef: string | null;
+  /** Work scale inherited from the linked task, when the card is filed to a project. */
+  size: TaskSize | null;
   /**
    * Only set on the read-only clones in `MeetingBoardDetail.carryOver`: the day
    * the work was originally planned for. Always null on a stored card.

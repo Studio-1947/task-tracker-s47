@@ -1,5 +1,17 @@
 import { useState } from 'react';
-import { TASK_SIZE_LABELS, TASK_SIZES, PRIORITIES, TASK_STATUSES, type TaskSize, type LabelRef, type Priority, type ProjectSummary, type TaskStatus, type UserRef } from '@task-tracker/shared';
+import {
+  TASK_SIZE_ESTIMATE_MINUTES,
+  TASK_SIZE_LABELS,
+  TASK_SIZES,
+  PRIORITIES,
+  TASK_STATUSES,
+  type TaskSize,
+  type LabelRef,
+  type Priority,
+  type ProjectSummary,
+  type TaskStatus,
+  type UserRef,
+} from '@task-tracker/shared';
 import { useCreateTask } from '../hooks/useTasks';
 import { nonWorkingReason, useCalendar } from '../hooks/useCalendar';
 import { ApiRequestError } from '../lib/api';
@@ -17,7 +29,14 @@ interface Props {
   onClose: () => void;
 }
 
-export function CreateTaskModal({ workspaceId, members, labels, projects, defaultProjectId, onClose }: Props) {
+export function CreateTaskModal({
+  workspaceId,
+  members,
+  labels,
+  projects,
+  defaultProjectId,
+  onClose,
+}: Props) {
   const createTask = useCreateTask(workspaceId);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -82,7 +101,10 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-8">
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/60 backdrop-blur-xs animate-fade-in" onClick={onClose} />
+      <div
+        className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/60 backdrop-blur-xs animate-fade-in"
+        onClick={onClose}
+      />
 
       {/* Modal content */}
       <div className="relative z-50 w-full max-w-lg rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#181818] shadow-xl dark:shadow-none animate-scale-up">
@@ -95,7 +117,14 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
               className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition"
               onClick={onClose}
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -103,7 +132,9 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Project</label>
+            <label className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">
+              Project
+            </label>
             <select
               aria-label="Project"
               className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white"
@@ -120,13 +151,25 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Title</label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={1000} required autoFocus />
-            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Up to 1,000 characters.</p>
+            <label className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">
+              Title
+            </label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              maxLength={1000}
+              required
+              autoFocus
+            />
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              Up to 1,000 characters.
+            </p>
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Description</label>
+            <label className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">
+              Description
+            </label>
             <textarea
               aria-label="Task description"
               className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-[#252525] dark:text-white"
@@ -134,23 +177,29 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
-            <div className="mt-2"><TextLinkButton value={description} onChange={setDescription} /></div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Acceptance criteria</label>
-            <textarea
-              aria-label="Acceptance criteria"
-              rows={2}
-              className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-[#252525] dark:text-white"
-              placeholder="How will the reviewer decide this is complete?"
-              value={acceptanceCriteria}
-              onChange={(e) => setAcceptanceCriteria(e.target.value)}
-            />
-          </div>
+            <div className="mt-2">
+              <TextLinkButton value={description} onChange={setDescription} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">
+                Acceptance criteria
+              </label>
+              <textarea
+                aria-label="Acceptance criteria"
+                rows={2}
+                className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-[#252525] dark:text-white"
+                placeholder="How will the reviewer decide this is complete?"
+                value={acceptanceCriteria}
+                onChange={(e) => setAcceptanceCriteria(e.target.value)}
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <label className="text-sm">
-              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Status</span>
+              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">
+                Status
+              </span>
               <select
                 aria-label="Status"
                 className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white"
@@ -158,14 +207,20 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
                 onChange={(e) => setStatus(e.target.value as TaskStatus)}
               >
                 {TASK_STATUSES.map((s) => (
-                  <option key={s} value={s} disabled={!!reviewerId && (s === 'IN_REVIEW' || s === 'DONE')}>
+                  <option
+                    key={s}
+                    value={s}
+                    disabled={!!reviewerId && (s === 'IN_REVIEW' || s === 'DONE')}
+                  >
                     {statusLabel(s)}
                   </option>
                 ))}
               </select>
             </label>
             <label className="text-sm">
-              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Priority</span>
+              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">
+                Priority
+              </span>
               <select
                 aria-label="Priority"
                 className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white"
@@ -180,26 +235,42 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
               </select>
             </label>
             <label className="text-sm">
-              <span className="mb-1 flex items-center gap-0.5 font-medium text-slate-600 dark:text-slate-300">Work scale<span className="text-red-500 ml-0.5">*</span></span>
+              <span className="mb-1 flex items-center gap-0.5 font-medium text-slate-600 dark:text-slate-300">
+                Work scale<span className="text-red-500 ml-0.5">*</span>
+              </span>
               <select
                 aria-label="Work scale"
                 className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white"
                 value={size}
-                onChange={(e) => setSize(e.target.value as TaskSize)}
+                onChange={(e) => {
+                  const nextSize = e.target.value as TaskSize;
+                  setSize(nextSize);
+                  // Keep an explicitly-entered estimate, but make the scale useful as a quick time forecast.
+                  if (!estimateHours)
+                    setEstimateHours(String(TASK_SIZE_ESTIMATE_MINUTES[nextSize] / 60));
+                }}
                 required
               >
-                <option value="" disabled>Choose work scale</option>
+                <option value="" disabled>
+                  Choose work scale
+                </option>
                 {TASK_SIZES.map((s) => (
                   <option key={s} value={s}>
                     {TASK_SIZE_LABELS[s]}
                   </option>
                 ))}
               </select>
-              <span className="mt-1 block text-[11px] text-slate-400 dark:text-slate-500">A quick relative classification. Set the effort estimate separately.</span>
+              <span className="mt-1 block text-[11px] text-slate-400 dark:text-slate-500">
+                Selecting a scale fills its suggested time forecast if no estimate has been entered.
+              </span>
             </label>
             <div className="text-sm">
-              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Tag people</span>
-              <p className="mb-1.5 text-xs text-slate-400 dark:text-slate-500">Select as many people as needed.</p>
+              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">
+                Tag people
+              </span>
+              <p className="mb-1.5 text-xs text-slate-400 dark:text-slate-500">
+                Select as many people as needed.
+              </p>
               <AssigneePicker
                 members={members}
                 selected={members.filter((m) => assigneeIds.includes(m.id))}
@@ -209,27 +280,60 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
               />
             </div>
             <label className="text-sm">
-              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Accountable owner</span>
-              <select className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white" value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
+              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">
+                Accountable owner
+              </span>
+              <select
+                className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white"
+                value={ownerId}
+                onChange={(e) => setOwnerId(e.target.value)}
+              >
                 <option value="">Not assigned</option>
-                {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                {members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
               </select>
               {!ownerId && assigneeIds.length > 0 ? (
-                <span className="mt-1 block text-[11px] font-medium text-amber-600 dark:text-amber-400">Tagged people are collaborators. Pick one accountable owner.</span>
+                <span className="mt-1 block text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                  Tagged people are collaborators. Pick one accountable owner.
+                </span>
               ) : null}
             </label>
             <label className="text-sm">
-              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Reviewer</span>
-              <select className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white" value={reviewerId} onChange={(e) => { setReviewerId(e.target.value); if (e.target.value && (status === 'IN_REVIEW' || status === 'DONE')) setStatus('IN_PROGRESS'); }}>
+              <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">
+                Reviewer
+              </span>
+              <select
+                className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white"
+                value={reviewerId}
+                onChange={(e) => {
+                  setReviewerId(e.target.value);
+                  if (e.target.value && (status === 'IN_REVIEW' || status === 'DONE'))
+                    setStatus('IN_PROGRESS');
+                }}
+              >
                 <option value="">Not assigned</option>
-                {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                {members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="text-sm">
               <span className="mb-1 flex items-center justify-between font-medium text-slate-600 dark:text-slate-300">
                 Baseline estimate (hours)
               </span>
-              <input type="number" min="0" step="0.25" className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white" value={estimateHours} onChange={(e) => setEstimateHours(e.target.value)} />
+              <input
+                type="number"
+                min="0"
+                step="0.25"
+                className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-2 py-2 bg-white dark:bg-[#252525] dark:text-white"
+                value={estimateHours}
+                onChange={(e) => setEstimateHours(e.target.value)}
+              />
             </label>
             <label className="text-sm">
               <span className="mb-1 flex items-center gap-0.5 font-medium text-slate-600 dark:text-slate-300">
@@ -245,7 +349,10 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
                 onChange={(e) => setDueDate(e.target.value)}
               />
               {offDayReason ? (
-                <span role="alert" className="mt-1 block text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                <span
+                  role="alert"
+                  className="mt-1 block text-[11px] font-semibold text-amber-600 dark:text-amber-400"
+                >
                   This date is {offDayReason}. Prefer a working day, or note why in the description.
                 </span>
               ) : null}
@@ -254,13 +361,16 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
 
           {Number(estimateHours) > 2 ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
-              ⚠️ <strong>Task breakup recommendation:</strong> Estimated effort exceeds 120 minutes (2 hours). Consider splitting this deliverable into smaller subtasks.
+              ⚠️ <strong>Task breakup recommendation:</strong> Estimated effort exceeds 120 minutes
+              (2 hours). Consider splitting this deliverable into smaller subtasks.
             </div>
           ) : null}
 
           {labels.length ? (
             <div>
-              <div className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">Labels</div>
+              <div className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                Labels
+              </div>
               <div className="flex flex-wrap gap-1.5">
                 {labels.map((l) => {
                   const on = labelIds.includes(l.id);
@@ -270,9 +380,18 @@ export function CreateTaskModal({ workspaceId, members, labels, projects, defaul
                       type="button"
                       onClick={() => toggleLabel(l.id)}
                       className={`rounded-full border px-2 py-0.5 text-[11px] font-medium transition ${
-                        on ? 'border-transparent' : 'border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:border-slate-300 dark:hover:border-slate-700'
+                        on
+                          ? 'border-transparent'
+                          : 'border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:border-slate-300 dark:hover:border-slate-700'
                       }`}
-                      style={on ? { backgroundColor: `${l.color ?? '#64748b'}1a`, color: l.color ?? '#64748b' } : undefined}
+                      style={
+                        on
+                          ? {
+                              backgroundColor: `${l.color ?? '#64748b'}1a`,
+                              color: l.color ?? '#64748b',
+                            }
+                          : undefined
+                      }
                     >
                       {l.name}
                     </button>
