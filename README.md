@@ -7,13 +7,13 @@ See [`task-tracker-prd.md`](./task-tracker-prd.md) for the full product spec.
 
 ## Stack
 
-| Layer     | Choice |
-|-----------|--------|
-| Monorepo  | pnpm workspaces + Turborepo |
-| Backend   | NestJS + Drizzle ORM + PostgreSQL |
-| Frontend  | Vite + React + TypeScript + Tailwind v4 + TanStack Query |
-| Auth      | Passport JWT (access) + httpOnly refresh cookie, argon2 hashing |
-| Shared    | `@task-tracker/shared` — zod schemas, enums, types (one source of truth) |
+| Layer    | Choice                                                                   |
+| -------- | ------------------------------------------------------------------------ |
+| Monorepo | pnpm workspaces + Turborepo                                              |
+| Backend  | NestJS + Drizzle ORM + PostgreSQL                                        |
+| Frontend | Vite + React + TypeScript + Tailwind v4 + TanStack Query                 |
+| Auth     | Passport JWT (access) + httpOnly refresh cookie, argon2 hashing          |
+| Shared   | `@task-tracker/shared` — zod schemas, enums, types (one source of truth) |
 
 ## Layout
 
@@ -54,19 +54,19 @@ Open http://localhost:5173 and sign in with the seeded admin.
 
 ## Common scripts
 
-| Command | What |
-|---|---|
-| `pnpm dev` | Run api + web (+ shared watch) via Turborepo |
-| `pnpm build` | Build everything |
-| `pnpm typecheck` | Typecheck all packages |
-| `pnpm test` | Run unit tests |
-| `pnpm db:up` / `pnpm db:down` | Start / stop local Postgres |
-| `pnpm db:generate` | Generate a new Drizzle migration from schema changes |
-| `pnpm db:migrate` | Apply migrations |
-| `pnpm db:studio` | Open Drizzle Studio |
-| `pnpm db:seed` | Seed the admin user |
-| `pnpm test:meetings` | Smoke-test the weekly meeting board against a running API |
-| `pnpm test:users` | Smoke-test the admin user directory (reset, deactivate, remove) |
+| Command                       | What                                                            |
+| ----------------------------- | --------------------------------------------------------------- |
+| `pnpm dev`                    | Run api + web (+ shared watch) via Turborepo                    |
+| `pnpm build`                  | Build everything                                                |
+| `pnpm typecheck`              | Typecheck all packages                                          |
+| `pnpm test`                   | Run unit tests                                                  |
+| `pnpm db:up` / `pnpm db:down` | Start / stop local Postgres                                     |
+| `pnpm db:generate`            | Generate a new Drizzle migration from schema changes            |
+| `pnpm db:migrate`             | Apply migrations                                                |
+| `pnpm db:studio`              | Open Drizzle Studio                                             |
+| `pnpm db:seed`                | Seed the admin user                                             |
+| `pnpm test:meetings`          | Smoke-test the weekly meeting board against a running API       |
+| `pnpm test:users`             | Smoke-test the admin user directory (reset, deactivate, remove) |
 
 ## What's built
 
@@ -76,12 +76,12 @@ Open http://localhost:5173 and sign in with the seeded admin.
 - ✅ Users (admin CRUD) + Workspaces (CRUD, membership, task-prefix)
 - ✅ **Tasks**: create (atomic `ENG-142` refs), list with filter/search/sort/paginate,
   detail, update, archive (soft-delete), multi-assignee, comments
-- ✅ **Audit log**: every task mutation writes one immutable row *in the same
-  transaction* (one row per changed field); per-task history + workspace/global
+- ✅ **Audit log**: every task mutation writes one immutable row _in the same
+  transaction_ (one row per changed field); per-task history + workspace/global
   activity feeds
 - ✅ **Kanban** view (dnd-kit) with drag-to-change-status + optimistic updates
 - ✅ **Dashboards**: admin global stats (workspaces/users/overdue/tasks-by-status/most-active
-  + activity feed) and member "my tasks" home (scoped to your workspaces)
+  - activity feed) and member "my tasks" home (scoped to your workspaces)
 - ✅ **Labels**: per-workspace label CRUD, assign/toggle on tasks (chips on rows +
   Kanban cards, inline create in the drawer), filter tasks by label
 - ✅ **Saved filters** persisted per workspace + reset; richer empty states
@@ -91,7 +91,7 @@ Open http://localhost:5173 and sign in with the seeded admin.
   mobile), each member does one **mood check-in** per week, and per-member +
   team-wide **progress bars** roll up for admins. Three views: **By day** (half-bands
   across the week), **By member** (swimlane overview — names pinned left, the whole
-  week across, admins also see who has *nothing planned* and can drag a card onto
+  week across, admins also see who has _nothing planned_ and can drag a card onto
   another person to reassign it) and **By project** (one lane per project, unfiled
   work called out at the bottom), plus a project filter. Board-level meeting notes
   and per-card comments included; admins can title, set an agenda for, and **lock** a week
@@ -109,7 +109,7 @@ Open http://localhost:5173 and sign in with the seeded admin.
   The mirror task outlives the card: detaching or deleting a card never deletes
   work from the tracker
 - ✅ **Admin user directory** (`/users`): split into **Team** and **No longer active**, the
-  latter separating *deactivated* (suspended — comes back intact) from *removed*
+  latter separating _deactivated_ (suspended — comes back intact) from _removed_
   (offboarded — signed out, dropped from every workspace, task assignments released,
   and the account row deleted outright when no history references it). Each person is
   tagged with the **projects they have open assigned work in**. Resetting a password
@@ -134,3 +134,9 @@ See [`deploy/README.md`](./deploy/README.md).
 
 - CI checks: Enabled (formatting, typescript typecheck, unit tests, e2e smoke tests)
 - CD deployment: Enabled (auto-deploys to Hostinger VPS on push to main branch)
+
+git pull origin main # should now fast-forward to aa81dea
+export CACHEBUST=$(git rev-parse HEAD)
+docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml logs --tail=80 api | grep -iE "migrat|error|listening"
+docker compose -f docker-compose.prod.yml ps
