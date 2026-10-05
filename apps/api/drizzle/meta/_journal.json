@@ -295,6 +295,13 @@
       "when": 1812100000000,
       "tag": "0041_weekly_briefings",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1812200000000,
+      "tag": "0042_project_lifecycle",
+      "breakpoints": true
     }
   ]
 }

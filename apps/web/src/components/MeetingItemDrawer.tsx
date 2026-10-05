@@ -18,6 +18,7 @@ import {
   useUpdateBoardItem,
   useUpdateBoardNote,
 } from '../hooks/useMeetings';
+import { useDeleteTask } from '../hooks/useTasks';
 import { useAuth } from '../stores/auth';
 import { ApiRequestError } from '../lib/api';
 import { Avatar } from './Avatar';
@@ -26,13 +27,20 @@ import { BoardProjectSelect } from './BoardProjectSelect';
 import { Button, ErrorState, Spinner } from './ui';
 
 const dayLabel = (d: string) =>
-  new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  new Date(`${d}T00:00:00`).toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  });
 
-const timeAgo = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+const timeAgo = (iso: string) =>
+  new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
 export const STATUS_STYLES: Record<BoardItemStatus, string> = {
-  PENDING: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-[#252525] dark:text-slate-350 dark:border-[#333]',
-  IN_PROGRESS: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/25 dark:text-amber-400 dark:border-amber-900/40',
+  PENDING:
+    'bg-slate-100 text-slate-600 border-slate-200 dark:bg-[#252525] dark:text-slate-350 dark:border-[#333]',
+  IN_PROGRESS:
+    'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/25 dark:text-amber-400 dark:border-amber-900/40',
   DONE: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/25 dark:text-emerald-400 dark:border-emerald-900/40',
 };
 
@@ -57,6 +65,9 @@ export function MeetingItemDrawer({
   const isAdmin = user?.role === 'ADMIN';
   const isOwner = item.user.id === user?.id;
   const canEdit = isAdmin || (isOwner && !board.isLocked);
+  const isCreator = item.createdBy?.id === user?.id;
+  const canDeleteCard = isAdmin || (isCreator && !board.isLocked);
+  const canDeleteTask = Boolean(item.taskId && item.project && (isAdmin || isCreator));
 
   const [title, setTitle] = useState(item.title);
   const [note, setNote] = useState(item.note ?? '');
@@ -68,6 +79,7 @@ export function MeetingItemDrawer({
   const { data: comments, isLoading: commentsLoading } = useItemNotes(item.id);
   const updateItem = useUpdateBoardItem();
   const deleteItem = useDeleteBoardItem();
+  const deleteTask = useDeleteTask(item.project?.workspaceId ?? '');
   const createNote = useCreateBoardNote();
   const updateNote = useUpdateBoardNote();
   const deleteNote = useDeleteBoardNote();
@@ -120,7 +132,9 @@ export function MeetingItemDrawer({
             </div>
             <div className="mt-1.5 flex items-center gap-2">
               <Avatar user={item.user} size="sm" />
-              <span className="truncate text-sm font-medium text-slate-600 dark:text-slate-350">{item.user.name}</span>
+              <span className="truncate text-sm font-medium text-slate-600 dark:text-slate-350">
+                {item.user.name}
+              </span>
             </div>
           </div>
           <button
@@ -129,7 +143,14 @@ export function MeetingItemDrawer({
             onClick={onClose}
             className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -158,7 +179,9 @@ export function MeetingItemDrawer({
 
           {/* status */}
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Status</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+              Status
+            </p>
             <div className="flex flex-wrap gap-2">
               {(BOARD_ITEM_STATUSES as BoardItemStatus[]).map((s) => (
                 <button
@@ -177,7 +200,9 @@ export function MeetingItemDrawer({
               ))}
             </div>
             {item.completedAt ? (
-              <p className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">Completed {timeAgo(item.completedAt)}</p>
+              <p className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
+                Completed {timeAgo(item.completedAt)}
+              </p>
             ) : null}
           </div>
 
@@ -227,7 +252,9 @@ export function MeetingItemDrawer({
             <BoardProjectSelect
               value={item.project?.id ?? ''}
               disabled={!canEdit}
-              onChange={(projectId) => void patch({ projectId: projectId === '' ? null : projectId })}
+              onChange={(projectId) =>
+                void patch({ projectId: projectId === '' ? null : projectId })
+              }
             />
             {item.project && item.taskId ? (
               <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
@@ -239,7 +266,8 @@ export function MeetingItemDrawer({
                 >
                   {item.taskRef ?? 'this task'}
                 </button>{' '}
-                in {item.project.workspaceName}. Open it here for the full task detail, history, attachments and planning controls.
+                in {item.project.workspaceName}. Open it here for the full task detail, history,
+                attachments and planning controls.
               </p>
             ) : item.project ? (
               <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
@@ -260,14 +288,17 @@ export function MeetingItemDrawer({
               </label>
               <AssigneePicker
                 members={members}
-                selected={members.filter((member) => item.assignees.some((assignee) => assignee.id === member.id))}
+                selected={members.filter((member) =>
+                  item.assignees.some((assignee) => assignee.id === member.id),
+                )}
                 disabled={!canEdit}
                 emptyLabel="No people tagged"
                 pluralLabel="people tagged"
                 onChange={(assigneeIds) => void patch({ assigneeIds })}
               />
               <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
-                Tagged people who belong to {item.project.workspaceName} will see this task on their own board.
+                Tagged people who belong to {item.project.workspaceName} will see this task on their
+                own board.
               </p>
             </div>
           ) : null}
@@ -327,8 +358,12 @@ export function MeetingItemDrawer({
                       <Avatar user={c.author} size="sm" />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-baseline gap-2">
-                          <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{c.author.name}</span>
-                          <span className="text-[10px] text-slate-400 dark:text-slate-500">{timeAgo(c.createdAt)}</span>
+                          <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                            {c.author.name}
+                          </span>
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                            {timeAgo(c.createdAt)}
+                          </span>
                         </div>
                         {editingNoteId === c.id ? (
                           <div className="mt-1.5">
@@ -344,14 +379,22 @@ export function MeetingItemDrawer({
                                 onClick={() =>
                                   void run(async () => {
                                     const body = editingBody.trim();
-                                    if (body) await updateNote.mutateAsync({ noteId: c.id, patch: { body } });
+                                    if (body)
+                                      await updateNote.mutateAsync({
+                                        noteId: c.id,
+                                        patch: { body },
+                                      });
                                     setEditingNoteId(null);
                                   })
                                 }
                               >
                                 Save
                               </Button>
-                              <Button variant="ghost" className="px-2.5 py-1 text-xs" onClick={() => setEditingNoteId(null)}>
+                              <Button
+                                variant="ghost"
+                                className="px-2.5 py-1 text-xs"
+                                onClick={() => setEditingNoteId(null)}
+                              >
                                 Cancel
                               </Button>
                             </div>
@@ -378,7 +421,11 @@ export function MeetingItemDrawer({
                             <button
                               type="button"
                               className="hover:text-red-600 dark:hover:text-red-400"
-                              onClick={() => void run(() => deleteNote.mutateAsync({ noteId: c.id, itemId: item.id }))}
+                              onClick={() =>
+                                void run(() =>
+                                  deleteNote.mutateAsync({ noteId: c.id, itemId: item.id }),
+                                )
+                              }
                             >
                               Delete
                             </button>
@@ -409,7 +456,10 @@ export function MeetingItemDrawer({
                     void run(async () => {
                       const body = draft.trim();
                       if (!body) return;
-                      await createNote.mutateAsync({ boardId: board.id, input: { itemId: item.id, body } });
+                      await createNote.mutateAsync({
+                        boardId: board.id,
+                        input: { itemId: item.id, body },
+                      });
                       setDraft('');
                     })
                   }
@@ -421,26 +471,56 @@ export function MeetingItemDrawer({
           </div>
         </div>
 
-        {canEdit ? (
+        {canDeleteCard || canDeleteTask ? (
           <div className="border-t border-slate-100 px-5 py-4 dark:border-slate-800/60">
-            <Button
-              variant="danger"
-              className="w-full text-xs"
-              disabled={deleteItem.isPending}
-              onClick={() =>
-                void run(async () => {
-                  await deleteItem.mutateAsync(item.id);
-                  onClose();
-                })
-              }
-            >
-              Delete card
-            </Button>
-            {item.taskId ? (
-              <p className="mt-2 text-center text-[11px] text-slate-400 dark:text-slate-500">
-                The mirrored task stays in the workspace with its history.
-              </p>
-            ) : null}
+            <div className="space-y-2">
+              {canDeleteCard ? (
+                <Button
+                  variant="ghost"
+                  className="w-full text-xs"
+                  disabled={deleteItem.isPending}
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        'Remove this card from the weekly plan? The linked workspace task will stay.',
+                      )
+                    )
+                      return;
+                    void run(async () => {
+                      await deleteItem.mutateAsync(item.id);
+                      onClose();
+                    });
+                  }}
+                >
+                  Delete card from weekly plan
+                </Button>
+              ) : null}
+              {canDeleteTask && item.taskId ? (
+                <Button
+                  variant="danger"
+                  className="w-full text-xs"
+                  disabled={deleteTask.isPending}
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        'Permanently delete the linked task and its history? This cannot be undone.',
+                      )
+                    )
+                      return;
+                    void run(async () => {
+                      await deleteTask.mutateAsync(item.taskId!);
+                      onClose();
+                    });
+                  }}
+                >
+                  Delete linked task permanently
+                </Button>
+              ) : null}
+            </div>
+            <p className="mt-2 text-center text-[11px] text-slate-400 dark:text-slate-500">
+              Deleting the card only removes it from this week. Permanent deletion removes the
+              linked workspace task.
+            </p>
           </div>
         ) : null}
       </div>

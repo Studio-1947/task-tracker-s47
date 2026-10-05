@@ -1065,7 +1065,12 @@ export class MeetingsService {
    */
   async deleteItem(actor: Actor, itemId: string): Promise<{ id: string }> {
     const { item, board } = await this.loadItemOrThrow(itemId);
-    this.assertCanMutate(actor, board, item.userId);
+    if (!this.isAdmin(actor)) {
+      if (board.isLocked) throw new ForbiddenException('This week is locked');
+      if (item.createdById !== actor.id) {
+        throw new ForbiddenException('Only the card creator can remove this card');
+      }
+    }
     await this.db.delete(meetingBoardItems).where(eq(meetingBoardItems.id, itemId));
     return { id: itemId };
   }

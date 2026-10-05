@@ -25,6 +25,7 @@ export const updateProjectSchema = z
       .nullable()
       .optional(),
     isArchived: z.boolean().optional(),
+    lifecycle: z.enum(['ACTIVE', 'UPCOMING', 'PAST']).optional(),
   })
   .strict()
   .refine((v) => Object.keys(v).length > 0, { message: 'No fields to update' });

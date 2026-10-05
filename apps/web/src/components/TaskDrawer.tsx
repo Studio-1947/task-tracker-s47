@@ -76,9 +76,19 @@ interface Props {
   onClose: () => void;
   /** Opens another task (a subtask or the parent) in this same drawer. */
   onOpenTask: (id: string) => void;
+  /** Available only when opened from the matching Weekly Tasks card. */
+  onDeleteCard?: () => Promise<void>;
 }
 
-export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOpenTask }: Props) {
+export function TaskDrawer({
+  workspaceId,
+  taskId,
+  members,
+  labels,
+  onClose,
+  onOpenTask,
+  onDeleteCard,
+}: Props) {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
   const { data: task, isLoading } = useTask(taskId);
@@ -93,6 +103,7 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
   const qc = useQueryClient();
   const [comment, setComment] = useState('');
   const [subtaskTitle, setSubtaskTitle] = useState('');
+  const canDeletePermanently = isAdmin || task?.createdBy?.id === user?.id;
 
   // Lock body scroll when drawer is open to prevent double scrollbars
   useEffect(() => {
@@ -221,7 +232,7 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                   Archive
                 </Button>
               )}
-              {isAdmin ? (
+              {canDeletePermanently ? (
                 <Button
                   variant="danger"
                   className="py-1.5 px-3 text-xs"
@@ -229,6 +240,23 @@ export function TaskDrawer({ workspaceId, taskId, members, labels, onClose, onOp
                   onClick={onDelete}
                 >
                   Delete permanently
+                </Button>
+              ) : null}
+              {onDeleteCard && canDeletePermanently ? (
+                <Button
+                  variant="ghost"
+                  className="py-1.5 px-3 text-xs"
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        'Remove this card from the weekly plan? The workspace task will remain.',
+                      )
+                    )
+                      return;
+                    void onDeleteCard();
+                  }}
+                >
+                  Delete card from weekly plan
                 </Button>
               ) : null}
               {remove.isError ? (

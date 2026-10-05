@@ -139,6 +139,7 @@ export interface ProjectSummary {
   color: string | null;
   taskPrefix: string;
   isArchived: boolean;
+  lifecycle: 'ACTIVE' | 'UPCOMING' | 'PAST';
   createdAt: string;
   taskCount?: number;
 }

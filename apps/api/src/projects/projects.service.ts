@@ -23,6 +23,7 @@ export class ProjectsService {
       color: p.color,
       taskPrefix: p.taskPrefix,
       isArchived: p.isArchived,
+      lifecycle: p.lifecycle === 'UPCOMING' || p.lifecycle === 'PAST' ? p.lifecycle : 'ACTIVE',
       createdAt: p.createdAt.toISOString(),
       ...(taskCount !== undefined ? { taskCount } : {}),
     };
@@ -74,8 +75,17 @@ export class ProjectsService {
     return this.toSummary(project, Number(c));
   }
 
-  async create(workspaceId: string, actor: Actor, input: CreateProjectInput): Promise<ProjectSummary> {
+  async create(
+    workspaceId: string,
+    actor: Actor,
+    input: CreateProjectInput,
+  ): Promise<ProjectSummary> {
     await this.workspaces.assertCanAccess(workspaceId, actor);
+    if (actor.role !== 'ADMIN' && !(await this.workspaces.isManager(workspaceId, actor))) {
+      throw new ForbiddenException(
+        'Only an administrator or workspace manager can create a project',
+      );
+    }
     const [p] = await this.db
       .insert(projects)
       .values({
@@ -90,7 +100,11 @@ export class ProjectsService {
     return this.toSummary(p!, 0);
   }
 
-  async update(projectId: string, actor: Actor, input: UpdateProjectInput): Promise<ProjectSummary> {
+  async update(
+    projectId: string,
+    actor: Actor,
+    input: UpdateProjectInput,
+  ): Promise<ProjectSummary> {
     const project = await this.assertCanAccess(projectId, actor);
     // Renaming or archiving a project changes what everyone in the workspace sees (spec section 9).
     if (actor.role !== 'ADMIN' && !(await this.workspaces.isManager(project.workspaceId, actor))) {
@@ -103,6 +117,7 @@ export class ProjectsService {
         ...(input.description !== undefined ? { description: input.description } : {}),
         ...(input.color !== undefined ? { color: input.color } : {}),
         ...(input.isArchived !== undefined ? { isArchived: input.isArchived } : {}),
+        ...(input.lifecycle !== undefined ? { lifecycle: input.lifecycle } : {}),
         updatedAt: new Date(),
       })
       .where(eq(projects.id, projectId))

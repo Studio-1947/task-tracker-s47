@@ -117,7 +117,11 @@ export function MeetingBoardPage() {
   });
   const [tab, setTab] = useState<Tab>('board');
   const [openItemId, setOpenItemId] = useState<string | null>(null);
-  const [openTask, setOpenTask] = useState<{ taskId: string; workspaceId: string } | null>(null);
+  const [openTask, setOpenTask] = useState<{
+    taskId: string;
+    workspaceId: string;
+    boardItemId?: string;
+  } | null>(null);
   const [ownerFilter, setOwnerFilter] = useState<'all' | 'mine' | 'selected'>('all');
   const [watchedMemberIds, setWatchedMemberIds] = useState<string[]>([]);
   const [projectFilter, setProjectFilter] = useState<ProjectFilter>('all');
@@ -262,7 +266,11 @@ export function MeetingBoardPage() {
   const openCardDetails = (itemId: string) => {
     const item = board?.items.find((candidate) => candidate.id === itemId);
     if (item?.taskId && item.project) {
-      setOpenTask({ taskId: item.taskId, workspaceId: item.project.workspaceId });
+      setOpenTask({
+        taskId: item.taskId,
+        workspaceId: item.project.workspaceId,
+        boardItemId: item.id,
+      });
       return;
     }
     setOpenItemId(itemId);
@@ -544,6 +552,7 @@ export function MeetingBoardPage() {
                               setOpenTask({
                                 taskId: item.taskId,
                                 workspaceId: item.project.workspaceId,
+                                boardItemId: item.id,
                               });
                           }}
                           onDragStart={setDragId}
@@ -608,6 +617,7 @@ export function MeetingBoardPage() {
                                 setOpenTask({
                                   taskId: item.taskId,
                                   workspaceId: item.project.workspaceId,
+                                  boardItemId: item.id,
                                 });
                             }}
                             onDragStart={setDragId}
@@ -632,7 +642,11 @@ export function MeetingBoardPage() {
               onOpen={openCardDetails}
               onCreated={(item) => {
                 if (item.taskId && item.project)
-                  setOpenTask({ taskId: item.taskId, workspaceId: item.project.workspaceId });
+                  setOpenTask({
+                    taskId: item.taskId,
+                    workspaceId: item.project.workspaceId,
+                    boardItemId: item.id,
+                  });
               }}
               onError={setError}
               onDragStart={setDragId}
@@ -649,7 +663,11 @@ export function MeetingBoardPage() {
               onOpen={openCardDetails}
               onCreated={(item) => {
                 if (item.taskId && item.project)
-                  setOpenTask({ taskId: item.taskId, workspaceId: item.project.workspaceId });
+                  setOpenTask({
+                    taskId: item.taskId,
+                    workspaceId: item.project.workspaceId,
+                    boardItemId: item.id,
+                  });
               }}
               onError={setError}
               onDragStart={setDragId}
@@ -681,13 +699,16 @@ export function MeetingBoardPage() {
           board={board}
           members={allUsers ?? []}
           onClose={() => setOpenItemId(null)}
-          onOpenTaskDetail={(taskId, workspaceId) => setOpenTask({ taskId, workspaceId })}
+          onOpenTaskDetail={(taskId, workspaceId) =>
+            setOpenTask({ taskId, workspaceId, boardItemId: openItem.id })
+          }
         />
       ) : null}
       {openTask ? (
         <MeetingTaskDrawer
           workspaceId={openTask.workspaceId}
           taskId={openTask.taskId}
+          boardItemId={openTask.boardItemId}
           onClose={() => setOpenTask(null)}
           onOpenTask={(taskId) =>
             setOpenTask((current) => (current ? { ...current, taskId } : null))

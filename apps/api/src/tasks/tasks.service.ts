@@ -1,5 +1,28 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Logger } from '@nestjs/common';
-import { and, asc, count, desc, eq, gt, gte, ilike, inArray, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  Logger,
+} from '@nestjs/common';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  ne,
+  or,
+  sql,
+} from 'drizzle-orm';
 import type {
   AuditEntry,
   CreateLinkAttachmentInput,
@@ -26,8 +49,24 @@ import type {
   ReviewQueueItem,
   UserRef,
 } from '@task-tracker/shared';
-import type { CapacityAllocationInput, ReservedTimeInput, UnallocatedWorkItem } from '@task-tracker/shared';
-import { AttachmentKind, AuditAction, Role, apportionMinutes, calculateCapacity, intervalsOverlap, localMidnight, localWorkDate, mergeIntervals, splitAcrossLocalDays, workingMinutesElapsed } from '@task-tracker/shared';
+import type {
+  CapacityAllocationInput,
+  ReservedTimeInput,
+  UnallocatedWorkItem,
+} from '@task-tracker/shared';
+import {
+  AttachmentKind,
+  AuditAction,
+  Role,
+  apportionMinutes,
+  calculateCapacity,
+  intervalsOverlap,
+  localMidnight,
+  localWorkDate,
+  mergeIntervals,
+  splitAcrossLocalDays,
+  workingMinutesElapsed,
+} from '@task-tracker/shared';
 import { DRIZZLE, type Database } from '../database/database.module';
 import {
   labels,
@@ -69,7 +108,6 @@ type Actor = { id: string; role: string };
 export class TasksService {
   private readonly logger = new Logger(TasksService.name);
 
-
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly workspaces: WorkspacesService,
@@ -78,7 +116,6 @@ export class TasksService {
     private readonly notifications: NotificationsService,
     private readonly calendar: CalendarService,
   ) {}
-
 
   // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -105,7 +142,12 @@ export class TasksService {
     const rows = await this.db
       .select({ userId: workspaceMembers.userId })
       .from(workspaceMembers)
-      .where(and(eq(workspaceMembers.workspaceId, workspaceId), inArray(workspaceMembers.userId, unique)));
+      .where(
+        and(
+          eq(workspaceMembers.workspaceId, workspaceId),
+          inArray(workspaceMembers.userId, unique),
+        ),
+      );
     if (rows.length !== unique.length) {
       throw new ForbiddenException('All assignees must be members of the workspace');
     }
@@ -163,7 +205,12 @@ export class TasksService {
         .innerJoin(users, eq(users.id, taskAssignees.userId))
         .where(inArray(taskAssignees.taskId, taskIds)),
       this.db
-        .select({ taskId: taskLabels.taskId, id: labels.id, name: labels.name, color: labels.color })
+        .select({
+          taskId: taskLabels.taskId,
+          id: labels.id,
+          name: labels.name,
+          color: labels.color,
+        })
         .from(taskLabels)
         .innerJoin(labels, eq(labels.id, taskLabels.labelId))
         .where(inArray(taskLabels.taskId, taskIds)),
@@ -204,14 +251,27 @@ export class TasksService {
 
     // Recorded effort per task, with a parent's total including its direct subtasks so it matches the rolled-up remaining estimate.
     const effortRows = await this.db
-      .select({ root: sql<string>`coalesce(${tasks.parentTaskId}, ${tasks.id})`, minutes: sql<number>`coalesce(sum(${taskTimeEntries.durationMinutes}), 0)` })
+      .select({
+        root: sql<string>`coalesce(${tasks.parentTaskId}, ${tasks.id})`,
+        minutes: sql<number>`coalesce(sum(${taskTimeEntries.durationMinutes}), 0)`,
+      })
       .from(taskTimeEntries)
       .innerJoin(tasks, eq(tasks.id, taskTimeEntries.taskId))
       .where(or(inArray(tasks.id, taskIds), inArray(tasks.parentTaskId, taskIds)))
       .groupBy(sql`coalesce(${tasks.parentTaskId}, ${tasks.id})`);
-    const actualMinutes = new Map(effortRows.filter((r) => taskIds.includes(r.root)).map((r) => [r.root, Number(r.minutes)]));
+    const actualMinutes = new Map(
+      effortRows.filter((r) => taskIds.includes(r.root)).map((r) => [r.root, Number(r.minutes)]),
+    );
 
-    return { assignees: assigneeMap, labels: labelMap, commentCounts, attachmentCounts, subtaskCounts, subtaskDoneCounts, actualMinutes };
+    return {
+      assignees: assigneeMap,
+      labels: labelMap,
+      commentCounts,
+      attachmentCounts,
+      subtaskCounts,
+      subtaskDoneCounts,
+      actualMinutes,
+    };
   }
 
   /**
@@ -230,7 +290,12 @@ export class TasksService {
     if (!dueDate || status === 'DONE' || dueDate.getTime() >= now.getTime()) return null;
     const settings = calendar?.settings;
     if (!settings) return null;
-    return workingMinutesElapsed(dueDate.toISOString(), now.toISOString(), settings, calendar!.exceptions);
+    return workingMinutesElapsed(
+      dueDate.toISOString(),
+      now.toISOString(),
+      settings,
+      calendar!.exceptions,
+    );
   }
 
   private toListItem(
@@ -391,7 +456,9 @@ export class TasksService {
     if (children.length === 0) return;
     // A parent only rolls up from effort-bearing children. Subtasks with no estimate yet say nothing about the work, so they
     // must not overwrite the parent's own baseline, approved and remaining estimates with nothing (spec section 3 and 6).
-    const effortBearing = children.some((c) => c.baseline !== null || c.current !== null || c.remaining !== null);
+    const effortBearing = children.some(
+      (c) => c.baseline !== null || c.current !== null || c.remaining !== null,
+    );
     if (!effortBearing) return;
 
     const sum = (values: (number | null)[]): number | null => {
@@ -412,7 +479,10 @@ export class TasksService {
       parent.remainingEstimateMinutes !== rollup.remainingEstimateMinutes;
     if (!changed) return;
 
-    await tx.update(tasks).set({ ...rollup, updatedAt: new Date() }).where(eq(tasks.id, parentTaskId));
+    await tx
+      .update(tasks)
+      .set({ ...rollup, updatedAt: new Date() })
+      .where(eq(tasks.id, parentTaskId));
     await this.audit.record(
       {
         workspaceId: parent.workspaceId,
@@ -481,8 +551,13 @@ export class TasksService {
           ownerId: input.ownerId ?? null,
           reviewerId: input.reviewerId ?? null,
           baselineEstimateMinutes: input.baselineEstimateMinutes ?? null,
-          currentEstimateMinutes: input.currentEstimateMinutes ?? input.baselineEstimateMinutes ?? null,
-          remainingEstimateMinutes: input.remainingEstimateMinutes ?? input.currentEstimateMinutes ?? input.baselineEstimateMinutes ?? null,
+          currentEstimateMinutes:
+            input.currentEstimateMinutes ?? input.baselineEstimateMinutes ?? null,
+          remainingEstimateMinutes:
+            input.remainingEstimateMinutes ??
+            input.currentEstimateMinutes ??
+            input.baselineEstimateMinutes ??
+            null,
           completedAt: input.status === 'DONE' ? new Date() : null,
           createdById: actor.id,
         })
@@ -490,10 +565,14 @@ export class TasksService {
       if (!task) throw new Error('Failed to create task');
 
       if (assigneeIds.length) {
-        await tx.insert(taskAssignees).values(assigneeIds.map((userId) => ({ taskId: task.id, userId })));
+        await tx
+          .insert(taskAssignees)
+          .values(assigneeIds.map((userId) => ({ taskId: task.id, userId })));
       }
       if (labelIds.length) {
-        await tx.insert(taskLabels).values(labelIds.map((labelId) => ({ taskId: task.id, labelId })));
+        await tx
+          .insert(taskLabels)
+          .values(labelIds.map((labelId) => ({ taskId: task.id, labelId })));
       }
 
       await this.audit.record(
@@ -531,14 +610,16 @@ export class TasksService {
       const taskRef = detail.ref;
       for (const assigneeId of assigneeIds) {
         if (assigneeId !== actor.id) {
-          void this.notifications.createNotification(
-            assigneeId,
-            actor.id,
-            'TASK_ASSIGNED',
-            'New Task Assigned',
-            `You have been assigned to task ${taskRef}: "${detail.title}"`,
-            { taskId: detail.id, workspaceId, taskRef },
-          ).catch((err) => this.logger.error(`Failed to trigger notification: ${err.message}`));
+          void this.notifications
+            .createNotification(
+              assigneeId,
+              actor.id,
+              'TASK_ASSIGNED',
+              'New Task Assigned',
+              `You have been assigned to task ${taskRef}: "${detail.title}"`,
+              { taskId: detail.id, workspaceId, taskRef },
+            )
+            .catch((err) => this.logger.error(`Failed to trigger notification: ${err.message}`));
         }
       }
     }
@@ -546,9 +627,12 @@ export class TasksService {
     return detail;
   }
 
-
   /** Convenience wrapper: creates a task as a subtask of `parentTaskId`, inheriting its workspace/project. */
-  async createSubtask(parentTaskId: string, actor: Actor, input: CreateSubtaskInput): Promise<TaskDetail> {
+  async createSubtask(
+    parentTaskId: string,
+    actor: Actor,
+    input: CreateSubtaskInput,
+  ): Promise<TaskDetail> {
     const parent = await this.loadTaskOrThrow(parentTaskId);
     await this.workspaces.assertCanAccess(parent.workspaceId, actor);
     if (parent.parentTaskId) {
@@ -564,7 +648,11 @@ export class TasksService {
     });
   }
 
-  async list(workspaceId: string, actor: Actor, query: TaskQuery): Promise<Paginated<TaskListItem>> {
+  async list(
+    workspaceId: string,
+    actor: Actor,
+    query: TaskQuery,
+  ): Promise<Paginated<TaskListItem>> {
     await this.workspaces.assertCanAccess(workspaceId, actor);
 
     // Subtasks are shown nested under their parent (in the drawer), never as their own board row.
@@ -611,13 +699,19 @@ export class TasksService {
           conds.push(sql`${tasks.dueDate} < now()`, open);
           break;
         case 'BLOCKED': {
-          const blocked = this.db.select({ id: taskBlockers.taskId }).from(taskBlockers).where(isNull(taskBlockers.unblockedAt));
+          const blocked = this.db
+            .select({ id: taskBlockers.taskId })
+            .from(taskBlockers)
+            .where(isNull(taskBlockers.unblockedAt));
           conds.push(inArray(tasks.id, blocked), open);
           break;
         }
         case 'REVIEW_OVERDUE': {
           // Waiting time is measured in scheduled working minutes, not wall-clock hours.
-          const [policy] = await this.db.select().from(organisationPolicies).where(eq(organisationPolicies.id, 1));
+          const [policy] = await this.db
+            .select()
+            .from(organisationPolicies)
+            .where(eq(organisationPolicies.id, 1));
           const cal = await this.calendar.get();
           const pending = await this.db
             .select({ taskId: taskSubmissions.taskId, submittedAt: taskSubmissions.submittedAt })
@@ -627,7 +721,17 @@ export class TasksService {
           const nowIso = new Date().toISOString();
           const target = policy?.reviewTargetMinutes ?? 480;
           const late = cal.settings
-            ? pending.filter((r) => workingMinutesElapsed(r.submittedAt.toISOString(), nowIso, cal.settings!, cal.exceptions) >= target).map((r) => r.taskId)
+            ? pending
+                .filter(
+                  (r) =>
+                    workingMinutesElapsed(
+                      r.submittedAt.toISOString(),
+                      nowIso,
+                      cal.settings!,
+                      cal.exceptions,
+                    ) >= target,
+                )
+                .map((r) => r.taskId)
             : [];
           conds.push(late.length ? inArray(tasks.id, late) : sql`false`);
           break;
@@ -667,7 +771,9 @@ export class TasksService {
     ]);
     const now = new Date();
     return {
-      items: rows.map((r) => this.toListItem(r.task, r.prefix, r.projectName, rel, people, calendar, now)),
+      items: rows.map((r) =>
+        this.toListItem(r.task, r.prefix, r.projectName, rel, people, calendar, now),
+      ),
       total: Number(total),
       page: query.page,
       pageSize: query.pageSize,
@@ -682,7 +788,15 @@ export class TasksService {
       this.userRefs([task.ownerId, task.reviewerId]),
       this.calendar.get(),
     ]);
-    const base = this.toListItem(task, task.taskPrefix, task.projectName, rel, people, calendar, new Date());
+    const base = this.toListItem(
+      task,
+      task.taskPrefix,
+      task.projectName,
+      rel,
+      people,
+      calendar,
+      new Date(),
+    );
     const createdBy = await this.userRef(task.createdById);
 
     const subtaskRows = await this.db
@@ -692,9 +806,13 @@ export class TasksService {
       .orderBy(asc(tasks.createdAt));
     const [subtaskRefs, parentRefs] = await Promise.all([
       this.subtaskRefsFor(subtaskRows.map((r) => r.id)),
-      task.parentTaskId ? this.subtaskRefsFor([task.parentTaskId]) : Promise.resolve(new Map<string, SubtaskRef>()),
+      task.parentTaskId
+        ? this.subtaskRefsFor([task.parentTaskId])
+        : Promise.resolve(new Map<string, SubtaskRef>()),
     ]);
-    const subtasks = subtaskRows.map((r) => subtaskRefs.get(r.id)).filter((s): s is SubtaskRef => !!s);
+    const subtasks = subtaskRows
+      .map((r) => subtaskRefs.get(r.id))
+      .filter((s): s is SubtaskRef => !!s);
     const parentTask = task.parentTaskId ? (parentRefs.get(task.parentTaskId) ?? null) : null;
 
     return { ...base, description: task.description, createdBy, parentTask, subtasks };
@@ -713,23 +831,36 @@ export class TasksService {
       .map((r) => r.userId)
       .sort();
 
-    if (input.assigneeIds) await this.assertAssigneesAreMembers(current.workspaceId, input.assigneeIds);
+    if (input.assigneeIds)
+      await this.assertAssigneesAreMembers(current.workspaceId, input.assigneeIds);
     const planningPeople = [input.ownerId, input.reviewerId].filter((id): id is string => !!id);
-    if (planningPeople.length) await this.assertAssigneesAreMembers(current.workspaceId, planningPeople);
+    if (planningPeople.length)
+      await this.assertAssigneesAreMembers(current.workspaceId, planningPeople);
     const nextOwner = input.ownerId === undefined ? current.ownerId : input.ownerId;
     const nextReviewer = input.reviewerId === undefined ? current.reviewerId : input.reviewerId;
     if (nextOwner && nextReviewer && nextOwner === nextReviewer) {
       throw new BadRequestException('Owner and reviewer must be different people');
     }
-    if ((input.status !== undefined || input.reviewerId !== undefined) &&
-        (input.status !== current.status || input.reviewerId !== current.reviewerId)) {
-      const [pendingReview] = await this.db.select({ id: taskSubmissions.id }).from(taskSubmissions)
-        .where(and(eq(taskSubmissions.taskId, taskId), eq(taskSubmissions.status, 'PENDING'))).limit(1);
-      if (pendingReview) throw new BadRequestException('Decide the pending submission before changing its status or reviewer');
+    if (
+      (input.status !== undefined || input.reviewerId !== undefined) &&
+      (input.status !== current.status || input.reviewerId !== current.reviewerId)
+    ) {
+      const [pendingReview] = await this.db
+        .select({ id: taskSubmissions.id })
+        .from(taskSubmissions)
+        .where(and(eq(taskSubmissions.taskId, taskId), eq(taskSubmissions.status, 'PENDING')))
+        .limit(1);
+      if (pendingReview)
+        throw new BadRequestException(
+          'Decide the pending submission before changing its status or reviewer',
+        );
     }
     if (input.labelIds) await this.assertLabelsInWorkspace(current.workspaceId, input.labelIds);
 
-    if (input.currentEstimateMinutes !== undefined || input.remainingEstimateMinutes !== undefined) {
+    if (
+      input.currentEstimateMinutes !== undefined ||
+      input.remainingEstimateMinutes !== undefined
+    ) {
       const childEstimates = await this.db
         .select({
           baseline: tasks.baselineEstimateMinutes,
@@ -759,11 +890,16 @@ export class TasksService {
 
     await this.db.transaction(async (tx) => {
       const patch: Partial<TaskRow> = {};
-      const audits: { action: AuditAction; before: unknown; after: unknown; reason?: string }[] = [];
+      const audits: { action: AuditAction; before: unknown; after: unknown; reason?: string }[] =
+        [];
 
       if (input.title !== undefined && input.title !== current.title) {
         patch.title = input.title;
-        audits.push({ action: AuditAction.TITLE_CHANGED, before: current.title, after: input.title });
+        audits.push({
+          action: AuditAction.TITLE_CHANGED,
+          before: current.title,
+          after: input.title,
+        });
       }
       if (input.description !== undefined && (input.description ?? null) !== current.description) {
         patch.description = input.description ?? null;
@@ -773,33 +909,60 @@ export class TasksService {
           after: input.description ?? null,
         });
       }
-      if (input.acceptanceCriteria !== undefined && (input.acceptanceCriteria ?? null) !== current.acceptanceCriteria) {
+      if (
+        input.acceptanceCriteria !== undefined &&
+        (input.acceptanceCriteria ?? null) !== current.acceptanceCriteria
+      ) {
         patch.acceptanceCriteria = input.acceptanceCriteria ?? null;
-        audits.push({ action: AuditAction.DESCRIPTION_CHANGED, before: { acceptanceCriteria: current.acceptanceCriteria }, after: { acceptanceCriteria: input.acceptanceCriteria ?? null } });
+        audits.push({
+          action: AuditAction.DESCRIPTION_CHANGED,
+          before: { acceptanceCriteria: current.acceptanceCriteria },
+          after: { acceptanceCriteria: input.acceptanceCriteria ?? null },
+        });
       }
       if (input.childScope !== undefined && input.childScope !== current.childScope) {
         patch.childScope = input.childScope;
-        audits.push({ action: AuditAction.DESCRIPTION_CHANGED, before: { childScope: current.childScope }, after: { childScope: input.childScope } });
+        audits.push({
+          action: AuditAction.DESCRIPTION_CHANGED,
+          before: { childScope: current.childScope },
+          after: { childScope: input.childScope },
+        });
       }
       if (input.status !== undefined && input.status !== current.status) {
         if (current.reviewerId && (input.status === 'IN_REVIEW' || input.status === 'DONE')) {
-          throw new BadRequestException('Use the evidence submission and review workflow for this status');
+          throw new BadRequestException(
+            'Use the evidence submission and review workflow for this status',
+          );
         }
         if (!current.reviewerId && !current.parentTaskId && input.status === 'DONE') {
-          await this.assertSimplifiedDoneAllowed(current.currentEstimateMinutes ?? current.baselineEstimateMinutes);
+          await this.assertSimplifiedDoneAllowed(
+            current.currentEstimateMinutes ?? current.baselineEstimateMinutes,
+          );
         }
         patch.status = input.status;
         // Track completion time for analytics; a re-opened task no longer counts as completed.
         patch.completedAt = input.status === 'DONE' ? new Date() : null;
-        audits.push({ action: AuditAction.STATUS_CHANGED, before: current.status, after: input.status });
+        audits.push({
+          action: AuditAction.STATUS_CHANGED,
+          before: current.status,
+          after: input.status,
+        });
       }
       if (input.priority !== undefined && input.priority !== current.priority) {
         patch.priority = input.priority;
-        audits.push({ action: AuditAction.PRIORITY_CHANGED, before: current.priority, after: input.priority });
+        audits.push({
+          action: AuditAction.PRIORITY_CHANGED,
+          before: current.priority,
+          after: input.priority,
+        });
       }
       if (input.size !== undefined && input.size !== current.size) {
         patch.size = input.size;
-        audits.push({ action: AuditAction.DESCRIPTION_CHANGED, before: { size: current.size }, after: { size: input.size } });
+        audits.push({
+          action: AuditAction.DESCRIPTION_CHANGED,
+          before: { size: current.size },
+          after: { size: input.size },
+        });
       }
       if (input.dueDate !== undefined) {
         const nextDue = input.dueDate ? new Date(input.dueDate) : null;
@@ -808,27 +971,46 @@ export class TasksService {
         if (currentIso !== nextIso) {
           // Moving or clearing an existing commitment needs a reason (PRD §2); setting the first date does not.
           if (current.dueDate && !input.dueDateReason) {
-            throw new BadRequestException('A reason is required when changing an existing due date');
+            throw new BadRequestException(
+              'A reason is required when changing an existing due date',
+            );
           }
           patch.dueDate = nextDue;
           // The first non-null commitment becomes the immutable baseline for
           // deadline-revision reporting, including legacy undated tasks.
           if (!current.originalDueDate && nextDue) patch.originalDueDate = nextDue;
-          audits.push({ action: AuditAction.DUE_DATE_CHANGED, before: currentIso, after: nextIso, reason: input.dueDateReason });
+          audits.push({
+            action: AuditAction.DUE_DATE_CHANGED,
+            before: currentIso,
+            after: nextIso,
+            reason: input.dueDateReason,
+          });
         }
       }
       if (input.ownerId !== undefined && input.ownerId !== current.ownerId) {
         patch.ownerId = input.ownerId;
-        audits.push({ action: AuditAction.OWNER_CHANGED, before: current.ownerId, after: input.ownerId });
+        audits.push({
+          action: AuditAction.OWNER_CHANGED,
+          before: current.ownerId,
+          after: input.ownerId,
+        });
       }
       if (input.reviewerId !== undefined && input.reviewerId !== current.reviewerId) {
         patch.reviewerId = input.reviewerId;
-        audits.push({ action: AuditAction.REVIEWER_CHANGED, before: current.reviewerId, after: input.reviewerId });
+        audits.push({
+          action: AuditAction.REVIEWER_CHANGED,
+          before: current.reviewerId,
+          after: input.reviewerId,
+        });
       }
       for (const field of ['currentEstimateMinutes', 'remainingEstimateMinutes'] as const) {
         if (input[field] !== undefined && input[field] !== current[field]) {
           patch[field] = input[field];
-          audits.push({ action: AuditAction.ESTIMATE_CHANGED, before: { field, value: current[field] }, after: { field, value: input[field] } });
+          audits.push({
+            action: AuditAction.ESTIMATE_CHANGED,
+            before: { field, value: current[field] },
+            after: { field, value: input[field] },
+          });
         }
       }
 
@@ -885,7 +1067,10 @@ export class TasksService {
         );
       }
 
-      if (current.parentTaskId && (patch.currentEstimateMinutes !== undefined || patch.remainingEstimateMinutes !== undefined)) {
+      if (
+        current.parentTaskId &&
+        (patch.currentEstimateMinutes !== undefined || patch.remainingEstimateMinutes !== undefined)
+      ) {
         await this.recalcParentRollup(current.parentTaskId, actor.id, tx);
       }
     });
@@ -897,14 +1082,16 @@ export class TasksService {
       const addedAssignees = input.assigneeIds.filter((id) => !currentAssignees.includes(id));
       for (const assigneeId of addedAssignees) {
         if (assigneeId !== actor.id) {
-          void this.notifications.createNotification(
-            assigneeId,
-            actor.id,
-            'TASK_ASSIGNED',
-            'New Task Assigned',
-            `You have been assigned to task ${detail.ref}: "${detail.title}"`,
-            { taskId, workspaceId: current.workspaceId, taskRef: detail.ref },
-          ).catch((err) => this.logger.error(`Failed to trigger notification: ${err.message}`));
+          void this.notifications
+            .createNotification(
+              assigneeId,
+              actor.id,
+              'TASK_ASSIGNED',
+              'New Task Assigned',
+              `You have been assigned to task ${detail.ref}: "${detail.title}"`,
+              { taskId, workspaceId: current.workspaceId, taskRef: detail.ref },
+            )
+            .catch((err) => this.logger.error(`Failed to trigger notification: ${err.message}`));
         }
       }
     }
@@ -914,14 +1101,16 @@ export class TasksService {
       const taskAssigneesList = detail.assignees;
       for (const assignee of taskAssigneesList) {
         if (assignee.id !== actor.id) {
-          void this.notifications.createNotification(
-            assignee.id,
-            actor.id,
-            'TASK_STATUS_CHANGED',
-            'Task Status Updated',
-            `Task ${detail.ref} status was updated to "${input.status}"`,
-            { taskId, workspaceId: current.workspaceId, taskRef: detail.ref },
-          ).catch((err) => this.logger.error(`Failed to trigger notification: ${err.message}`));
+          void this.notifications
+            .createNotification(
+              assignee.id,
+              actor.id,
+              'TASK_STATUS_CHANGED',
+              'Task Status Updated',
+              `Task ${detail.ref} status was updated to "${input.status}"`,
+              { taskId, workspaceId: current.workspaceId, taskRef: detail.ref },
+            )
+            .catch((err) => this.logger.error(`Failed to trigger notification: ${err.message}`));
         }
       }
     }
@@ -932,7 +1121,11 @@ export class TasksService {
   async listSubmissions(taskId: string, actor: Actor): Promise<TaskSubmission[]> {
     const task = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(task.workspaceId, actor);
-    const rows = await this.db.select().from(taskSubmissions).where(eq(taskSubmissions.taskId, taskId)).orderBy(desc(taskSubmissions.submittedAt));
+    const rows = await this.db
+      .select()
+      .from(taskSubmissions)
+      .where(eq(taskSubmissions.taskId, taskId))
+      .orderBy(desc(taskSubmissions.submittedAt));
     const people = await this.userRefs(rows.flatMap((r) => [r.submitterId, r.reviewerId]));
     return rows.map((r) => ({
       id: r.id,
@@ -948,27 +1141,69 @@ export class TasksService {
     }));
   }
 
-  async submitForReview(taskId: string, actor: Actor, input: SubmitTaskInput): Promise<TaskSubmission> {
+  async submitForReview(
+    taskId: string,
+    actor: Actor,
+    input: SubmitTaskInput,
+  ): Promise<TaskSubmission> {
     const task = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(task.workspaceId, actor);
-    if (task.isArchived || task.status === 'DONE') throw new BadRequestException('This task cannot be submitted');
+    if (task.isArchived || task.status === 'DONE')
+      throw new BadRequestException('This task cannot be submitted');
     if (!task.reviewerId) throw new BadRequestException('Assign a reviewer before submitting');
-    const [assignee] = await this.db.select({ userId: taskAssignees.userId }).from(taskAssignees)
-      .where(and(eq(taskAssignees.taskId, taskId), eq(taskAssignees.userId, actor.id))).limit(1);
+    const [assignee] = await this.db
+      .select({ userId: taskAssignees.userId })
+      .from(taskAssignees)
+      .where(and(eq(taskAssignees.taskId, taskId), eq(taskAssignees.userId, actor.id)))
+      .limit(1);
     if (actor.role !== Role.ADMIN && task.ownerId !== actor.id && !assignee) {
-      throw new ForbiddenException('Only the accountable owner or a tagged contributor can submit this task');
+      throw new ForbiddenException(
+        'Only the accountable owner or a tagged contributor can submit this task',
+      );
     }
-    const [evidence] = await this.db.select({ id: taskAttachments.id }).from(taskAttachments)
-      .where(and(eq(taskAttachments.id, input.evidenceAttachmentId), eq(taskAttachments.taskId, taskId))).limit(1);
+    const [evidence] = await this.db
+      .select({ id: taskAttachments.id })
+      .from(taskAttachments)
+      .where(
+        and(eq(taskAttachments.id, input.evidenceAttachmentId), eq(taskAttachments.taskId, taskId)),
+      )
+      .limit(1);
     if (!evidence) throw new BadRequestException('Select evidence attached to this task');
-    const [pending] = await this.db.select({ id: taskSubmissions.id }).from(taskSubmissions)
-      .where(and(eq(taskSubmissions.taskId, taskId), eq(taskSubmissions.status, 'PENDING'))).limit(1);
+    const [pending] = await this.db
+      .select({ id: taskSubmissions.id })
+      .from(taskSubmissions)
+      .where(and(eq(taskSubmissions.taskId, taskId), eq(taskSubmissions.status, 'PENDING')))
+      .limit(1);
     if (pending) throw new BadRequestException('This task already has a pending review');
 
     const row = await this.db.transaction(async (tx) => {
-      const [created] = await tx.insert(taskSubmissions).values({ taskId, submitterId: actor.id, evidenceAttachmentId: evidence.id, note: input.note }).returning();
-      await tx.update(tasks).set({ status: 'IN_REVIEW', completedAt: null, updatedAt: new Date() }).where(eq(tasks.id, taskId));
-      await this.audit.record({ workspaceId: task.workspaceId, taskId, userId: actor.id, action: AuditAction.SUBMITTED, afterValue: { submissionId: created!.id, evidenceAttachmentId: evidence.id, note: input.note } }, tx);
+      const [created] = await tx
+        .insert(taskSubmissions)
+        .values({
+          taskId,
+          submitterId: actor.id,
+          evidenceAttachmentId: evidence.id,
+          note: input.note,
+        })
+        .returning();
+      await tx
+        .update(tasks)
+        .set({ status: 'IN_REVIEW', completedAt: null, updatedAt: new Date() })
+        .where(eq(tasks.id, taskId));
+      await this.audit.record(
+        {
+          workspaceId: task.workspaceId,
+          taskId,
+          userId: actor.id,
+          action: AuditAction.SUBMITTED,
+          afterValue: {
+            submissionId: created!.id,
+            evidenceAttachmentId: evidence.id,
+            note: input.note,
+          },
+        },
+        tx,
+      );
       return created!;
     });
     return (await this.listSubmissions(taskId, actor)).find((s) => s.id === row.id)!;
@@ -996,7 +1231,17 @@ export class TasksService {
   }
 
   /** Only the current reviewer, an admin, or a workspace manager can hand off review authority. */
-  async delegateReview(taskId: string, actor: Actor, input: DelegateReviewInput): Promise<{ id: string; delegateId: string; effectiveFrom: string; effectiveTo: string; reason: string }> {
+  async delegateReview(
+    taskId: string,
+    actor: Actor,
+    input: DelegateReviewInput,
+  ): Promise<{
+    id: string;
+    delegateId: string;
+    effectiveFrom: string;
+    effectiveTo: string;
+    reason: string;
+  }> {
     const task = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(task.workspaceId, actor);
     if (
@@ -1004,7 +1249,9 @@ export class TasksService {
       task.reviewerId !== actor.id &&
       !(await this.workspaces.isManager(task.workspaceId, actor))
     ) {
-      throw new ForbiddenException('Only the assigned reviewer, an admin, or a workspace manager can delegate review');
+      throw new ForbiddenException(
+        'Only the assigned reviewer, an admin, or a workspace manager can delegate review',
+      );
     }
     if (input.delegateId === task.reviewerId) {
       throw new BadRequestException('The delegate must be different from the assigned reviewer');
@@ -1012,9 +1259,15 @@ export class TasksService {
     const [delegateIsMember] = await this.db
       .select({ userId: workspaceMembers.userId })
       .from(workspaceMembers)
-      .where(and(eq(workspaceMembers.workspaceId, task.workspaceId), eq(workspaceMembers.userId, input.delegateId)))
+      .where(
+        and(
+          eq(workspaceMembers.workspaceId, task.workspaceId),
+          eq(workspaceMembers.userId, input.delegateId),
+        ),
+      )
       .limit(1);
-    if (!delegateIsMember) throw new BadRequestException('The delegate must be a member of this workspace');
+    if (!delegateIsMember)
+      throw new BadRequestException('The delegate must be a member of this workspace');
 
     const row = await this.db.transaction(async (tx) => {
       const [created] = await tx
@@ -1035,7 +1288,12 @@ export class TasksService {
           taskId,
           userId: actor.id,
           action: AuditAction.REVIEW_DELEGATED,
-          afterValue: { delegateId: input.delegateId, effectiveFrom: input.effectiveFrom, effectiveTo: input.effectiveTo, reason: input.reason },
+          afterValue: {
+            delegateId: input.delegateId,
+            effectiveFrom: input.effectiveFrom,
+            effectiveTo: input.effectiveTo,
+            reason: input.reason,
+          },
         },
         tx,
       );
@@ -1053,7 +1311,11 @@ export class TasksService {
   async listDelegations(taskId: string, actor: Actor) {
     const task = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(task.workspaceId, actor);
-    const rows = await this.db.select().from(reviewerDelegations).where(eq(reviewerDelegations.taskId, taskId)).orderBy(desc(reviewerDelegations.createdAt));
+    const rows = await this.db
+      .select()
+      .from(reviewerDelegations)
+      .where(eq(reviewerDelegations.taskId, taskId))
+      .orderBy(desc(reviewerDelegations.createdAt));
     const people = await this.userRefs(rows.flatMap((r) => [r.delegatorId, r.delegateId]));
     return rows.map((r) => ({
       id: r.id,
@@ -1074,7 +1336,13 @@ export class TasksService {
   async reviewQueue(actor: Actor): Promise<ReviewQueueItem[]> {
     const now = new Date();
     const rows = await this.db
-      .select({ sub: taskSubmissions, task: tasks, workspaceName: workspaces.name, prefix: projects.taskPrefix, projectName: projects.name })
+      .select({
+        sub: taskSubmissions,
+        task: tasks,
+        workspaceName: workspaces.name,
+        prefix: projects.taskPrefix,
+        projectName: projects.name,
+      })
       .from(taskSubmissions)
       .innerJoin(tasks, eq(tasks.id, taskSubmissions.taskId))
       .innerJoin(workspaces, eq(workspaces.id, tasks.workspaceId))
@@ -1083,17 +1351,35 @@ export class TasksService {
       .orderBy(asc(taskSubmissions.submittedAt));
     const taskIds = rows.map((r) => r.task.id);
     const delegations = taskIds.length
-      ? await this.db.select().from(reviewerDelegations).where(and(inArray(reviewerDelegations.taskId, taskIds), lte(reviewerDelegations.effectiveFrom, now), gte(reviewerDelegations.effectiveTo, now))).orderBy(desc(reviewerDelegations.createdAt))
+      ? await this.db
+          .select()
+          .from(reviewerDelegations)
+          .where(
+            and(
+              inArray(reviewerDelegations.taskId, taskIds),
+              lte(reviewerDelegations.effectiveFrom, now),
+              gte(reviewerDelegations.effectiveTo, now),
+            ),
+          )
+          .orderBy(desc(reviewerDelegations.createdAt))
       : [];
     const activeDelegation = new Map<string, (typeof delegations)[number]>();
-    for (const d of delegations) if (!activeDelegation.has(d.taskId)) activeDelegation.set(d.taskId, d);
+    for (const d of delegations)
+      if (!activeDelegation.has(d.taskId)) activeDelegation.set(d.taskId, d);
     const managerCache = new Map<string, boolean>();
     const visible: typeof rows = [];
     for (const r of rows) {
       const delegation = activeDelegation.get(r.task.id);
-      let ok = actor.role === Role.ADMIN || r.task.reviewerId === actor.id || delegation?.delegateId === actor.id;
+      let ok =
+        actor.role === Role.ADMIN ||
+        r.task.reviewerId === actor.id ||
+        delegation?.delegateId === actor.id;
       if (!ok) {
-        if (!managerCache.has(r.task.workspaceId)) managerCache.set(r.task.workspaceId, await this.workspaces.isManager(r.task.workspaceId, actor));
+        if (!managerCache.has(r.task.workspaceId))
+          managerCache.set(
+            r.task.workspaceId,
+            await this.workspaces.isManager(r.task.workspaceId, actor),
+          );
         ok = managerCache.get(r.task.workspaceId)!;
       }
       if (ok) visible.push(r);
@@ -1101,12 +1387,35 @@ export class TasksService {
     const visibleTaskIds = visible.map((r) => r.task.id);
     const evidenceIds = visible.map((r) => r.sub.evidenceAttachmentId);
     const [people, cal, evidenceRows, returnedRows] = await Promise.all([
-      this.userRefs(visible.flatMap((r) => [r.sub.submitterId, r.task.reviewerId, activeDelegation.get(r.task.id)?.delegatorId ?? null])),
+      this.userRefs(
+        visible.flatMap((r) => [
+          r.sub.submitterId,
+          r.task.reviewerId,
+          activeDelegation.get(r.task.id)?.delegatorId ?? null,
+        ]),
+      ),
       this.calendar.get(),
-      evidenceIds.length ? this.db.select({ id: taskAttachments.id, fileName: taskAttachments.fileName }).from(taskAttachments).where(inArray(taskAttachments.id, evidenceIds)) : Promise.resolve([]),
+      evidenceIds.length
+        ? this.db
+            .select({ id: taskAttachments.id, fileName: taskAttachments.fileName })
+            .from(taskAttachments)
+            .where(inArray(taskAttachments.id, evidenceIds))
+        : Promise.resolve([]),
       visibleTaskIds.length
-        ? this.db.select({ taskId: taskSubmissions.taskId, reason: taskSubmissions.reviewNote, decidedAt: taskSubmissions.decidedAt }).from(taskSubmissions)
-            .where(and(inArray(taskSubmissions.taskId, visibleTaskIds), eq(taskSubmissions.status, 'RETURNED'))).orderBy(desc(taskSubmissions.decidedAt))
+        ? this.db
+            .select({
+              taskId: taskSubmissions.taskId,
+              reason: taskSubmissions.reviewNote,
+              decidedAt: taskSubmissions.decidedAt,
+            })
+            .from(taskSubmissions)
+            .where(
+              and(
+                inArray(taskSubmissions.taskId, visibleTaskIds),
+                eq(taskSubmissions.status, 'RETURNED'),
+              ),
+            )
+            .orderBy(desc(taskSubmissions.decidedAt))
         : Promise.resolve([]),
     ]);
     const evidenceById = new Map(evidenceRows.map((e) => [e.id, e]));
@@ -1127,11 +1436,24 @@ export class TasksService {
         workspaceId: r.task.workspaceId,
         workspaceName: r.workspaceName,
         submitter: people.get(r.sub.submitterId)!,
-        reviewer: r.task.reviewerId ? people.get(r.task.reviewerId) ?? null : null,
-        delegatedBy: d && d.delegateId === actor.id && r.task.reviewerId !== actor.id ? people.get(d.delegatorId) ?? null : null,
+        reviewer: r.task.reviewerId ? (people.get(r.task.reviewerId) ?? null) : null,
+        delegatedBy:
+          d && d.delegateId === actor.id && r.task.reviewerId !== actor.id
+            ? (people.get(d.delegatorId) ?? null)
+            : null,
         submittedAt: r.sub.submittedAt.toISOString(),
-        waitingWorkingMinutes: cal.settings ? workingMinutesElapsed(r.sub.submittedAt.toISOString(), now.toISOString(), cal.settings, cal.exceptions) : null,
-        waitingWallMinutes: Math.max(0, Math.round((now.getTime() - r.sub.submittedAt.getTime()) / 60000)),
+        waitingWorkingMinutes: cal.settings
+          ? workingMinutesElapsed(
+              r.sub.submittedAt.toISOString(),
+              now.toISOString(),
+              cal.settings,
+              cal.exceptions,
+            )
+          : null,
+        waitingWallMinutes: Math.max(
+          0,
+          Math.round((now.getTime() - r.sub.submittedAt.getTime()) / 60000),
+        ),
         projectName: r.projectName,
         dueDate: r.task.dueDate ? r.task.dueDate.toISOString() : null,
         deliveryNote: r.sub.note,
@@ -1141,7 +1463,12 @@ export class TasksService {
     });
   }
 
-  async reviewSubmission(taskId: string, submissionId: string, actor: Actor, input: ReviewTaskInput): Promise<TaskSubmission> {
+  async reviewSubmission(
+    taskId: string,
+    submissionId: string,
+    actor: Actor,
+    input: ReviewTaskInput,
+  ): Promise<TaskSubmission> {
     const task = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(task.workspaceId, actor);
     const now = new Date();
@@ -1157,20 +1484,50 @@ export class TasksService {
       activeDelegateId !== actor.id &&
       !(await this.workspaces.isManager(task.workspaceId, actor))
     ) {
-      throw new ForbiddenException('Only the assigned reviewer, an active delegate, or a workspace manager can decide this submission');
+      throw new ForbiddenException(
+        'Only the assigned reviewer, an active delegate, or a workspace manager can decide this submission',
+      );
     }
-    const [submission] = await this.db.select().from(taskSubmissions)
-      .where(and(eq(taskSubmissions.id, submissionId), eq(taskSubmissions.taskId, taskId))).limit(1);
+    const [submission] = await this.db
+      .select()
+      .from(taskSubmissions)
+      .where(and(eq(taskSubmissions.id, submissionId), eq(taskSubmissions.taskId, taskId)))
+      .limit(1);
     if (!submission) throw new NotFoundException('Submission not found');
-    if (submission.status !== 'PENDING') throw new BadRequestException('This submission has already been decided');
+    if (submission.status !== 'PENDING')
+      throw new BadRequestException('This submission has already been decided');
     await this.db.transaction(async (tx) => {
-      await tx.update(taskSubmissions).set({ status: input.decision, reviewerId: actor.id, reviewNote: input.note ?? null, decidedAt: now }).where(eq(taskSubmissions.id, submissionId));
-      await tx.update(tasks).set({ status: input.decision === 'ACCEPTED' ? 'DONE' : 'IN_PROGRESS', completedAt: input.decision === 'ACCEPTED' ? now : null, updatedAt: now }).where(eq(tasks.id, taskId));
-      await this.audit.record({ workspaceId: task.workspaceId, taskId, userId: actor.id, action: AuditAction.REVIEWED, beforeValue: { submissionId, status: 'PENDING' }, afterValue: { decision: input.decision, note: input.note ?? null } }, tx);
+      await tx
+        .update(taskSubmissions)
+        .set({
+          status: input.decision,
+          reviewerId: actor.id,
+          reviewNote: input.note ?? null,
+          decidedAt: now,
+        })
+        .where(eq(taskSubmissions.id, submissionId));
+      await tx
+        .update(tasks)
+        .set({
+          status: input.decision === 'ACCEPTED' ? 'DONE' : 'IN_PROGRESS',
+          completedAt: input.decision === 'ACCEPTED' ? now : null,
+          updatedAt: now,
+        })
+        .where(eq(tasks.id, taskId));
+      await this.audit.record(
+        {
+          workspaceId: task.workspaceId,
+          taskId,
+          userId: actor.id,
+          action: AuditAction.REVIEWED,
+          beforeValue: { submissionId, status: 'PENDING' },
+          afterValue: { decision: input.decision, note: input.note ?? null },
+        },
+        tx,
+      );
     });
     return (await this.listSubmissions(taskId, actor)).find((s) => s.id === submissionId)!;
   }
-
 
   async archive(taskId: string, actor: Actor): Promise<{ id: string; isArchived: boolean }> {
     const current = await this.loadTaskOrThrow(taskId);
@@ -1178,9 +1535,17 @@ export class TasksService {
     if (current.isArchived) return { id: taskId, isArchived: true };
 
     await this.db.transaction(async (tx) => {
-      await tx.update(tasks).set({ isArchived: true, updatedAt: new Date() }).where(eq(tasks.id, taskId));
+      await tx
+        .update(tasks)
+        .set({ isArchived: true, updatedAt: new Date() })
+        .where(eq(tasks.id, taskId));
       await this.audit.record(
-        { workspaceId: current.workspaceId, taskId, userId: actor.id, action: AuditAction.ARCHIVED },
+        {
+          workspaceId: current.workspaceId,
+          taskId,
+          userId: actor.id,
+          action: AuditAction.ARCHIVED,
+        },
         tx,
       );
       if (current.parentTaskId) await this.recalcParentRollup(current.parentTaskId, actor.id, tx);
@@ -1194,7 +1559,10 @@ export class TasksService {
     await this.workspaces.assertCanAccess(current.workspaceId, actor);
     if (!current.isArchived) return { id: taskId, isArchived: false };
     await this.db.transaction(async (tx) => {
-      await tx.update(tasks).set({ isArchived: false, updatedAt: new Date() }).where(eq(tasks.id, taskId));
+      await tx
+        .update(tasks)
+        .set({ isArchived: false, updatedAt: new Date() })
+        .where(eq(tasks.id, taskId));
       if (current.parentTaskId) await this.recalcParentRollup(current.parentTaskId, actor.id, tx);
     });
     return { id: taskId, isArchived: false };
@@ -1206,10 +1574,20 @@ export class TasksService {
    * referencing this task survive with `taskId` set to null (ON DELETE SET NULL).
    */
   async remove(taskId: string, actor: Actor): Promise<{ id: string }> {
-    if (actor.role !== Role.ADMIN) {
-      throw new ForbiddenException('Only an admin can permanently delete a task');
+    let current: Awaited<ReturnType<TasksService['loadTaskOrThrow']>>;
+    try {
+      current = await this.loadTaskOrThrow(taskId);
+    } catch (error) {
+      // A weekly card can outlive its linked task briefly while clients refresh.
+      // DELETE is idempotent, so an already-removed task is the desired end state.
+      if (error instanceof NotFoundException) return { id: taskId };
+      throw error;
     }
-    const current = await this.loadTaskOrThrow(taskId);
+    if (actor.role !== Role.ADMIN && current.createdById !== actor.id) {
+      throw new ForbiddenException(
+        'Only an admin or the task creator can permanently delete a task',
+      );
+    }
     await this.workspaces.assertCanAccess(current.workspaceId, actor);
 
     const subtaskRows = await this.db
@@ -1278,7 +1656,12 @@ export class TasksService {
     });
 
     const user = await this.userRef(actor.id);
-    const commentDetail = { id: comment.id, body: comment.body, user, createdAt: comment.createdAt.toISOString() };
+    const commentDetail = {
+      id: comment.id,
+      body: comment.body,
+      user,
+      createdAt: comment.createdAt.toISOString(),
+    };
 
     // Trigger Notification for comment in the background
     void (async () => {
@@ -1322,7 +1705,6 @@ export class TasksService {
     return commentDetail;
   }
 
-
   async listComments(taskId: string, actor: Actor): Promise<TaskComment[]> {
     const current = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(current.workspaceId, actor);
@@ -1365,7 +1747,14 @@ export class TasksService {
       createdAt: row.createdAt.toISOString(),
     };
     if (row.kind === AttachmentKind.LINK) {
-      return { ...base, kind: AttachmentKind.LINK, url: row.url!, mimeType: null, sizeBytes: null, storageKey: null };
+      return {
+        ...base,
+        kind: AttachmentKind.LINK,
+        url: row.url!,
+        mimeType: null,
+        sizeBytes: null,
+        storageKey: null,
+      };
     }
     return {
       ...base,
@@ -1457,7 +1846,11 @@ export class TasksService {
     return this.toAttachment(row, await this.userRef(actor.id));
   }
 
-  async addAttachment(taskId: string, actor: Actor, file: Express.Multer.File): Promise<TaskAttachment> {
+  async addAttachment(
+    taskId: string,
+    actor: Actor,
+    file: Express.Multer.File,
+  ): Promise<TaskAttachment> {
     const current = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(current.workspaceId, actor);
 
@@ -1499,7 +1892,11 @@ export class TasksService {
     }
   }
 
-  async removeAttachment(taskId: string, attachmentId: string, actor: Actor): Promise<{ id: string }> {
+  async removeAttachment(
+    taskId: string,
+    attachmentId: string,
+    actor: Actor,
+  ): Promise<{ id: string }> {
     const current = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(current.workspaceId, actor);
 
@@ -1512,9 +1909,13 @@ export class TasksService {
     if (attachment.uploaderId !== actor.id && actor.role !== Role.ADMIN) {
       throw new ForbiddenException('Only the uploader or an admin can delete an attachment');
     }
-    const [usedAsEvidence] = await this.db.select({ id: taskSubmissions.id }).from(taskSubmissions)
-      .where(eq(taskSubmissions.evidenceAttachmentId, attachmentId)).limit(1);
-    if (usedAsEvidence) throw new BadRequestException('Evidence used in a submission cannot be deleted');
+    const [usedAsEvidence] = await this.db
+      .select({ id: taskSubmissions.id })
+      .from(taskSubmissions)
+      .where(eq(taskSubmissions.evidenceAttachmentId, attachmentId))
+      .limit(1);
+    if (usedAsEvidence)
+      throw new BadRequestException('Evidence used in a submission cannot be deleted');
 
     await this.db.transaction(async (tx) => {
       await tx.delete(taskAttachments).where(eq(taskAttachments.id, attachmentId));
@@ -1584,9 +1985,15 @@ export class TasksService {
     now: Date,
   ): Promise<void> {
     const rows = await db
-      .select({ id: taskTimeEntries.id, startedAt: taskTimeEntries.startedAt, endedAt: taskTimeEntries.endedAt })
+      .select({
+        id: taskTimeEntries.id,
+        startedAt: taskTimeEntries.startedAt,
+        endedAt: taskTimeEntries.endedAt,
+      })
       .from(taskTimeEntries)
-      .where(and(eq(taskTimeEntries.userId, userId), sql`${taskTimeEntries.startedAt} IS NOT NULL`));
+      .where(
+        and(eq(taskTimeEntries.userId, userId), sql`${taskTimeEntries.startedAt} IS NOT NULL`),
+      );
     for (const r of rows) {
       const rStart = r.startedAt!;
       const rEnd = r.endedAt ?? now;
@@ -1602,7 +2009,13 @@ export class TasksService {
   async logTimeEntry(
     taskId: string,
     actor: Actor,
-    input: { workDate: string; durationMinutes: number; startedAt?: string; category?: string; note?: string },
+    input: {
+      workDate: string;
+      durationMinutes: number;
+      startedAt?: string;
+      category?: string;
+      note?: string;
+    },
   ) {
     const task = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(task.workspaceId, actor);
@@ -1614,23 +2027,55 @@ export class TasksService {
     if (input.startedAt) {
       const start = new Date(input.startedAt);
       const end = new Date(start.getTime() + input.durationMinutes * 60000);
-      if (end.getTime() > now.getTime() + 60000) throw new BadRequestException('Time cannot be logged for a period that has not happened yet');
+      if (end.getTime() > now.getTime() + 60000)
+        throw new BadRequestException(
+          'Time cannot be logged for a period that has not happened yet',
+        );
       const segments = splitAcrossLocalDays(start, end, await this.officeTimezone());
       const parts = apportionMinutes(input.durationMinutes, segments);
-      rows = segments.map((seg, i) => ({ workDate: seg.workDate, durationMinutes: parts[i]!, startedAt: seg.startedAt, endedAt: seg.endedAt }));
+      rows = segments.map((seg, i) => ({
+        workDate: seg.workDate,
+        durationMinutes: parts[i]!,
+        startedAt: seg.startedAt,
+        endedAt: seg.endedAt,
+      }));
     } else {
-      rows = [{ workDate: input.workDate, durationMinutes: input.durationMinutes, startedAt: now, endedAt: now }];
+      rows = [
+        {
+          workDate: input.workDate,
+          durationMinutes: input.durationMinutes,
+          startedAt: now,
+          endedAt: now,
+        },
+      ];
     }
 
     return await this.db.transaction(async (tx) => {
       if (input.startedAt) {
         // Serialise per user so two concurrent logs cannot both pass the check.
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${actor.id}))`);
-        await this.assertNoTimeOverlap(tx, actor.id, rows[0]!.startedAt, rows[rows.length - 1]!.endedAt, now);
+        await this.assertNoTimeOverlap(
+          tx,
+          actor.id,
+          rows[0]!.startedAt,
+          rows[rows.length - 1]!.endedAt,
+          now,
+        );
       }
       const entries = await tx
         .insert(taskTimeEntries)
-        .values(rows.map((r) => ({ taskId, userId: actor.id, workDate: r.workDate, durationMinutes: r.durationMinutes, category, note: input.note ?? null, startedAt: r.startedAt, endedAt: r.endedAt })))
+        .values(
+          rows.map((r) => ({
+            taskId,
+            userId: actor.id,
+            workDate: r.workDate,
+            durationMinutes: r.durationMinutes,
+            category,
+            note: input.note ?? null,
+            startedAt: r.startedAt,
+            endedAt: r.endedAt,
+          })),
+        )
         .returning();
 
       // Remaining effort is the owner's explicit forecast. Logged time is actual
@@ -1642,7 +2087,12 @@ export class TasksService {
           taskId,
           userId: actor.id,
           action: AuditAction.TIME_ENTRY_CREATED,
-          afterValue: { entryId: entries[0]!.id, entryIds: entries.map((e) => e.id), durationMinutes: input.durationMinutes, category },
+          afterValue: {
+            entryId: entries[0]!.id,
+            entryIds: entries.map((e) => e.id),
+            durationMinutes: input.durationMinutes,
+            category,
+          },
         },
         tx,
       );
@@ -1663,7 +2113,9 @@ export class TasksService {
       .where(and(eq(taskTimeEntries.userId, actor.id), isNull(taskTimeEntries.endedAt)))
       .limit(1);
     if (running) {
-      throw new BadRequestException('You already have an active timer running. Stop it before starting a new one.');
+      throw new BadRequestException(
+        'You already have an active timer running. Stop it before starting a new one.',
+      );
     }
 
     const now = new Date();
@@ -1690,13 +2142,23 @@ export class TasksService {
   /** The caller's open timer, if any (used by attendance check-out). */
   async findRunningTimer(userId: string) {
     const [row] = await this.db
-      .select({ taskId: taskTimeEntries.taskId, taskTitle: tasks.title, startedAt: taskTimeEntries.startedAt, isPaused: taskTimeEntries.isPaused })
+      .select({
+        taskId: taskTimeEntries.taskId,
+        taskTitle: tasks.title,
+        startedAt: taskTimeEntries.startedAt,
+        isPaused: taskTimeEntries.isPaused,
+      })
       .from(taskTimeEntries)
       .innerJoin(tasks, eq(tasks.id, taskTimeEntries.taskId))
       .where(and(eq(taskTimeEntries.userId, userId), isNull(taskTimeEntries.endedAt)))
       .limit(1);
     if (!row || !row.startedAt) return null;
-    return { taskId: row.taskId, taskTitle: row.taskTitle, startedAt: row.startedAt.toISOString(), isPaused: row.isPaused };
+    return {
+      taskId: row.taskId,
+      taskTitle: row.taskTitle,
+      startedAt: row.startedAt.toISOString(),
+      isPaused: row.isPaused,
+    };
   }
 
   private async loadRunningTimer(taskId: string, actor: Actor) {
@@ -1705,7 +2167,13 @@ export class TasksService {
     const [running] = await this.db
       .select()
       .from(taskTimeEntries)
-      .where(and(eq(taskTimeEntries.taskId, taskId), eq(taskTimeEntries.userId, actor.id), isNull(taskTimeEntries.endedAt)))
+      .where(
+        and(
+          eq(taskTimeEntries.taskId, taskId),
+          eq(taskTimeEntries.userId, actor.id),
+          isNull(taskTimeEntries.endedAt),
+        ),
+      )
       .limit(1);
     if (!running || !running.startedAt) {
       throw new NotFoundException('No active timer running for this task');
@@ -1727,11 +2195,17 @@ export class TasksService {
 
   async resumeTimer(taskId: string, actor: Actor) {
     const { running } = await this.loadRunningTimer(taskId, actor);
-    if (!running.isPaused || !running.pausedAt) throw new BadRequestException('This timer is not paused');
+    if (!running.isPaused || !running.pausedAt)
+      throw new BadRequestException('This timer is not paused');
     const now = new Date();
     const [updated] = await this.db
       .update(taskTimeEntries)
-      .set({ isPaused: false, pausedAt: null, pausedMs: running.pausedMs + Math.max(0, now.getTime() - running.pausedAt.getTime()), updatedAt: now })
+      .set({
+        isPaused: false,
+        pausedAt: null,
+        pausedMs: running.pausedMs + Math.max(0, now.getTime() - running.pausedAt.getTime()),
+        updatedAt: now,
+      })
       .where(eq(taskTimeEntries.id, running.id))
       .returning();
     return updated;
@@ -1743,8 +2217,14 @@ export class TasksService {
 
     const now = new Date();
     // Time spent paused (including a pause still open at stop) is not effort.
-    const openPauseMs = running.isPaused && running.pausedAt ? Math.max(0, now.getTime() - running.pausedAt.getTime()) : 0;
-    const activeMs = Math.max(0, now.getTime() - startedAt.getTime() - running.pausedMs - openPauseMs);
+    const openPauseMs =
+      running.isPaused && running.pausedAt
+        ? Math.max(0, now.getTime() - running.pausedAt.getTime())
+        : 0;
+    const activeMs = Math.max(
+      0,
+      now.getTime() - startedAt.getTime() - running.pausedMs - openPauseMs,
+    );
     const elapsedMinutes = Math.max(1, Math.round(activeMs / 60000));
     const segments = splitAcrossLocalDays(startedAt, now, await this.officeTimezone());
     const parts = apportionMinutes(elapsedMinutes, segments);
@@ -1790,7 +2270,11 @@ export class TasksService {
           taskId,
           userId: actor.id,
           action: AuditAction.TIME_ENTRY_CREATED,
-          afterValue: { entryId: running.id, durationMinutes: elapsedMinutes, days: segments.length },
+          afterValue: {
+            entryId: running.id,
+            durationMinutes: elapsedMinutes,
+            days: segments.length,
+          },
         },
         tx,
       );
@@ -1844,16 +2328,42 @@ export class TasksService {
     const task = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(task.workspaceId, actor);
     const canManage = await this.workspaces.isManager(task.workspaceId, actor);
-    if (!canManage) throw new ForbiddenException('Only an admin or workspace manager can approve estimate revisions');
+    if (!canManage)
+      throw new ForbiddenException(
+        'Only an admin or workspace manager can approve estimate revisions',
+      );
     const previous = task.currentEstimateMinutes ?? task.baselineEstimateMinutes ?? 0;
     return this.db.transaction(async (tx) => {
-      const [revision] = await tx.insert(taskEstimateRevisions).values({
-        taskId, previousEstimateMinutes: previous, revisedEstimateMinutes: input.revisedEstimateMinutes,
-        reason: input.reason, classification: input.classification, actorId: actor.id,
-      }).returning();
-      await tx.update(tasks).set({ currentEstimateMinutes: input.revisedEstimateMinutes, updatedAt: new Date() }).where(eq(tasks.id, taskId));
-      await this.audit.record({ workspaceId: task.workspaceId, taskId, userId: actor.id, action: AuditAction.ESTIMATE_CHANGED,
-        beforeValue: { currentEstimateMinutes: previous }, afterValue: { currentEstimateMinutes: input.revisedEstimateMinutes, reason: input.reason, classification: input.classification } }, tx);
+      const [revision] = await tx
+        .insert(taskEstimateRevisions)
+        .values({
+          taskId,
+          previousEstimateMinutes: previous,
+          revisedEstimateMinutes: input.revisedEstimateMinutes,
+          reason: input.reason,
+          classification: input.classification,
+          actorId: actor.id,
+        })
+        .returning();
+      await tx
+        .update(tasks)
+        .set({ currentEstimateMinutes: input.revisedEstimateMinutes, updatedAt: new Date() })
+        .where(eq(tasks.id, taskId));
+      await this.audit.record(
+        {
+          workspaceId: task.workspaceId,
+          taskId,
+          userId: actor.id,
+          action: AuditAction.ESTIMATE_CHANGED,
+          beforeValue: { currentEstimateMinutes: previous },
+          afterValue: {
+            currentEstimateMinutes: input.revisedEstimateMinutes,
+            reason: input.reason,
+            classification: input.classification,
+          },
+        },
+        tx,
+      );
       if (task.parentTaskId) await this.recalcParentRollup(task.parentTaskId, actor.id, tx);
       return revision;
     });
@@ -1862,48 +2372,127 @@ export class TasksService {
   async reopen(taskId: string, actor: Actor, input: ReopenTaskInput) {
     const task = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(task.workspaceId, actor);
-    const canManage = task.reviewerId === actor.id || await this.workspaces.isManager(task.workspaceId, actor);
-    if (!canManage) throw new ForbiddenException('Only the reviewer or a workspace manager can reopen this task');
-    if (task.status !== 'DONE') throw new BadRequestException('Only an accepted task can be reopened');
+    const canManage =
+      task.reviewerId === actor.id || (await this.workspaces.isManager(task.workspaceId, actor));
+    if (!canManage)
+      throw new ForbiddenException('Only the reviewer or a workspace manager can reopen this task');
+    if (task.status !== 'DONE')
+      throw new BadRequestException('Only an accepted task can be reopened');
     return this.db.transaction(async (tx) => {
-      const [event] = await tx.insert(taskReopenings).values({ taskId, reason: input.reason, actorId: actor.id }).returning();
-      await tx.update(tasks).set({ status: 'IN_PROGRESS', completedAt: null, updatedAt: new Date() }).where(eq(tasks.id, taskId));
-      await this.audit.record({ workspaceId: task.workspaceId, taskId, userId: actor.id, action: AuditAction.STATUS_CHANGED,
-        beforeValue: { status: 'DONE' }, afterValue: { status: 'IN_PROGRESS', reopeningId: event!.id, reason: input.reason } }, tx);
+      const [event] = await tx
+        .insert(taskReopenings)
+        .values({ taskId, reason: input.reason, actorId: actor.id })
+        .returning();
+      await tx
+        .update(tasks)
+        .set({ status: 'IN_PROGRESS', completedAt: null, updatedAt: new Date() })
+        .where(eq(tasks.id, taskId));
+      await this.audit.record(
+        {
+          workspaceId: task.workspaceId,
+          taskId,
+          userId: actor.id,
+          action: AuditAction.STATUS_CHANGED,
+          beforeValue: { status: 'DONE' },
+          afterValue: { status: 'IN_PROGRESS', reopeningId: event!.id, reason: input.reason },
+        },
+        tx,
+      );
       return event;
     });
   }
 
-  async allocateTimeEntry(taskId: string, entryId: string, actor: Actor, input: AllocateTimeEntryInput) {
+  async allocateTimeEntry(
+    taskId: string,
+    entryId: string,
+    actor: Actor,
+    input: AllocateTimeEntryInput,
+  ) {
     const [source, target, entry] = await Promise.all([
-      this.loadTaskOrThrow(taskId), this.loadTaskOrThrow(input.targetTaskId),
-      this.db.select().from(taskTimeEntries).where(and(eq(taskTimeEntries.id, entryId), eq(taskTimeEntries.taskId, taskId))).limit(1).then((r) => r[0]),
+      this.loadTaskOrThrow(taskId),
+      this.loadTaskOrThrow(input.targetTaskId),
+      this.db
+        .select()
+        .from(taskTimeEntries)
+        .where(and(eq(taskTimeEntries.id, entryId), eq(taskTimeEntries.taskId, taskId)))
+        .limit(1)
+        .then((r) => r[0]),
     ]);
     await this.workspaces.assertCanAccess(source.workspaceId, actor);
     const canManage = await this.workspaces.isManager(source.workspaceId, actor);
-    if (!canManage) throw new ForbiddenException('Only an admin or workspace manager can allocate historical time');
+    if (!canManage)
+      throw new ForbiddenException(
+        'Only an admin or workspace manager can allocate historical time',
+      );
     if (!entry) throw new NotFoundException('Time entry not found');
-    if (target.parentTaskId !== source.id || target.workspaceId !== source.workspaceId) throw new BadRequestException('Target must be a direct child of the source task');
-    if (entry.endedAt === null) throw new BadRequestException('Stop the timer before allocating it');
-    if (input.durationMinutes > entry.durationMinutes) throw new BadRequestException('Allocated minutes exceed the source entry');
+    if (target.parentTaskId !== source.id || target.workspaceId !== source.workspaceId)
+      throw new BadRequestException('Target must be a direct child of the source task');
+    if (entry.endedAt === null)
+      throw new BadRequestException('Stop the timer before allocating it');
+    if (input.durationMinutes > entry.durationMinutes)
+      throw new BadRequestException('Allocated minutes exceed the source entry');
     return this.db.transaction(async (tx) => {
       let moved;
       if (input.durationMinutes === entry.durationMinutes) {
-        [moved] = await tx.update(taskTimeEntries).set({ taskId: target.id, updatedAt: new Date() }).where(eq(taskTimeEntries.id, entry.id)).returning();
+        [moved] = await tx
+          .update(taskTimeEntries)
+          .set({ taskId: target.id, updatedAt: new Date() })
+          .where(eq(taskTimeEntries.id, entry.id))
+          .returning();
       } else {
-        await tx.update(taskTimeEntries).set({ durationMinutes: entry.durationMinutes - input.durationMinutes, updatedAt: new Date() }).where(eq(taskTimeEntries.id, entry.id));
-        [moved] = await tx.insert(taskTimeEntries).values({ taskId: target.id, userId: entry.userId, workDate: entry.workDate,
-          durationMinutes: input.durationMinutes, category: entry.category, note: entry.note, startedAt: entry.startedAt, endedAt: entry.endedAt }).returning();
+        await tx
+          .update(taskTimeEntries)
+          .set({
+            durationMinutes: entry.durationMinutes - input.durationMinutes,
+            updatedAt: new Date(),
+          })
+          .where(eq(taskTimeEntries.id, entry.id));
+        [moved] = await tx
+          .insert(taskTimeEntries)
+          .values({
+            taskId: target.id,
+            userId: entry.userId,
+            workDate: entry.workDate,
+            durationMinutes: input.durationMinutes,
+            category: entry.category,
+            note: entry.note,
+            startedAt: entry.startedAt,
+            endedAt: entry.endedAt,
+          })
+          .returning();
       }
-      await this.audit.record({ workspaceId: source.workspaceId, taskId: source.id, userId: actor.id, action: AuditAction.TIME_ENTRY_UPDATED,
-        beforeValue: { entryId, taskId, durationMinutes: entry.durationMinutes }, afterValue: { targetTaskId: target.id, movedEntryId: moved!.id, allocatedMinutes: input.durationMinutes, reason: input.reason } }, tx);
-      return { sourceEntryId: entry.id, movedEntryId: moved!.id, allocatedMinutes: input.durationMinutes, totalMinutesPreserved: true };
+      await this.audit.record(
+        {
+          workspaceId: source.workspaceId,
+          taskId: source.id,
+          userId: actor.id,
+          action: AuditAction.TIME_ENTRY_UPDATED,
+          beforeValue: { entryId, taskId, durationMinutes: entry.durationMinutes },
+          afterValue: {
+            targetTaskId: target.id,
+            movedEntryId: moved!.id,
+            allocatedMinutes: input.durationMinutes,
+            reason: input.reason,
+          },
+        },
+        tx,
+      );
+      return {
+        sourceEntryId: entry.id,
+        movedEntryId: moved!.id,
+        allocatedMinutes: input.durationMinutes,
+        totalMinutesPreserved: true,
+      };
     });
   }
 
   // ── Task Blockers & Dependencies (P01) ────────────────────────────────────
 
-  async addBlocker(taskId: string, actor: Actor, input: { reason: string; unblockerUserId: string; nextFollowUpAt?: string }) {
+  async addBlocker(
+    taskId: string,
+    actor: Actor,
+    input: { reason: string; unblockerUserId: string; nextFollowUpAt?: string },
+  ) {
     const task = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(task.workspaceId, actor);
 
@@ -1924,7 +2513,11 @@ export class TasksService {
           taskId,
           userId: actor.id,
           action: AuditAction.TASK_BLOCKED,
-          afterValue: { blockerId: blocker.id, reason: input.reason, unblockerUserId: input.unblockerUserId },
+          afterValue: {
+            blockerId: blocker.id,
+            reason: input.reason,
+            unblockerUserId: input.unblockerUserId,
+          },
         },
         tx,
       );
@@ -1939,22 +2532,33 @@ export class TasksService {
    * organisation policy decides whether that is allowed (spec section 5 "documented simplified review policy").
    */
   private async assertSimplifiedDoneAllowed(estimateMinutes: number | null): Promise<void> {
-    const [policy] = await this.db.select().from(organisationPolicies).where(eq(organisationPolicies.id, 1));
+    const [policy] = await this.db
+      .select()
+      .from(organisationPolicies)
+      .where(eq(organisationPolicies.id, 1));
     const mode = policy?.noReviewerDonePolicy ?? 'ALLOW';
     if (mode === 'ALLOW') return;
     if (mode === 'REQUIRE_REVIEWER') {
-      throw new BadRequestException('Assign a reviewer and submit evidence for review; tasks cannot be marked Done without one');
+      throw new BadRequestException(
+        'Assign a reviewer and submit evidence for review; tasks cannot be marked Done without one',
+      );
     }
     const max = policy?.simplifiedReviewMaxMinutes ?? 120;
     if (estimateMinutes === null || estimateMinutes > max) {
-      throw new BadRequestException(`Only tasks estimated at ${max} minutes or less can be marked Done without a reviewer; assign a reviewer and submit evidence`);
+      throw new BadRequestException(
+        `Only tasks estimated at ${max} minutes or less can be marked Done without a reviewer; assign a reviewer and submit evidence`,
+      );
     }
   }
 
   async listBlockers(taskId: string, actor: Actor) {
     const task = await this.loadTaskOrThrow(taskId);
     await this.workspaces.assertCanAccess(task.workspaceId, actor);
-    const rows = await this.db.select().from(taskBlockers).where(eq(taskBlockers.taskId, taskId)).orderBy(desc(taskBlockers.blockedAt));
+    const rows = await this.db
+      .select()
+      .from(taskBlockers)
+      .where(eq(taskBlockers.taskId, taskId))
+      .orderBy(desc(taskBlockers.blockedAt));
     const people = await this.userRefs(rows.map((r) => r.unblockerUserId));
     const open = rows.filter((r) => !r.unblockedAt);
     const closed = rows.filter((r) => r.unblockedAt);
@@ -1969,7 +2573,11 @@ export class TasksService {
   }
 
   async unblock(blockerId: string, actor: Actor) {
-    const [blocker] = await this.db.select().from(taskBlockers).where(eq(taskBlockers.id, blockerId)).limit(1);
+    const [blocker] = await this.db
+      .select()
+      .from(taskBlockers)
+      .where(eq(taskBlockers.id, blockerId))
+      .limit(1);
     if (!blocker) throw new NotFoundException('Blocker record not found');
     const task = await this.loadTaskOrThrow(blocker.taskId);
     await this.workspaces.assertCanAccess(task.workspaceId, actor);
@@ -1992,7 +2600,10 @@ export class TasksService {
     return updated;
   }
 
-  async addDependency(actor: Actor, input: { predecessorTaskId: string; successorTaskId: string; isBlocking?: boolean }) {
+  async addDependency(
+    actor: Actor,
+    input: { predecessorTaskId: string; successorTaskId: string; isBlocking?: boolean },
+  ) {
     const pred = await this.loadTaskOrThrow(input.predecessorTaskId);
     const succ = await this.loadTaskOrThrow(input.successorTaskId);
     await this.workspaces.assertCanAccess(pred.workspaceId, actor);
@@ -2014,7 +2625,10 @@ export class TasksService {
       taskId: succ.id,
       userId: actor.id,
       action: AuditAction.DEPENDENCY_ADDED,
-      afterValue: { predecessorTaskId: input.predecessorTaskId, successorTaskId: input.successorTaskId },
+      afterValue: {
+        predecessorTaskId: input.predecessorTaskId,
+        successorTaskId: input.successorTaskId,
+      },
     });
 
     return dep;
@@ -2027,11 +2641,24 @@ export class TasksService {
     const rows = await this.db
       .select()
       .from(taskDependencies)
-      .where(or(eq(taskDependencies.predecessorTaskId, taskId), eq(taskDependencies.successorTaskId, taskId)));
-    const otherIds = rows.map((r) => (r.predecessorTaskId === taskId ? r.successorTaskId : r.predecessorTaskId));
+      .where(
+        or(
+          eq(taskDependencies.predecessorTaskId, taskId),
+          eq(taskDependencies.successorTaskId, taskId),
+        ),
+      );
+    const otherIds = rows.map((r) =>
+      r.predecessorTaskId === taskId ? r.successorTaskId : r.predecessorTaskId,
+    );
     const others = otherIds.length
       ? await this.db
-          .select({ id: tasks.id, number: tasks.number, title: tasks.title, status: tasks.status, prefix: projects.taskPrefix })
+          .select({
+            id: tasks.id,
+            number: tasks.number,
+            title: tasks.title,
+            status: tasks.status,
+            prefix: projects.taskPrefix,
+          })
           .from(tasks)
           .innerJoin(projects, eq(projects.id, tasks.projectId))
           .where(inArray(tasks.id, otherIds))
@@ -2041,12 +2668,28 @@ export class TasksService {
       const waitsOn = r.successorTaskId === taskId;
       const other = byId.get(waitsOn ? r.predecessorTaskId : r.successorTaskId);
       if (!other) return [];
-      return [{ id: r.id, direction: waitsOn ? ('WAITS_ON' as const) : ('BLOCKS' as const), isBlocking: r.isBlocking, task: { id: other.id, ref: this.ref(other.prefix, other.number), title: other.title, status: other.status } }];
+      return [
+        {
+          id: r.id,
+          direction: waitsOn ? ('WAITS_ON' as const) : ('BLOCKS' as const),
+          isBlocking: r.isBlocking,
+          task: {
+            id: other.id,
+            ref: this.ref(other.prefix, other.number),
+            title: other.title,
+            status: other.status,
+          },
+        },
+      ];
     });
   }
 
   async removeDependency(dependencyId: string, actor: Actor) {
-    const [dep] = await this.db.select().from(taskDependencies).where(eq(taskDependencies.id, dependencyId)).limit(1);
+    const [dep] = await this.db
+      .select()
+      .from(taskDependencies)
+      .where(eq(taskDependencies.id, dependencyId))
+      .limit(1);
     if (!dep) throw new NotFoundException('Dependency record not found');
     const succ = await this.loadTaskOrThrow(dep.successorTaskId);
     await this.workspaces.assertCanAccess(succ.workspaceId, actor);
@@ -2058,7 +2701,10 @@ export class TasksService {
       taskId: succ.id,
       userId: actor.id,
       action: AuditAction.DEPENDENCY_REMOVED,
-      beforeValue: { predecessorTaskId: dep.predecessorTaskId, successorTaskId: dep.successorTaskId },
+      beforeValue: {
+        predecessorTaskId: dep.predecessorTaskId,
+        successorTaskId: dep.successorTaskId,
+      },
     });
 
     return { id: dependencyId };
@@ -2072,17 +2718,27 @@ export class TasksService {
    * and split a task's effort among its contributors rather than double
    * counting the full estimate per tagged person).
    */
-  async allocateCapacity(workspaceId: string, actor: Actor, input: CapacityAllocationInput): Promise<typeof capacityAllocations.$inferSelect> {
+  async allocateCapacity(
+    workspaceId: string,
+    actor: Actor,
+    input: CapacityAllocationInput,
+  ): Promise<typeof capacityAllocations.$inferSelect> {
     await this.workspaces.assertCanAccess(workspaceId, actor);
     const [isMember] = await this.db
       .select({ userId: workspaceMembers.userId })
       .from(workspaceMembers)
-      .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, input.userId)))
+      .where(
+        and(
+          eq(workspaceMembers.workspaceId, workspaceId),
+          eq(workspaceMembers.userId, input.userId),
+        ),
+      )
       .limit(1);
     if (!isMember) throw new BadRequestException('The person must be a member of this workspace');
     if (input.taskId) {
       const task = await this.loadTaskOrThrow(input.taskId);
-      if (task.workspaceId !== workspaceId) throw new BadRequestException('Task must belong to this workspace');
+      if (task.workspaceId !== workspaceId)
+        throw new BadRequestException('Task must belong to this workspace');
     }
     const [row] = await this.db
       .insert(capacityAllocations)
@@ -2096,16 +2752,42 @@ export class TasksService {
       })
       .returning();
     if (!row) throw new Error('Failed to record allocation');
-    await this.audit.record({ workspaceId, taskId: input.taskId ?? null, userId: actor.id, action: AuditAction.CAPACITY_ALLOCATED, afterValue: { userId: input.userId, periodStart: input.periodStart, periodEnd: input.periodEnd, allocatedMinutes: input.allocatedMinutes } });
+    await this.audit.record({
+      workspaceId,
+      taskId: input.taskId ?? null,
+      userId: actor.id,
+      action: AuditAction.CAPACITY_ALLOCATED,
+      afterValue: {
+        userId: input.userId,
+        periodStart: input.periodStart,
+        periodEnd: input.periodEnd,
+        allocatedMinutes: input.allocatedMinutes,
+      },
+    });
     return row;
   }
 
   async removeCapacityAllocation(id: string, actor: Actor): Promise<{ id: string }> {
-    const [row] = await this.db.select().from(capacityAllocations).where(eq(capacityAllocations.id, id)).limit(1);
+    const [row] = await this.db
+      .select()
+      .from(capacityAllocations)
+      .where(eq(capacityAllocations.id, id))
+      .limit(1);
     if (!row) throw new NotFoundException('Allocation not found');
     await this.workspaces.assertCanAccess(row.workspaceId, actor);
     await this.db.delete(capacityAllocations).where(eq(capacityAllocations.id, id));
-    await this.audit.record({ workspaceId: row.workspaceId, taskId: row.taskId, userId: actor.id, action: AuditAction.CAPACITY_ALLOCATION_REMOVED, beforeValue: { userId: row.userId, periodStart: row.periodStart, periodEnd: row.periodEnd, allocatedMinutes: row.allocatedMinutes } });
+    await this.audit.record({
+      workspaceId: row.workspaceId,
+      taskId: row.taskId,
+      userId: actor.id,
+      action: AuditAction.CAPACITY_ALLOCATION_REMOVED,
+      beforeValue: {
+        userId: row.userId,
+        periodStart: row.periodStart,
+        periodEnd: row.periodEnd,
+        allocatedMinutes: row.allocatedMinutes,
+      },
+    });
     return { id };
   }
 
@@ -2121,7 +2803,13 @@ export class TasksService {
       this.db
         .select()
         .from(capacityAllocations)
-        .where(and(eq(capacityAllocations.workspaceId, workspaceId), lte(capacityAllocations.periodStart, periodEnd), gte(capacityAllocations.periodEnd, periodStart))),
+        .where(
+          and(
+            eq(capacityAllocations.workspaceId, workspaceId),
+            lte(capacityAllocations.periodStart, periodEnd),
+            gte(capacityAllocations.periodEnd, periodStart),
+          ),
+        ),
       this.calendar.get(),
     ]);
 
@@ -2132,11 +2820,26 @@ export class TasksService {
 
     // Scheduled working minutes for the office over the period, before any personal time is taken out.
     const scheduledMinutes = settings
-      ? workingMinutesElapsed(periodFrom.toISOString(), periodTo.toISOString(), settings, calendar.exceptions)
+      ? workingMinutesElapsed(
+          periodFrom.toISOString(),
+          periodTo.toISOString(),
+          settings,
+          calendar.exceptions,
+        )
       : 0;
     const workingIn = (intervals: Array<{ start: number; end: number }>) =>
       settings
-        ? mergeIntervals(intervals).reduce((sum, i) => sum + workingMinutesElapsed(new Date(i.start).toISOString(), new Date(i.end).toISOString(), settings, calendar.exceptions), 0)
+        ? mergeIntervals(intervals).reduce(
+            (sum, i) =>
+              sum +
+              workingMinutesElapsed(
+                new Date(i.start).toISOString(),
+                new Date(i.end).toISOString(),
+                settings,
+                calendar.exceptions,
+              ),
+            0,
+          )
         : 0;
 
     const memberIds = members.map((m) => m.id);
@@ -2145,32 +2848,60 @@ export class TasksService {
           this.db
             .select()
             .from(reservedTimeBlocks)
-            .where(and(inArray(reservedTimeBlocks.userId, memberIds), lt(reservedTimeBlocks.startsAt, periodTo), gt(reservedTimeBlocks.endsAt, periodFrom))),
+            .where(
+              and(
+                inArray(reservedTimeBlocks.userId, memberIds),
+                lt(reservedTimeBlocks.startsAt, periodTo),
+                gt(reservedTimeBlocks.endsAt, periodFrom),
+              ),
+            ),
           this.db
             .select()
             .from(leaveRequests)
-            .where(and(inArray(leaveRequests.userId, memberIds), eq(leaveRequests.status, 'APPROVED'), lte(leaveRequests.startDate, periodEnd), gte(leaveRequests.endDate, periodStart))),
+            .where(
+              and(
+                inArray(leaveRequests.userId, memberIds),
+                eq(leaveRequests.status, 'APPROVED'),
+                lte(leaveRequests.startDate, periodEnd),
+                gte(leaveRequests.endDate, periodStart),
+              ),
+            ),
         ])
       : [[], []];
 
     const byUser = new Map<string, number>();
-    for (const a of allocations) byUser.set(a.userId, (byUser.get(a.userId) ?? 0) + a.allocatedMinutes);
+    for (const a of allocations)
+      byUser.set(a.userId, (byUser.get(a.userId) ?? 0) + a.allocatedMinutes);
 
-    const clip = (start: number, end: number) => ({ start: Math.max(start, periodFrom.getTime()), end: Math.min(end, periodTo.getTime()) });
-    const halfDayEnd = settings ? (settings.startMinute + (settings.endMinute - settings.startMinute) / 2) * 60000 : 0;
+    const clip = (start: number, end: number) => ({
+      start: Math.max(start, periodFrom.getTime()),
+      end: Math.min(end, periodTo.getTime()),
+    });
+    const halfDayEnd = settings
+      ? (settings.startMinute + (settings.endMinute - settings.startMinute) / 2) * 60000
+      : 0;
 
     return members.map((m) => {
-      const reserved = reservations.filter((r) => r.userId === m.id).map((r) => clip(r.startsAt.getTime(), r.endsAt.getTime()));
+      const reserved = reservations
+        .filter((r) => r.userId === m.id)
+        .map((r) => clip(r.startsAt.getTime(), r.endsAt.getTime()));
       const leave = leaves
         .filter((l) => l.userId === m.id)
         .map((l) => {
           const from = localMidnight(l.startDate, tz).getTime();
-          return clip(from, l.halfDay ? from + halfDayEnd : localMidnight(this.nextDay(l.endDate), tz).getTime());
+          return clip(
+            from,
+            l.halfDay ? from + halfDayEnd : localMidnight(this.nextDay(l.endDate), tz).getTime(),
+          );
         });
       const excludedWorking = workingIn([...reserved, ...leave]);
       return {
         user: { id: m.id, name: m.name, email: m.email, avatarKey: m.avatarKey },
-        ...calculateCapacity(scheduledMinutes, excludedWorking > 0 ? [{ start: 0, end: excludedWorking }] : [], byUser.get(m.id) ?? 0),
+        ...calculateCapacity(
+          scheduledMinutes,
+          excludedWorking > 0 ? [{ start: 0, end: excludedWorking }] : [],
+          byUser.get(m.id) ?? 0,
+        ),
         reservedMinutes: workingIn(reserved),
         leaveMinutes: workingIn(leave),
       };
@@ -2194,12 +2925,21 @@ export class TasksService {
       .select({ task: tasks, prefix: projects.taskPrefix })
       .from(tasks)
       .innerJoin(projects, eq(projects.id, tasks.projectId))
-      .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.isArchived, false), sql`${tasks.status} <> 'DONE'`));
+      .where(
+        and(
+          eq(tasks.workspaceId, workspaceId),
+          eq(tasks.isArchived, false),
+          sql`${tasks.status} <> 'DONE'`,
+        ),
+      );
     if (!rows.length) return [];
     const ids = rows.map((r) => r.task.id);
     const [allocs, assignees] = await Promise.all([
       this.db
-        .select({ taskId: capacityAllocations.taskId, minutes: sql<number>`coalesce(sum(${capacityAllocations.allocatedMinutes}), 0)::int` })
+        .select({
+          taskId: capacityAllocations.taskId,
+          minutes: sql<number>`coalesce(sum(${capacityAllocations.allocatedMinutes}), 0)::int`,
+        })
         .from(capacityAllocations)
         .where(inArray(capacityAllocations.taskId, ids))
         .groupBy(capacityAllocations.taskId),
@@ -2235,27 +2975,45 @@ export class TasksService {
 
   async addReservedTime(actor: Actor, input: ReservedTimeInput) {
     const userId = input.userId ?? actor.id;
-    if (userId !== actor.id && actor.role !== Role.ADMIN) throw new ForbiddenException('You can only reserve time for yourself');
+    if (userId !== actor.id && actor.role !== Role.ADMIN)
+      throw new ForbiddenException('You can only reserve time for yourself');
     const [row] = await this.db
       .insert(reservedTimeBlocks)
-      .values({ userId, kind: input.kind, title: input.title, startsAt: new Date(input.startsAt), endsAt: new Date(input.endsAt), createdById: actor.id })
+      .values({
+        userId,
+        kind: input.kind,
+        title: input.title,
+        startsAt: new Date(input.startsAt),
+        endsAt: new Date(input.endsAt),
+        createdById: actor.id,
+      })
       .returning();
     return row!;
   }
 
   async listReservedTime(actor: Actor, userId?: string, from?: string, to?: string) {
     const target = userId ?? actor.id;
-    if (target !== actor.id && actor.role !== Role.ADMIN) throw new ForbiddenException('You can only view your own reserved time');
+    if (target !== actor.id && actor.role !== Role.ADMIN)
+      throw new ForbiddenException('You can only view your own reserved time');
     const conds = [eq(reservedTimeBlocks.userId, target)];
     if (from) conds.push(gt(reservedTimeBlocks.endsAt, new Date(from)));
     if (to) conds.push(lt(reservedTimeBlocks.startsAt, new Date(to)));
-    return this.db.select().from(reservedTimeBlocks).where(and(...conds)).orderBy(asc(reservedTimeBlocks.startsAt));
+    return this.db
+      .select()
+      .from(reservedTimeBlocks)
+      .where(and(...conds))
+      .orderBy(asc(reservedTimeBlocks.startsAt));
   }
 
   async removeReservedTime(id: string, actor: Actor): Promise<{ id: string }> {
-    const [row] = await this.db.select().from(reservedTimeBlocks).where(eq(reservedTimeBlocks.id, id)).limit(1);
+    const [row] = await this.db
+      .select()
+      .from(reservedTimeBlocks)
+      .where(eq(reservedTimeBlocks.id, id))
+      .limit(1);
     if (!row) throw new NotFoundException('Reservation not found');
-    if (row.userId !== actor.id && actor.role !== Role.ADMIN) throw new ForbiddenException('You can only remove your own reserved time');
+    if (row.userId !== actor.id && actor.role !== Role.ADMIN)
+      throw new ForbiddenException('You can only remove your own reserved time');
     await this.db.delete(reservedTimeBlocks).where(eq(reservedTimeBlocks.id, id));
     return { id };
   }
@@ -2264,7 +3022,10 @@ export class TasksService {
     await this.workspaces.assertCanAccess(workspaceId, actor);
     const conds = [eq(capacityAllocations.workspaceId, workspaceId)];
     if (userId) conds.push(eq(capacityAllocations.userId, userId));
-    return this.db.select().from(capacityAllocations).where(and(...conds)).orderBy(asc(capacityAllocations.periodStart));
+    return this.db
+      .select()
+      .from(capacityAllocations)
+      .where(and(...conds))
+      .orderBy(asc(capacityAllocations.periodStart));
   }
 }
-

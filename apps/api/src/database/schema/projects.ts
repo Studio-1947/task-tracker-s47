@@ -23,6 +23,8 @@ export const projects = pgTable(
     /** Per-project monotonic counter backing the human-readable task IDs. */
     taskSeq: integer('task_seq').notNull().default(0),
     isArchived: boolean('is_archived').notNull().default(false),
+    /** Admin/manager-controlled project timeline state. */
+    lifecycle: varchar('lifecycle', { length: 16 }).notNull().default('ACTIVE'),
     createdById: uuid('created_by_id')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),

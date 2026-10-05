@@ -100,6 +100,9 @@ function Board({ workspaceId }: { workspaceId: string }) {
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showEditProject, setShowEditProject] = useState(false);
   const [projectQuery, setProjectQuery] = useState('');
+  const [projectLifecycle, setProjectLifecycle] = useState<'ALL' | 'ACTIVE' | 'UPCOMING' | 'PAST'>(
+    'ACTIVE',
+  );
   const [showSettings, setShowSettings] = useState(false);
   const [showPlanning, setShowPlanning] = useState(false);
   const navigate = useNavigate();
@@ -115,12 +118,18 @@ function Board({ workspaceId }: { workspaceId: string }) {
   const selectedProject = activeProjects.find((p) => p.id === selectedProjectId) ?? null;
   const visibleProjects = useMemo(() => {
     const q = projectQuery.trim().toLowerCase();
-    if (!q) return activeProjects;
+    const lifecycleProjects =
+      projectLifecycle === 'ALL'
+        ? activeProjects
+        : activeProjects.filter(
+            (p) => p.id === selectedProjectId || p.lifecycle === projectLifecycle,
+          );
+    if (!q) return lifecycleProjects;
     // The open project stays visible while searching so the current scope is never hidden.
-    return activeProjects.filter(
+    return lifecycleProjects.filter(
       (p) => p.id === selectedProjectId || `${p.name} ${p.taskPrefix}`.toLowerCase().includes(q),
     );
-  }, [activeProjects, projectQuery, selectedProjectId]);
+  }, [activeProjects, projectLifecycle, projectQuery, selectedProjectId]);
   const canManageProjects =
     isAdmin || (members ?? []).find((m) => m.id === user?.id)?.workspaceRole === 'MANAGER';
   const selectProject = (id: string) => {
@@ -320,6 +329,42 @@ function Board({ workspaceId }: { workspaceId: string }) {
             onClick={() => selectProject('')}
             label="All projects"
           />
+          <select
+            aria-label="Filter projects by timeline"
+            value={projectLifecycle}
+            onChange={(e) => setProjectLifecycle(e.target.value as typeof projectLifecycle)}
+            className={`shrink-0 rounded-full border-2 bg-white/60 px-3 py-1.5 text-xs font-semibold outline-none dark:bg-slate-900/40 ${
+              projectLifecycle === 'ACTIVE'
+                ? 'border-emerald-400 text-emerald-700 focus:border-emerald-500 dark:border-emerald-700 dark:text-emerald-300'
+                : projectLifecycle === 'UPCOMING'
+                  ? 'border-indigo-400 text-indigo-700 focus:border-indigo-500 dark:border-indigo-600 dark:text-indigo-300'
+                  : projectLifecycle === 'PAST'
+                    ? 'border-amber-400 text-amber-700 focus:border-amber-500 dark:border-amber-700 dark:text-amber-300'
+                    : 'border-slate-300 text-slate-600 focus:border-slate-500 dark:border-slate-700 dark:text-slate-300'
+            }`}
+          >
+            <option value="ACTIVE">Active / ongoing</option>
+            <option value="UPCOMING">Upcoming</option>
+            <option value="PAST">Past</option>
+            <option value="ALL">All timelines</option>
+          </select>
+          <div
+            className="flex shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white/60 px-3 py-1.5 text-[10px] font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400"
+            aria-label="Project timeline colour guide"
+          >
+            <span className="inline-flex items-center gap-1">
+              <i className="h-2 w-2 rounded-full bg-emerald-500" />
+              Active
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <i className="h-2 w-2 rounded-full bg-indigo-500" />
+              Upcoming
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <i className="h-2 w-2 rounded-full bg-amber-500" />
+              Past
+            </span>
+          </div>
           {visibleProjects.map((p) => (
             <ProjectPill
               key={p.id}
@@ -328,6 +373,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
               label={p.name}
               prefix={p.taskPrefix}
               count={p.taskCount}
+              lifecycle={p.lifecycle}
             />
           ))}
           {projectQuery && visibleProjects.length === 0 ? (
@@ -344,13 +390,15 @@ function Board({ workspaceId }: { workspaceId: string }) {
               Edit project
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={() => setShowCreateProject(true)}
-            className="shrink-0 rounded-full border border-dashed border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
-          >
-            + New project
-          </button>
+          {canManageProjects ? (
+            <button
+              type="button"
+              onClick={() => setShowCreateProject(true)}
+              className="shrink-0 rounded-full border border-dashed border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+            >
+              + New project
+            </button>
+          ) : null}
           {selectedProjectId ? (
             <button
               type="button"
@@ -666,18 +714,28 @@ function ProjectPill({
   label,
   prefix,
   count,
+  lifecycle,
 }: {
   active: boolean;
   onClick: () => void;
   label: string;
   prefix?: string;
   count?: number;
+  lifecycle?: 'ACTIVE' | 'UPCOMING' | 'PAST';
 }) {
+  const lifecycleStyle =
+    lifecycle === 'ACTIVE'
+      ? 'border-l-emerald-500'
+      : lifecycle === 'UPCOMING'
+        ? 'border-l-indigo-500'
+        : lifecycle === 'PAST'
+          ? 'border-l-amber-500'
+          : '';
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`shrink-0 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+      className={`shrink-0 flex items-center gap-1.5 rounded-full border border-l-[4px] px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${lifecycleStyle} ${
         active
           ? 'border-indigo-500 bg-indigo-50/70 text-indigo-700 dark:border-indigo-500/50 dark:bg-indigo-950/30 dark:text-indigo-300'
           : 'border-slate-200 bg-white/60 text-slate-600 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300 dark:hover:border-slate-700'
