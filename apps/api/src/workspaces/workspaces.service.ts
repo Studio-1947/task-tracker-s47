@@ -122,6 +122,8 @@ export class WorkspacesService {
       this.db
         .select({ workspaceId: workspaceMembers.workspaceId, c: count() })
         .from(workspaceMembers)
+        .innerJoin(users, eq(users.id, workspaceMembers.userId))
+        .where(eq(users.isActive, true))
         .groupBy(workspaceMembers.workspaceId),
       this.db
         .select({ workspaceId: projects.workspaceId, c: count() })
@@ -151,7 +153,11 @@ export class WorkspacesService {
     const [w] = await this.db.select().from(workspaces).where(eq(workspaces.id, id)).limit(1);
     if (!w) throw new NotFoundException('Workspace not found');
     const [[{ c: memberCount } = { c: 0 }], [{ c: projectCount } = { c: 0 }]] = await Promise.all([
-      this.db.select({ c: count() }).from(workspaceMembers).where(eq(workspaceMembers.workspaceId, id)),
+      this.db
+        .select({ c: count() })
+        .from(workspaceMembers)
+        .innerJoin(users, eq(users.id, workspaceMembers.userId))
+        .where(and(eq(workspaceMembers.workspaceId, id), eq(users.isActive, true))),
       this.db
         .select({ c: count() })
         .from(projects)

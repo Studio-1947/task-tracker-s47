@@ -75,7 +75,7 @@ export class MetricsService {
       })
       .from(tasks)
       .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.isArchived, false)));
-    const topLevel = allRows.filter((t) => !t.parentTaskId);
+    const topLevel = allRows; // Include subtasks as per audit Phase 2
     const topIds = topLevel.map((t) => t.id);
     const dueOf = (t: (typeof topLevel)[number]) => (basis === 'ORIGINAL' ? t.originalDueDate ?? t.dueDate : t.dueDate);
 
@@ -160,9 +160,9 @@ export class MetricsService {
         to: to.toISOString(),
         basis,
         archivePolicy: 'ACTIVE_ONLY',
-        countedLevel: 'TOP_LEVEL',
+        countedLevel: 'ALL_TASKS',
         topLevelTasks: topLevel.length,
-        subtasksExcluded: allRows.length - topLevel.length,
+        subtasksExcluded: 0,
         generatedAt: now.toISOString(),
         metricVersion: METRIC_VERSION,
       },
@@ -307,7 +307,7 @@ export class MetricsService {
       ['Period from', s.from],
       ['Period to (exclusive)', s.to],
       ['Commitment basis', s.basis === 'ORIGINAL' ? 'Original commitment (first due date)' : 'Revised commitment (current due date)'],
-      ['Scope', `Active (non-archived) top-level tasks: ${s.topLevelTasks}; ${s.subtasksExcluded} subtask(s) counted separately, not included`],
+      ['Scope', `Active (non-archived) tasks (including subtasks): ${s.topLevelTasks}`],
       ['Generated at', s.generatedAt],
       ['Metric version', s.metricVersion],
       [],

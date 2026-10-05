@@ -27,7 +27,7 @@ function periodRange(p: Period): { from: string; to: string } {
   return { from: new Date(now.getTime() - days * 86400000).toISOString(), to: to.toISOString() };
 }
 
-const pctLabel = (p: number | null) => (p === null ? 'n/a' : `${p}%`);
+const pctLabel = (p: number | null) => (p === null ? 'No data' : `${p}%`);
 
 interface CardSpec {
   key: string;
@@ -131,7 +131,7 @@ export function MetricsPanel({ filters }: { filters: MetricFilters }) {
   const ratio = (label: string, key: string, r: RatioMetric, unit = ''): CardSpec => ({
     key,
     label,
-    primary: pctLabel(r.percentage),
+    primary: r.notApplicable ? 'No data' : pctLabel(r.percentage),
     detail: r.notApplicable
       ? `Not applicable (nothing eligible${unit ? ` ${unit}` : ''})`
       : `${r.numerator} of ${r.denominator}${unit ? ` ${unit}` : ''}`,
@@ -144,7 +144,7 @@ export function MetricsPanel({ filters }: { filters: MetricFilters }) {
           key: 'open',
           label: 'Open tasks',
           primary: String(m.openTasks.count),
-          detail: `${m.scope.topLevelTasks} top-level task(s) in scope`,
+          detail: `${m.scope.topLevelTasks} task(s) in scope (including subtasks)`,
           taskIds: m.openTasks.taskIds,
         },
         {
@@ -162,9 +162,9 @@ export function MetricsPanel({ filters }: { filters: MetricFilters }) {
           key: 'turnaround',
           label: 'Review turnaround',
           primary:
-            m.reviewTurnaround.medianMinutes === null
-              ? 'n/a'
-              : formatWorkingDuration(m.reviewTurnaround.medianMinutes),
+              m.reviewTurnaround.medianMinutes === null
+                ? 'No data'
+                : formatWorkingDuration(m.reviewTurnaround.medianMinutes),
           detail: m.reviewTurnaround.sampleSize
             ? `median of ${m.reviewTurnaround.sampleSize} decision(s) · p90 ${formatWorkingDuration(m.reviewTurnaround.p90Minutes ?? 0)} (working time)`
             : 'No decisions in period',
@@ -184,7 +184,7 @@ export function MetricsPanel({ filters }: { filters: MetricFilters }) {
         {
           key: 'rework',
           label: 'Rework effort',
-          primary: pctLabel(m.reworkEffort.percentage),
+          primary: m.reworkEffort.totalMinutes === 0 ? 'No data' : pctLabel(m.reworkEffort.percentage),
           detail: `${formatWorkingDuration(m.reworkEffort.reworkMinutes)} of ${formatWorkingDuration(m.reworkEffort.totalMinutes)} · ${m.reworkEffort.returnedSubmissions.count} returned · ${m.scopeChanges.count} scope change(s) reported separately`,
           taskIds: m.reworkEffort.returnedSubmissions.taskIds,
         },
@@ -214,13 +214,12 @@ export function MetricsPanel({ filters }: { filters: MetricFilters }) {
     <Card className="space-y-4 p-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <div className="text-xs font-bold uppercase tracking-wider text-slate-455 dark:text-slate-400">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-455 dark:text-slate-400">
             Delivery metrics
-          </div>
+          </h2>
           {m ? (
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              {m.scope.workspaceName} · active top-level tasks only ({m.scope.subtasksExcluded}{' '}
-              subtask(s) counted separately) · metric v{m.scope.metricVersion} ·{' '}
+              {m.scope.workspaceName} · active tasks only (including subtasks) · metric v{m.scope.metricVersion} ·{' '}
               {m.reconciliation.consistent ? 'totals reconcile' : 'TOTALS DO NOT RECONCILE'}
             </p>
           ) : null}
@@ -245,9 +244,9 @@ export function MetricsPanel({ filters }: { filters: MetricFilters }) {
                 key={c.key}
                 className="rounded-xl border border-slate-100 p-3 dark:border-slate-800"
               >
-                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   {c.label}
-                </div>
+                </h3>
                 <div
                   className={`mt-1 text-2xl font-extrabold tabular-nums ${c.tone === 'danger' ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-100'}`}
                 >

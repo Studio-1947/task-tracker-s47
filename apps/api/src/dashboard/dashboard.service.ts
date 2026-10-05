@@ -443,6 +443,7 @@ export class DashboardService {
       teamWorkload,
       workspacePerformance,
       upcomingDeadlines,
+      [{ noDeadlineTasks } = { noDeadlineTasks: 0 }],
     ] = await Promise.all([
       this.statusCounts(workspaceIds),
       this.overdueSummary(workspaceIds),
@@ -460,6 +461,17 @@ export class DashboardService {
       this.teamWorkload(workspaceIds),
       this.workspacePerformance(workspaceIds),
       this.upcomingDeadlines(workspaceIds),
+      this.db
+        .select({ noDeadlineTasks: count() })
+        .from(tasks)
+        .where(
+          and(
+            eq(tasks.isArchived, false),
+            ne(tasks.status, 'DONE'),
+            isNull(tasks.dueDate),
+            ...(workspaceIds ? [inArray(tasks.workspaceId, workspaceIds)] : [])
+          )
+        ),
     ]);
 
     let mostActiveWorkspace: AdminDashboard['mostActiveWorkspace'] = null;
@@ -477,6 +489,7 @@ export class DashboardService {
       totalWorkspaces: Number(totalWorkspaces),
       totalUsers: Number(totalUsers),
       tasksByStatus,
+      noDeadlineTasks: Number(noDeadlineTasks),
       overdueTasks: overdueSummary.total,
       overdueTaskList: overdueSummary.items,
       mostActiveWorkspace,

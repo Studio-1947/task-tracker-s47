@@ -103,16 +103,26 @@ export function TaskDrawer({
   const qc = useQueryClient();
   const [comment, setComment] = useState('');
   const [subtaskTitle, setSubtaskTitle] = useState('');
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showDeletePrompt, setShowDeletePrompt] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const canDeletePermanently = isAdmin || task?.createdBy?.id === user?.id;
 
-  // Lock body scroll when drawer is open to prevent double scrollbars
+  // Lock body scroll and handle Escape key when drawer is open
   useEffect(() => {
     const originalStyle = window.getComputedStyle(document.body).overflow;
     document.body.style.overflow = 'hidden';
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
     return () => {
       document.body.style.overflow = originalStyle;
+      window.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
+  }, [onClose]);
 
   const patch = (p: Parameters<typeof update.mutate>[0]['patch']) =>
     update.mutate({ id: taskId, patch: p });
@@ -127,11 +137,7 @@ export function TaskDrawer({
   const toggleSubtask = (subtaskId: string, currentStatus: TaskStatus) =>
     patchSubtask(subtaskId, { status: currentStatus === 'DONE' ? 'TODO' : 'DONE' });
 
-  const onDelete = () => {
-    if (!window.confirm(`Permanently delete "${task?.ref} ${task?.title}"? This cannot be undone.`))
-      return;
-    remove.mutate(taskId, { onSuccess: onClose });
-  };
+
 
   const onAddSubtask = (e: React.FormEvent) => {
     e.preventDefault();
@@ -149,7 +155,12 @@ export function TaskDrawer({
       />
 
       {/* Drawer content */}
-      <div className="relative z-50 flex h-full w-[calc(100%-3rem)] sm:w-[36rem] max-w-xl flex-col overflow-y-auto border-l border-slate-100 dark:border-slate-800/80 bg-white dark:bg-[#181818] shadow-2xl animate-slide-in">
+      <div 
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Task: ${task?.title}`}
+        className="relative z-50 flex h-full w-[calc(100%-3rem)] sm:w-[36rem] max-w-xl flex-col overflow-y-auto border-l border-slate-100 dark:border-slate-800/80 bg-white dark:bg-[#181818] shadow-2xl animate-slide-in"
+      >
         {isLoading || !task ? (
           <Spinner />
         ) : (
@@ -233,14 +244,55 @@ export function TaskDrawer({
                 </Button>
               )}
               {canDeletePermanently ? (
-                <Button
-                  variant="danger"
-                  className="py-1.5 px-3 text-xs"
-                  disabled={remove.isPending}
-                  onClick={onDelete}
-                >
-                  Delete permanently
-                </Button>
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    className="py-1.5 px-3 text-xs"
+                    onClick={() => { setShowMoreMenu(!showMoreMenu); setShowDeletePrompt(false); setDeleteConfirmText(''); }}
+                  >
+                    More
+                  </Button>
+                  {showMoreMenu && (
+                    <div className="absolute top-full left-0 mt-1 w-56 rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 z-10 p-2 dark:bg-[#252525] dark:ring-white/10">
+                      {showDeletePrompt ? (
+                        <div className="flex flex-col gap-2">
+                          <span className="text-[10px] text-red-600 dark:text-red-400 font-semibold leading-tight">Type '{task.ref}' to delete:</span>
+                          <input
+                            autoFocus
+                            className="rounded border border-red-200 bg-transparent px-2 py-1 text-xs outline-none dark:border-red-900/50"
+                            value={deleteConfirmText}
+                            onChange={(e) => setDeleteConfirmText(e.target.value)}
+                          />
+                          <div className="flex gap-1 justify-end">
+                            <button
+                              type="button"
+                              className="text-[10px] text-slate-400 hover:text-slate-600 p-1"
+                              onClick={() => { setShowDeletePrompt(false); setDeleteConfirmText(''); setShowMoreMenu(false); }}
+                            >
+                              Cancel
+                            </button>
+                            <Button
+                              variant="danger"
+                              className="py-1 px-2 text-[10px]"
+                              disabled={remove.isPending || deleteConfirmText !== task.ref}
+                              onClick={() => remove.mutate(taskId, { onSuccess: onClose })}
+                            >
+                              Confirm
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="w-full text-left rounded-md px-2 py-1.5 text-xs text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30 transition-colors"
+                          onClick={() => setShowDeletePrompt(true)}
+                        >
+                          Delete permanently
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               ) : null}
               {onDeleteCard && canDeletePermanently ? (
                 <Button

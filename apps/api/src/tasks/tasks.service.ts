@@ -104,6 +104,13 @@ type CalendarSnapshot = Awaited<ReturnType<CalendarService['get']>>;
 
 type Actor = { id: string; role: string };
 
+function parseDueDateIST(isoString: string | undefined | null): Date | null {
+  if (!isoString) return null;
+  const datePart = isoString.slice(0, 10);
+  // 19:00 in Asia/Kolkata (+05:30)
+  return new Date(`${datePart}T19:00:00+05:30`);
+}
+
 @Injectable()
 export class TasksService {
   private readonly logger = new Logger(TasksService.name);
@@ -546,8 +553,8 @@ export class TasksService {
           status: input.status ?? 'TODO',
           priority: input.priority ?? 'MEDIUM',
           size: input.size,
-          dueDate: input.dueDate ? new Date(input.dueDate) : null,
-          originalDueDate: input.dueDate ? new Date(input.dueDate) : null,
+          dueDate: parseDueDateIST(input.dueDate),
+          originalDueDate: parseDueDateIST(input.dueDate),
           ownerId: input.ownerId ?? null,
           reviewerId: input.reviewerId ?? null,
           baselineEstimateMinutes: input.baselineEstimateMinutes ?? null,
@@ -965,7 +972,7 @@ export class TasksService {
         });
       }
       if (input.dueDate !== undefined) {
-        const nextDue = input.dueDate ? new Date(input.dueDate) : null;
+        const nextDue = parseDueDateIST(input.dueDate);
         const currentIso = current.dueDate ? current.dueDate.toISOString() : null;
         const nextIso = nextDue ? nextDue.toISOString() : null;
         if (currentIso !== nextIso) {

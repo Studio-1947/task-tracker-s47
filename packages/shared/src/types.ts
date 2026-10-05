@@ -384,6 +384,7 @@ export interface AdminDashboard {
   totalWorkspaces: number;
   totalUsers: number;
   tasksByStatus: StatusCounts;
+  noDeadlineTasks: number;
   /**
    * Both this count and `overdueTaskList` come from one query (a window
    * `count(*) over()` alongside the page of rows) so they can never disagree
@@ -865,7 +866,7 @@ export interface WorkspaceMetrics {
     basis: CommitmentBasis;
     archivePolicy: 'ACTIVE_ONLY';
     /** Parent/top-level work and subtasks are never combined in one count. */
-    countedLevel: 'TOP_LEVEL';
+    countedLevel: 'TOP_LEVEL' | 'ALL_TASKS';
     topLevelTasks: number;
     subtasksExcluded: number;
     generatedAt: string;

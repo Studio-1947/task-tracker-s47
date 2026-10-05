@@ -22,6 +22,7 @@ import {
 } from '../hooks/useUsers';
 import { useAuth } from '../stores/auth';
 import { Avatar } from '../components/Avatar';
+import { EditUserDrawer } from '../components/EditUserDrawer';
 import { Badge, Button, Card, EmptyState, ErrorState, Input, Spinner } from '../components/ui';
 
 /**
@@ -107,39 +108,6 @@ function ProjectTags({ projects }: { projects: UserProjectTag[] }) {
   );
 }
 
-/** Inline-editable designation: commits on blur or Enter, only when changed. */
-function DesignationCell({
-  value,
-  userName,
-  disabled,
-  onCommit,
-}: {
-  value: string | null;
-  userName: string;
-  disabled: boolean;
-  onCommit: (next: string | null) => void;
-}) {
-  const [draft, setDraft] = useState(value ?? '');
-  const commit = () => {
-    const next = draft.trim() || null;
-    if (next !== (value ?? null)) onCommit(next);
-  };
-  return (
-    <input
-      aria-label={`Designation for ${userName}`}
-      className="w-36 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm text-slate-650 hover:border-slate-300 focus:border-indigo-500 focus:bg-white focus:outline-none dark:text-slate-300 dark:hover:border-slate-700 dark:focus:border-indigo-500 dark:focus:bg-slate-800"
-      value={draft}
-      placeholder="—"
-      maxLength={120}
-      disabled={disabled}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-      }}
-    />
-  );
-}
 
 function parseUserAgent(ua: string | null): string {
   if (!ua) return 'Unknown Device';
@@ -173,9 +141,7 @@ function UserTable({
   users,
   currentUserId,
   busy,
-  onRole,
-  onDesignation,
-  onGender,
+  onEdit,
   onReset,
   onDeactivate,
   onReactivate,
@@ -184,9 +150,7 @@ function UserTable({
   users: UserSummary[];
   currentUserId?: string;
   busy: boolean;
-  onRole: (u: UserSummary, role: Role) => void;
-  onDesignation: (u: UserSummary, designation: string | null) => void;
-  onGender: (u: UserSummary, gender: GenderType) => void;
+  onEdit: (u: UserSummary) => void;
   onReset: (u: UserSummary) => void;
   onDeactivate: (u: UserSummary) => void;
   onReactivate: (u: UserSummary) => void;
@@ -223,44 +187,14 @@ function UserTable({
                   </span>
                 </td>
                 <td className="px-4 py-3 text-slate-505 dark:text-slate-400 font-medium">{u.email}</td>
-                <td className="px-4 py-3">
-                  <select
-                    aria-label={`Role for ${u.name}`}
-                    className="rounded-lg border border-slate-200 dark:border-slate-850 px-2 py-1 text-xs text-slate-700 dark:text-white bg-white dark:bg-[#1a1a1a] outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all font-semibold disabled:opacity-60"
-                    value={u.role}
-                    onChange={(e) => onRole(u, e.target.value as Role)}
-                    disabled={busy || isMe || status === 'REMOVED'}
-                    title={isMe ? 'You cannot change your own role' : undefined}
-                  >
-                    {ROLES.map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))}
-                  </select>
+                <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-300">
+                  {u.role}
                 </td>
-                <td className="px-4 py-3">
-                  <DesignationCell
-                    key={`${u.id}-${u.designation ?? ''}`}
-                    value={u.designation}
-                    userName={u.name}
-                    disabled={busy || status === 'REMOVED'}
-                    onCommit={(next) => onDesignation(u, next)}
-                  />
+                <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
+                  {u.designation || '—'}
                 </td>
-                <td className="px-4 py-3">
-                  <select
-                    aria-label={`Gender for ${u.name}`}
-                    className="rounded-lg border border-slate-200 dark:border-slate-850 px-2 py-1 text-xs text-slate-700 dark:text-white bg-white dark:bg-[#1a1a1a] outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/10 transition-all font-semibold disabled:opacity-60"
-                    value={u.gender ?? 'UNSPECIFIED'}
-                    onChange={(e) => onGender(u, e.target.value as GenderType)}
-                    disabled={busy || status === 'REMOVED'}
-                  >
-                    <option value="UNSPECIFIED">Unspecified</option>
-                    <option value="MALE">Male</option>
-                    <option value="FEMALE">Female</option>
-                    <option value="OTHER">Other</option>
-                  </select>
+                <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
+                  {u.gender === 'UNSPECIFIED' ? '—' : (u.gender ? u.gender.charAt(0) + u.gender.slice(1).toLowerCase() : '—')}
                 </td>
                 <td className="px-4 py-3">
                   <ProjectTags projects={u.projects ?? []} />
@@ -271,17 +205,25 @@ function UserTable({
                 </td>
                 <td className="px-5 py-3">
                   <div className="flex items-center justify-end gap-2.5">
-                    {/* A removed account is offboarded; handing out a new password
-                        for it would only invite signing them back in by accident. */}
                     {status === 'REMOVED' ? null : (
-                      <Button
-                        variant="ghost"
-                        className="text-xs py-1.5 px-3 font-semibold"
-                        disabled={busy}
-                        onClick={() => onReset(u)}
-                      >
-                        Reset password
-                      </Button>
+                      <>
+                        <Button
+                          variant="ghost"
+                          className="text-xs py-1.5 px-3 font-semibold"
+                          disabled={busy}
+                          onClick={() => onEdit(u)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          className="text-xs py-1.5 px-3 font-semibold"
+                          disabled={busy}
+                          onClick={() => onReset(u)}
+                        >
+                          Reset password
+                        </Button>
+                      </>
                     )}
                     {status === 'ACTIVE' ? (
                       <Button
@@ -365,6 +307,7 @@ export function UsersPage() {
   } | null>(null);
   const [removed, setRemoved] = useState<{ name: string; deleted: boolean } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [editingUser, setEditingUser] = useState<UserSummary | null>(null);
 
   // Pagination for Active Sessions (displays 10 per page max)
   const [sessionPage, setSessionPage] = useState(1);
@@ -418,9 +361,7 @@ export function UsersPage() {
   const tableProps = {
     currentUserId: me?.id,
     busy: updateUser.isPending || resetPassword.isPending || removeUser.isPending,
-    onRole: (u: UserSummary, role: Role) => patchUser(u, { role }),
-    onDesignation: (u: UserSummary, designation: string | null) => patchUser(u, { designation }),
-    onGender: (u: UserSummary, gender: GenderType) => patchUser(u, { gender }),
+    onEdit: (u: UserSummary) => setEditingUser(u),
     onReset: (u: UserSummary) => {
       setActionError(null);
       setPending({ kind: 'reset', user: u });
@@ -783,6 +724,18 @@ export function UsersPage() {
             </Button>
           </div>
         </Dialog>
+      ) : null}
+
+      {editingUser ? (
+        <EditUserDrawer
+          user={editingUser}
+          onClose={() => setEditingUser(null)}
+          busy={updateUser.isPending}
+          onRole={(u, role) => patchUser(u, { role })}
+          onDesignation={(u, designation) => patchUser(u, { designation })}
+          onGender={(u, gender) => patchUser(u, { gender })}
+          isMe={editingUser.id === me?.id}
+        />
       ) : null}
     </div>
   );

@@ -13,6 +13,7 @@ import { LoginPage } from './pages/LoginPage';
 import { UsersPage } from './pages/UsersPage';
 import { OrganisationPage } from './pages/OrganisationPage';
 import { OrgTreePage } from './pages/OrgTreePage';
+import { ReportsPage } from './pages/ReportsPage';
 import { WorkspacesPage } from './pages/WorkspacesPage';
 import { WorkspaceTasksPage } from './pages/WorkspaceTasksPage';
 import { useAuth } from './stores/auth';
@@ -81,6 +82,7 @@ export default function App() {
           <Route element={<RequireAdmin />}>
             <Route path="users" element={<UsersPage />} />
             <Route path="organisation" element={<OrganisationPage />} />
+            <Route path="reports" element={<ReportsPage />} />
           </Route>
         </Route>
       </Route>
