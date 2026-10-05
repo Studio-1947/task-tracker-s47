@@ -321,21 +321,21 @@ function Board({ workspaceId }: { workspaceId: string }) {
               placeholder="Search projects…"
               value={projectQuery}
               onChange={(e) => setProjectQuery(e.target.value)}
-              className="w-52 rounded-full border border-slate-200 bg-white/60 py-2 pl-8 pr-8 text-xs text-slate-700 outline-none focus:border-indigo-500 sm:w-60 dark:border-slate-800 dark:bg-slate-900/40 dark:text-white"
+              className="w-52 rounded-full border border-slate-200 bg-white py-2 pl-8 pr-8 text-xs font-medium text-slate-700 shadow-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15 sm:w-60 dark:border-[#343434] dark:bg-[#1d1d1d] dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-400 dark:focus:ring-indigo-400/15"
             />
             {projectQuery ? (
               <button
                 type="button"
                 aria-label="Clear project search"
                 onClick={() => setProjectQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-[#303030] dark:hover:text-slate-200"
               >
                 ×
               </button>
             ) : null}
           </div>
           <div
-            className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-900/50"
+            className="inline-flex rounded-xl border border-slate-200 bg-slate-100/80 p-1 shadow-sm dark:border-[#343434] dark:bg-[#181818]"
             aria-label="Project timeline filters"
           >
             {(
@@ -353,7 +353,7 @@ function Board({ workspaceId }: { workspaceId: string }) {
                   setProjectLifecycle(value);
                   selectProject('');
                 }}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${projectLifecycle === value ? `bg-white shadow-sm dark:bg-slate-800 ${tone}` : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${projectLifecycle === value ? `bg-white shadow-sm ring-1 ring-slate-200/70 dark:bg-[#2a2a2a] dark:ring-[#3a3a3a] ${tone}` : 'text-slate-500 hover:bg-white/70 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-[#252525] dark:hover:text-slate-200'}`}
               >
                 {label}
               </button>
