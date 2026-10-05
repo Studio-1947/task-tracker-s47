@@ -14,7 +14,9 @@ export const createTaskSchema = z.object({
   childScope: z.enum(['REQUIRED', 'OPTIONAL', 'CANCELLED']).optional(),
   status: statusEnum.optional(),
   priority: priorityEnum.optional(),
-  size: sizeEnum,
+  // API clients created before work scale was introduced remain compatible;
+  // the UI still requires an explicit selection.
+  size: sizeEnum.default('SMALL'),
   /** ISO datetime string, or null for no due date. */
   dueDate: z.string().datetime().nullable().optional(),
   assigneeIds: z.array(z.string().uuid()).optional(),
@@ -32,7 +34,7 @@ export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 /** Lightweight create form used by the "+ Add subtask" quick-add under a task. */
 export const createSubtaskSchema = z.object({
   title: z.string().min(1).max(1000),
-  size: sizeEnum,
+  size: sizeEnum.default('SMALL'),
   assigneeIds: z.array(z.string().uuid()).optional(),
   dueDate: z.string().datetime().nullable().optional(),
 });
@@ -76,7 +78,10 @@ export const reviewTaskSchema = z
     decision: z.enum(['ACCEPTED', 'RETURNED']),
     note: z.string().trim().max(4000).optional(),
   })
-  .refine((v) => v.decision !== 'RETURNED' || !!v.note, { message: 'A return reason is required', path: ['note'] });
+  .refine((v) => v.decision !== 'RETURNED' || !!v.note, {
+    message: 'A return reason is required',
+    path: ['note'],
+  });
 export type ReviewTaskInput = z.infer<typeof reviewTaskSchema>;
 
 export const createCommentSchema = z.object({
@@ -94,14 +99,17 @@ export const createLinkAttachmentSchema = z.object({
     .string()
     .url()
     .max(2000)
-    .refine((v) => {
-      try {
-        const scheme = new URL(v).protocol;
-        return scheme === 'http:' || scheme === 'https:';
-      } catch {
-        return false;
-      }
-    }, { message: 'Link must be an http(s) URL' }),
+    .refine(
+      (v) => {
+        try {
+          const scheme = new URL(v).protocol;
+          return scheme === 'http:' || scheme === 'https:';
+        } catch {
+          return false;
+        }
+      },
+      { message: 'Link must be an http(s) URL' },
+    ),
   /** Display label. Falls back to the link's hostname when omitted. */
   title: z.string().min(1).max(255).optional(),
 });
@@ -118,12 +126,16 @@ export const taskQuerySchema = z.object({
   dueAfter: z.string().datetime().optional(),
   search: z.string().max(200).optional(),
   /** Planning-hygiene filters (spec section 11): the exceptions a manager should chase. */
-  attention: z.enum(['NO_OWNER', 'NO_DEADLINE', 'BLOCKED', 'REVIEW_OVERDUE', 'MISSING_ESTIMATE', 'OVERDUE']).optional(),
+  attention: z
+    .enum(['NO_OWNER', 'NO_DEADLINE', 'BLOCKED', 'REVIEW_OVERDUE', 'MISSING_ESTIMATE', 'OVERDUE'])
+    .optional(),
   includeArchived: z
     .union([z.boolean(), z.enum(['true', 'false'])])
     .transform((v) => v === true || v === 'true')
     .optional(),
-  sort: z.enum(['createdAt', 'updatedAt', 'dueDate', 'priority', 'status', 'number']).default('createdAt'),
+  sort: z
+    .enum(['createdAt', 'updatedAt', 'dueDate', 'priority', 'status', 'number'])
+    .default('createdAt'),
   order: z.enum(['asc', 'desc']).default('desc'),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(15),
@@ -149,7 +161,12 @@ export type StartTimerInput = z.infer<typeof startTimerSchema>;
 export const reviseEstimateSchema = z.object({
   revisedEstimateMinutes: z.number().int().min(0).max(1_000_000),
   reason: z.string().trim().min(1).max(2000),
-  classification: z.enum(['SCOPE_CHANGE', 'PLANNING_CORRECTION', 'CLIENT_CHANGE', 'INTERNAL_CHANGE']),
+  classification: z.enum([
+    'SCOPE_CHANGE',
+    'PLANNING_CORRECTION',
+    'CLIENT_CHANGE',
+    'INTERNAL_CHANGE',
+  ]),
 });
 export type ReviseEstimateInput = z.infer<typeof reviseEstimateSchema>;
 
@@ -182,12 +199,15 @@ export type CreateDependencyInput = z.infer<typeof createDependencySchema>;
  * effective-dated period (PRD §9 "Reviewer delegate": only the explicitly
  * delegated scope, for its effective period — no automatic wider access).
  */
-export const delegateReviewSchema = z.object({
-  delegateId: z.string().uuid(),
-  effectiveFrom: z.string().datetime(),
-  effectiveTo: z.string().datetime(),
-  reason: z.string().trim().min(1).max(2000),
-}).refine((v) => v.effectiveTo > v.effectiveFrom, { message: 'Effective end must be after the start', path: ['effectiveTo'] });
+export const delegateReviewSchema = z
+  .object({
+    delegateId: z.string().uuid(),
+    effectiveFrom: z.string().datetime(),
+    effectiveTo: z.string().datetime(),
+    reason: z.string().trim().min(1).max(2000),
+  })
+  .refine((v) => v.effectiveTo > v.effectiveFrom, {
+    message: 'Effective end must be after the start',
+    path: ['effectiveTo'],
+  });
 export type DelegateReviewInput = z.infer<typeof delegateReviewSchema>;
-
-
