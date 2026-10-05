@@ -19,6 +19,7 @@ export const updateUserSchema = z
     designation: z.string().max(120).nullable().optional(),
     gender: z.enum(['MALE', 'FEMALE', 'OTHER', 'UNSPECIFIED']).optional(),
     isActive: z.boolean().optional(),
+    workspaceIds: z.array(z.string().uuid()).optional(),
   })
   .strict();
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;

@@ -731,9 +731,7 @@ export function UsersPage() {
           user={editingUser}
           onClose={() => setEditingUser(null)}
           busy={updateUser.isPending}
-          onRole={(u, role) => patchUser(u, { role })}
-          onDesignation={(u, designation) => patchUser(u, { designation })}
-          onGender={(u, gender) => patchUser(u, { gender })}
+          onSave={(patch) => patchUser(editingUser, patch)}
           isMe={editingUser.id === me?.id}
         />
       ) : null}

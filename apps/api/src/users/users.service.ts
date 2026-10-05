@@ -49,6 +49,7 @@ export class UsersService {
     u: UserRow,
     workspaceCount?: number,
     userProjects?: UserProjectTag[],
+    workspaceIds?: string[],
   ): UserSummary {
     return {
       id: u.id,
@@ -63,6 +64,7 @@ export class UsersService {
       createdAt: u.createdAt.toISOString(),
       ...(workspaceCount !== undefined ? { workspaceCount } : {}),
       ...(userProjects !== undefined ? { projects: userProjects } : {}),
+      ...(workspaceIds !== undefined ? { workspaceIds } : {}),
     };
   }
 
@@ -117,18 +119,21 @@ export class UsersService {
   }
 
   async list(): Promise<UserSummary[]> {
-    const [rows, counts, projectTags] = await Promise.all([
+    const [rows, memberships, projectTags] = await Promise.all([
       this.db.select().from(users).orderBy(users.createdAt),
-      this.db
-        .select({ userId: workspaceMembers.userId, c: count() })
-        .from(workspaceMembers)
-        .groupBy(workspaceMembers.userId),
+      this.db.select({ userId: workspaceMembers.userId, workspaceId: workspaceMembers.workspaceId }).from(workspaceMembers),
       this.projectTagsByUser(),
     ]);
-    const countByUser = new Map(counts.map((r) => [r.userId, Number(r.c)]));
-    return rows.map((u) =>
-      this.toSummary(u, countByUser.get(u.id) ?? 0, projectTags.get(u.id) ?? []),
-    );
+    const membersByUser = new Map<string, string[]>();
+    for (const m of memberships) {
+      const existing = membersByUser.get(m.userId) ?? [];
+      existing.push(m.workspaceId);
+      membersByUser.set(m.userId, existing);
+    }
+    return rows.map((u) => {
+      const wIds = membersByUser.get(u.id) ?? [];
+      return this.toSummary(u, wIds.length, projectTags.get(u.id) ?? [], wIds);
+    });
   }
 
   async create(input: CreateUserInput): Promise<CreatedUserWithTempPassword> {
@@ -163,7 +168,7 @@ export class UsersService {
       return user;
     });
 
-    return { ...this.toSummary(created, input.workspaceIds?.length ?? 0), tempPassword };
+    return { ...this.toSummary(created, input.workspaceIds?.length ?? 0, undefined, input.workspaceIds ?? []), tempPassword };
   }
 
   /**
@@ -213,9 +218,22 @@ export class UsersService {
       // the admin's Active Sessions tab reads — leaving them would show somebody
       // as signed in seconds after being locked out.
       if (deactivating) await tx.delete(sessions).where(eq(sessions.userId, id));
+      
+      if (input.workspaceIds) {
+        await tx.delete(workspaceMembers).where(eq(workspaceMembers.userId, id));
+        if (input.workspaceIds.length > 0) {
+          await tx
+            .insert(workspaceMembers)
+            .values(input.workspaceIds.map((workspaceId) => ({ workspaceId, userId: id })))
+            .onConflictDoNothing();
+        }
+      }
       return row;
     });
-    return this.toSummary(updated!);
+
+    const wMemberships = await this.db.select({ workspaceId: workspaceMembers.workspaceId }).from(workspaceMembers).where(eq(workspaceMembers.userId, id));
+    const wIds = wMemberships.map(m => m.workspaceId);
+    return this.toSummary(updated!, wIds.length, undefined, wIds);
   }
 
   /**

@@ -4,30 +4,32 @@ import {
   type Role,
   type UserSummary,
   type GenderType,
+  type UpdateUserInput,
 } from '@task-tracker/shared';
 import { Button, Input } from './ui';
+import { useWorkspaces } from '../hooks/useWorkspaces';
 
 export function EditUserDrawer({
   user,
   onClose,
   busy,
-  onRole,
-  onDesignation,
-  onGender,
+  onSave,
   isMe,
 }: {
   user: UserSummary;
   onClose: () => void;
   busy: boolean;
-  onRole: (u: UserSummary, role: Role) => void;
-  onDesignation: (u: UserSummary, designation: string | null) => void;
-  onGender: (u: UserSummary, gender: GenderType) => void;
+  onSave: (patch: UpdateUserInput) => void;
   isMe: boolean;
 }) {
   const [roleDraft, setRoleDraft] = useState<Role>(user.role);
   const [roleConfirm, setRoleConfirm] = useState(false);
   const [designationDraft, setDesignationDraft] = useState(user.designation ?? '');
   const [genderDraft, setGenderDraft] = useState<GenderType>(user.gender ?? 'UNSPECIFIED');
+  const [workspacesDraft, setWorkspacesDraft] = useState<string[]>(user.workspaceIds ?? []);
+
+  const { data: allWorkspaces } = useWorkspaces();
+  const activeWorkspaces = allWorkspaces?.filter((w) => !w.isArchived) ?? [];
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -38,21 +40,42 @@ export function EditUserDrawer({
   }, [onClose]);
 
   const handleSave = () => {
+    const patch: UpdateUserInput = {};
+    
     if (roleDraft !== user.role) {
       if (!roleConfirm) {
         setRoleConfirm(true);
         return;
       }
-      onRole(user, roleDraft);
+      patch.role = roleDraft;
     }
+    
     const nextDesig = designationDraft.trim() || null;
     if (nextDesig !== user.designation) {
-      onDesignation(user, nextDesig);
+      patch.designation = nextDesig;
     }
+    
     if (genderDraft !== user.gender) {
-      onGender(user, genderDraft);
+      patch.gender = genderDraft;
     }
+    
+    const oldW = user.workspaceIds ?? [];
+    const same = oldW.length === workspacesDraft.length && oldW.every((id) => workspacesDraft.includes(id));
+    if (!same) {
+      patch.workspaceIds = workspacesDraft;
+    }
+
+    if (Object.keys(patch).length > 0) {
+      onSave(patch);
+    }
+    
     onClose();
+  };
+
+  const toggleWorkspace = (id: string) => {
+    setWorkspacesDraft((prev) => 
+      prev.includes(id) ? prev.filter(w => w !== id) : [...prev, id]
+    );
   };
 
   return (
@@ -62,7 +85,7 @@ export function EditUserDrawer({
         role="dialog"
         aria-modal="true"
         aria-label={`Edit ${user.name}`}
-        className="animate-slide-in-right relative z-50 w-full max-w-sm bg-white shadow-2xl dark:bg-[#161616] flex flex-col h-full border-l border-slate-100 dark:border-slate-800"
+        className="animate-slide-in-right relative z-50 w-full max-w-md bg-white shadow-2xl dark:bg-[#161616] flex flex-col h-full border-l border-slate-100 dark:border-slate-800"
       >
         <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-800/50">
           <h2 className="text-lg font-bold text-slate-900 dark:text-white">Edit {user.name}</h2>
@@ -108,6 +131,32 @@ export function EditUserDrawer({
                 <option key={r} value={r}>{r}</option>
               ))}
             </select>
+          </div>
+          
+          <div>
+            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-550 dark:text-slate-400">
+              Workspaces ({workspacesDraft.length})
+            </label>
+            <div className="max-h-64 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 p-2 space-y-1">
+              {activeWorkspaces.length === 0 ? (
+                <div className="p-2 text-sm text-slate-500 dark:text-slate-400 text-center">No active workspaces</div>
+              ) : (
+                activeWorkspaces.map((w) => (
+                  <label key={w.id} className="flex items-center gap-3 rounded p-2 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 dark:border-slate-700 dark:bg-slate-800 dark:focus:ring-indigo-600/50"
+                      checked={workspacesDraft.includes(w.id)}
+                      onChange={() => toggleWorkspace(w.id)}
+                      disabled={busy}
+                    />
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300 select-none">
+                      {w.name}
+                    </span>
+                  </label>
+                ))
+              )}
+            </div>
           </div>
         </div>
         <div className="p-5 border-t border-slate-100 dark:border-slate-800/50 bg-slate-50 dark:bg-slate-900/50 flex flex-col gap-3">

@@ -95,6 +95,7 @@ export interface UserSummary {
   removedAt: string | null;
   createdAt: string;
   workspaceCount?: number;
+  workspaceIds?: string[];
   /** Projects the person has assigned work in, busiest first. Omitted on writes. */
   projects?: UserProjectTag[];
 }
