@@ -288,6 +288,13 @@
       "when": 1800000000000,
       "tag": "0040_task_size_repair",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1812100000000,
+      "tag": "0041_weekly_briefings",
+      "breakpoints": true
     }
   ]
 }

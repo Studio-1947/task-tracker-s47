@@ -130,6 +130,8 @@ export const meetingBoardNotes = pgTable(
     authorId: uuid('author_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    /** A briefing is a team-facing weekly update; notes remain meeting minutes. */
+    kind: varchar('kind', { length: 16 }).notNull().default('NOTE'),
     body: varchar('body', { length: 4000 }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

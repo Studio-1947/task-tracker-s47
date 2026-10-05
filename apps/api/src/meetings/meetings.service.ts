@@ -194,7 +194,8 @@ export class MeetingsService {
       .from(taskAssignees)
       .where(inArray(taskAssignees.taskId, unique));
     const assigneeIds = new Map<string, string[]>();
-    for (const row of assigneeRows) assigneeIds.set(row.taskId, [...(assigneeIds.get(row.taskId) ?? []), row.userId]);
+    for (const row of assigneeRows)
+      assigneeIds.set(row.taskId, [...(assigneeIds.get(row.taskId) ?? []), row.userId]);
     for (const r of rows) {
       map.set(r.id, {
         id: r.id,
@@ -246,6 +247,7 @@ export class MeetingsService {
       id: row.id,
       boardId: row.boardId,
       itemId: row.itemId,
+      kind: row.kind === 'BRIEFING' ? 'BRIEFING' : 'NOTE',
       author: this.refOrUnknown(refs, row.authorId),
       body: row.body,
       createdAt: row.createdAt.toISOString(),
@@ -523,7 +525,10 @@ export class MeetingsService {
     // planning lane while remaining a single card in the team-wide totals.
     const memberIds = [
       ...new Set([
-        ...items.flatMap((item) => [item.user.id, ...item.assignees.map((assignee) => assignee.id)]),
+        ...items.flatMap((item) => [
+          item.user.id,
+          ...item.assignees.map((assignee) => assignee.id),
+        ]),
         ...moodRows.map((m) => m.userId),
       ]),
     ];
@@ -589,16 +594,26 @@ export class MeetingsService {
    * Roll the week's cards up per organisation team. Membership is the team's members plus its manager, active people
    * only. A card counts once per team that owns or is tagged on it.
    */
-  private async teamSummaries(items: BoardItem[], boardMemberIds: string[]): Promise<BoardTeamSummary[]> {
+  private async teamSummaries(
+    items: BoardItem[],
+    boardMemberIds: string[],
+  ): Promise<BoardTeamSummary[]> {
     const [teamRows, links, active] = await Promise.all([
-      this.db.select({ id: orgTeams.id, name: orgTeams.name, managerId: orgTeams.managerId }).from(orgTeams).where(eq(orgTeams.isArchived, false)),
-      this.db.select({ teamId: orgTeamMembers.teamId, userId: orgTeamMembers.userId }).from(orgTeamMembers),
+      this.db
+        .select({ id: orgTeams.id, name: orgTeams.name, managerId: orgTeams.managerId })
+        .from(orgTeams)
+        .where(eq(orgTeams.isArchived, false)),
+      this.db
+        .select({ teamId: orgTeamMembers.teamId, userId: orgTeamMembers.userId })
+        .from(orgTeamMembers),
       this.db.select({ id: users.id }).from(users).where(eq(users.isActive, true)),
     ]);
     const activeIds = new Set(active.map((u) => u.id));
     const peopleOf = new Map<string, Set<string>>();
     for (const t of teamRows) {
-      const set = new Set(links.filter((l) => l.teamId === t.id && activeIds.has(l.userId)).map((l) => l.userId));
+      const set = new Set(
+        links.filter((l) => l.teamId === t.id && activeIds.has(l.userId)).map((l) => l.userId),
+      );
       if (t.managerId && activeIds.has(t.managerId)) set.add(t.managerId);
       peopleOf.set(t.id, set);
     }
@@ -611,7 +626,9 @@ export class MeetingsService {
       .map((t) => {
         const people = peopleOf.get(t.id)!;
         const mine = items.filter((i) => touches(i, people));
-        const active = [...people].filter((id) => items.some((i) => i.user.id === id || i.assignees.some((a) => a.id === id)));
+        const active = [...people].filter((id) =>
+          items.some((i) => i.user.id === id || i.assignees.some((a) => a.id === id)),
+        );
         return {
           team: { id: t.id, name: t.name },
           managerId: t.managerId && activeIds.has(t.managerId) ? t.managerId : null,
@@ -625,7 +642,11 @@ export class MeetingsService {
 
     // People who have cards but sit in no team.
     const inSomeTeam = new Set([...peopleOf.values()].flatMap((s) => [...s]));
-    const loose = [...withCards].filter((id) => !inSomeTeam.has(id) && items.some((i) => i.user.id === id || i.assignees.some((a) => a.id === id)));
+    const loose = [...withCards].filter(
+      (id) =>
+        !inSomeTeam.has(id) &&
+        items.some((i) => i.user.id === id || i.assignees.some((a) => a.id === id)),
+    );
     if (loose.length) {
       const looseSet = new Set(loose);
       out.push({
@@ -781,11 +802,24 @@ export class MeetingsService {
   private async createMirrorTask(
     actor: Actor,
     project: ProjectRow,
-    card: { title: string; note: string | null; status: BoardItemStatus; userId: string; assigneeIds?: string[]; dueDate?: string; size?: import('@task-tracker/shared').TaskSize },
+    card: {
+      title: string;
+      note: string | null;
+      status: BoardItemStatus;
+      userId: string;
+      assigneeIds?: string[];
+      dueDate?: string;
+      size?: import('@task-tracker/shared').TaskSize;
+    },
   ): Promise<string> {
     const requested = [...new Set(card.assigneeIds ?? [card.userId])];
-    const allowed = await Promise.all(requested.map((id) => this.workspaces.isMember(project.workspaceId, id)));
-    if (allowed.some((member) => !member)) throw new BadRequestException('Tagged people must be members of the selected project workspace');
+    const allowed = await Promise.all(
+      requested.map((id) => this.workspaces.isMember(project.workspaceId, id)),
+    );
+    if (allowed.some((member) => !member))
+      throw new BadRequestException(
+        'Tagged people must be members of the selected project workspace',
+      );
     const task = await this.tasks.create(project.workspaceId, actor, {
       projectId: project.id,
       title: card.title,
@@ -807,12 +841,24 @@ export class MeetingsService {
     actor: Actor,
     taskId: string,
     workspaceId: string,
-    patch: { title?: string; note?: string | null; status?: BoardItemStatus; userId?: string; assigneeIds?: string[] },
+    patch: {
+      title?: string;
+      note?: string | null;
+      status?: BoardItemStatus;
+      userId?: string;
+      assigneeIds?: string[];
+    },
   ): Promise<void> {
-    const requested = patch.assigneeIds ?? (patch.userId === undefined ? undefined : [patch.userId]);
+    const requested =
+      patch.assigneeIds ?? (patch.userId === undefined ? undefined : [patch.userId]);
     if (requested) {
-      const allowed = await Promise.all([...new Set(requested)].map((id) => this.workspaces.isMember(workspaceId, id)));
-      if (allowed.some((member) => !member)) throw new BadRequestException('Tagged people must be members of the selected project workspace');
+      const allowed = await Promise.all(
+        [...new Set(requested)].map((id) => this.workspaces.isMember(workspaceId, id)),
+      );
+      if (allowed.some((member) => !member))
+        throw new BadRequestException(
+          'Tagged people must be members of the selected project workspace',
+        );
     }
     const body = {
       ...(patch.title !== undefined ? { title: patch.title } : {}),
@@ -901,7 +947,11 @@ export class MeetingsService {
 
     const mirrors = await this.mirrorTasks([row.taskId]);
     const [refs, projectRefs] = await Promise.all([
-      this.userRefs([row.userId, row.createdById ?? '', ...[...mirrors.values()].flatMap((mirror) => mirror.assigneeIds)]),
+      this.userRefs([
+        row.userId,
+        row.createdById ?? '',
+        ...[...mirrors.values()].flatMap((mirror) => mirror.assigneeIds),
+      ]),
       this.projectRefs([row.projectId]),
     ]);
     return this.toItem(row, refs, 0, projectRefs, mirrors);
@@ -993,7 +1043,11 @@ export class MeetingsService {
       .where(eq(meetingBoardNotes.itemId, itemId));
     const mirrors = await this.mirrorTasks([row.taskId]);
     const [refs, projectRefs] = await Promise.all([
-      this.userRefs([row.userId, row.createdById ?? '', ...[...mirrors.values()].flatMap((mirror) => mirror.assigneeIds)]),
+      this.userRefs([
+        row.userId,
+        row.createdById ?? '',
+        ...[...mirrors.values()].flatMap((mirror) => mirror.assigneeIds),
+      ]),
       this.projectRefs([row.projectId]),
     ]);
     return this.toItem(row, refs, countRow?.count ?? 0, projectRefs, mirrors);
@@ -1101,6 +1155,8 @@ export class MeetingsService {
         boardId: board.id,
         itemId: input.itemId ?? null,
         authorId: actor.id,
+        // Card discussion is always a note; briefings only belong to the week.
+        kind: input.itemId ? 'NOTE' : (input.kind ?? 'NOTE'),
         body: input.body,
       })
       .returning();
@@ -1109,14 +1165,16 @@ export class MeetingsService {
     const refs = await this.userRefs([row.authorId]);
     if (input.mentionIds && input.mentionIds.length > 0) {
       for (const targetId of input.mentionIds) {
-        await this.notifications.createNotification(
-          targetId,
-          actor.id,
-          'TASK_COMMENT',
-          'Mention in meeting notes',
-          `${refs.get(actor.id)?.name ?? 'Someone'} mentioned you in a meeting note.`,
-          { boardId: board.id, itemId: input.itemId },
-        ).catch((err) => this.logger.warn(`Could not notify user ${targetId}: ${err}`));
+        await this.notifications
+          .createNotification(
+            targetId,
+            actor.id,
+            'TASK_COMMENT',
+            'Mention in meeting notes',
+            `${refs.get(actor.id)?.name ?? 'Someone'} mentioned you in a meeting note.`,
+            { boardId: board.id, itemId: input.itemId },
+          )
+          .catch((err) => this.logger.warn(`Could not notify user ${targetId}: ${err}`));
       }
     }
 
@@ -1136,7 +1194,8 @@ export class MeetingsService {
   /** Only the author may edit their own words — admins can delete but not rewrite. */
   async updateNote(actor: Actor, noteId: string, input: UpdateBoardNoteInput): Promise<BoardNote> {
     const note = await this.loadNoteOrThrow(noteId);
-    if (note.authorId !== actor.id) throw new ForbiddenException('You can only edit your own notes');
+    if (note.authorId !== actor.id)
+      throw new ForbiddenException('You can only edit your own notes');
 
     const [row] = await this.db
       .update(meetingBoardNotes)

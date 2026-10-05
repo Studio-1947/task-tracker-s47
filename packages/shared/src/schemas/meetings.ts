@@ -101,6 +101,8 @@ export const createBoardNoteSchema = z
   .object({
     /** Omit for a board-level meeting note; set to comment on one card. */
     itemId: z.string().uuid().nullable().optional(),
+    /** Briefings are team-facing weekly context; card comments are always notes. */
+    kind: z.enum(['NOTE', 'BRIEFING']).optional(),
     body: z.string().min(1).max(4000),
     mentionIds: z.array(z.string().uuid()).max(50).optional(),
   })

@@ -349,7 +349,8 @@ export interface WorkspacePerformance {
   /** One actionable, calendar-aware state replacing the old unexplained "Idle" (spec section 10). */
   /** In-progress tasks whose owner has not given a real update within the policy threshold. */
   updateOverdueTasks: number;
-  state: 'WEEKLY_OFF' | 'BLOCKED' | 'AWAITING_REVIEW' | 'UPDATE_OVERDUE' | 'NO_ACTIVE_WORK' | 'ACTIVE';
+  state:
+    'WEEKLY_OFF' | 'BLOCKED' | 'AWAITING_REVIEW' | 'UPDATE_OVERDUE' | 'NO_ACTIVE_WORK' | 'ACTIVE';
 }
 
 export interface UpcomingDeadline {
@@ -703,11 +704,12 @@ export interface BoardItem {
   updatedAt: string;
 }
 
-/** A board-level meeting note, or a comment on a card when `itemId` is set. */
+/** A board-level meeting note/briefing, or a comment on a card when `itemId` is set. */
 export interface BoardNote {
   id: string;
   boardId: string;
   itemId: string | null;
+  kind: 'NOTE' | 'BRIEFING';
   author: UserRef;
   body: string;
   createdAt: string;
@@ -889,12 +891,19 @@ export interface WorkspaceMetrics {
     returnedSubmissions: { count: number; taskIds: string[] };
   };
   /** Scope changes are reported separately from rework, never folded into it. */
-  scopeChanges: { count: number; netEstimateMinutes: number; byClassification: Record<string, number> };
+  scopeChanges: {
+    count: number;
+    netEstimateMinutes: number;
+    byClassification: Record<string, number>;
+  };
   /** Deliverables accepted with no recorded submission: excluded from quality metrics rather than back-filled. */
   legacyUnverified: { count: number; taskIds: string[] };
-  reconciliation: { statusBreakdown: Record<string, number>; topLevelTotal: number; consistent: boolean };
+  reconciliation: {
+    statusBreakdown: Record<string, number>;
+    topLevelTotal: number;
+    consistent: boolean;
+  };
 }
-
 
 /** One calendar day's classification for a person (spec section 8): every day is exactly one of these. */
 export type AttendanceDayState =

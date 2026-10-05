@@ -91,7 +91,7 @@ function rollUp(items: BoardItem[]): BoardProgress {
   return p;
 }
 
-type Tab = 'board' | 'team' | 'notes';
+type Tab = 'board' | 'team' | 'briefing' | 'notes';
 /**
  * 'day' = the week split into two half-bands; 'member' = one swimlane per person;
  * 'project' = one lane per project, with unfiled work called out at the bottom.
@@ -390,7 +390,14 @@ export function MeetingBoardPage() {
           [
             { key: 'board', label: 'Board' },
             { key: 'team', label: 'Team & Progress' },
-            { key: 'notes', label: `Notes${board.notes.length ? ` (${board.notes.length})` : ''}` },
+            {
+              key: 'briefing',
+              label: `Briefing${board.notes.filter((n) => n.kind === 'BRIEFING').length ? ` (${board.notes.filter((n) => n.kind === 'BRIEFING').length})` : ''}`,
+            },
+            {
+              key: 'notes',
+              label: `Notes${board.notes.filter((n) => n.kind !== 'BRIEFING').length ? ` (${board.notes.filter((n) => n.kind !== 'BRIEFING').length})` : ''}`,
+            },
           ] as { key: Tab; label: string }[]
         ).map((t) => (
           <button
@@ -654,8 +661,18 @@ export function MeetingBoardPage() {
 
       {tab === 'team' ? <TeamPanel board={board} onPickWeek={setWeekStart} /> : null}
 
+      {tab === 'briefing' ? (
+        <BriefingPanel board={board} canWrite={canWrite} onError={setError} allUsers={allUsers} />
+      ) : null}
+
       {tab === 'notes' ? (
-        <NotesPanel board={board} isAdmin={isAdmin} canWrite={canWrite} onError={setError} allUsers={allUsers} />
+        <NotesPanel
+          board={board}
+          isAdmin={isAdmin}
+          canWrite={canWrite}
+          onError={setError}
+          allUsers={allUsers}
+        />
       ) : null}
 
       {openItem ? (
@@ -1278,6 +1295,152 @@ function TeamPanel({
 
 /* ── notes ───────────────────────────────────────────────────────────────── */
 
+function BriefingPanel({
+  board,
+  canWrite,
+  onError,
+  allUsers,
+}: {
+  board: MeetingBoardDetail;
+  canWrite: boolean;
+  onError: (m: string | null) => void;
+  allUsers?: UserRef[];
+}) {
+  const createBriefing = useCreateBoardNote();
+  const [draft, setDraft] = useState('');
+  const briefings = board.notes.filter((note) => note.kind === 'BRIEFING');
+
+  const post = () => {
+    const body = draft.trim();
+    if (!body) return;
+    const people = allUsers ?? board.members.map((member) => member.user);
+    const mentionIds = people
+      .filter((person) =>
+        body.toLowerCase().includes(`@${person.name.replace(/\s+/g, '')}`.toLowerCase()),
+      )
+      .map((person) => person.id);
+    onError(null);
+    createBriefing
+      .mutateAsync({ boardId: board.id, input: { body, kind: 'BRIEFING', mentionIds } })
+      .then(() => setDraft(''))
+      .catch((e: unknown) =>
+        onError(e instanceof ApiRequestError ? e.message : 'Could not post briefing'),
+      );
+  };
+
+  return (
+    <div className="space-y-5">
+      <Card className="p-4 sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-700 dark:text-slate-200">Week ahead</h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              The live plan for {monthDay(board.weekStart)} – {monthDay(board.weekEnd)}. Flag
+              changes, priorities, or help needed below.
+            </p>
+          </div>
+          <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300">
+            {board.items.length} planned card{board.items.length === 1 ? '' : 's'}
+          </span>
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          {board.days.map((day) => {
+            const items = board.items.filter((item) => item.dayDate === day);
+            return (
+              <div
+                key={day}
+                className="min-w-0 rounded-lg border border-slate-100 bg-slate-50/70 p-3 dark:border-[#2d2d2d] dark:bg-[#1d1d1d]"
+              >
+                <div className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  {weekdayShort(day)} <span className="text-slate-400">{dayNum(day)}</span>
+                </div>
+                {items.length ? (
+                  <ul className="mt-2 space-y-1.5">
+                    {items.slice(0, 4).map((item) => (
+                      <li
+                        key={item.id}
+                        className="truncate text-xs text-slate-600 dark:text-slate-300"
+                        title={item.title}
+                      >
+                        <span className="mr-1 text-indigo-500">•</span>
+                        {item.title}
+                      </li>
+                    ))}
+                    {items.length > 4 ? (
+                      <li className="text-[11px] text-slate-400">+{items.length - 4} more</li>
+                    ) : null}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-xs text-slate-400">No cards planned</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      <Card className="p-4 sm:p-5">
+        <h2 className="text-sm font-bold text-slate-700 dark:text-slate-200">
+          Team briefings {briefings.length ? `(${briefings.length})` : ''}
+        </h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Share changes to the plan, key context, risks, or anything the team should adjust.
+        </p>
+        {briefings.length ? (
+          <ul className="mt-4 space-y-3.5">
+            {briefings.map((briefing) => (
+              <li key={briefing.id} className="flex gap-2.5">
+                <Avatar user={briefing.author} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                      {briefing.author.name}
+                    </span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                      {stamp(briefing.createdAt)}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-slate-600 dark:text-slate-350">
+                    {linkify(briefing.body, { users: allUsers ?? [] })}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-4 text-sm text-slate-400 dark:text-slate-500">
+            No briefing updates yet.
+          </p>
+        )}
+        {canWrite ? (
+          <div className="mt-4 border-t border-slate-100 pt-4 dark:border-[#2d2d2d]">
+            <textarea
+              value={draft}
+              rows={3}
+              placeholder="Share an update for the week ahead…"
+              onChange={(e) => setDraft(e.target.value)}
+              className="w-full resize-y rounded-lg border border-slate-200 bg-white/80 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 dark:border-[#2d2d2d] dark:bg-[#1a1a1a] dark:text-white dark:placeholder-slate-500"
+            />
+            <div className="mt-2 flex justify-end">
+              <Button
+                className="px-4 py-2 text-xs"
+                disabled={!draft.trim() || createBriefing.isPending}
+                onClick={post}
+              >
+                {createBriefing.isPending ? 'Posting…' : 'Post briefing'}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-4 text-xs text-slate-400 dark:text-slate-500">
+            This week is locked — briefings are read-only.
+          </p>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 function NotesPanel({
   board,
   isAdmin,
@@ -1302,6 +1465,7 @@ function NotesPanel({
   const [draft, setDraft] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingBody, setEditingBody] = useState('');
+  const notes = board.notes.filter((note) => note.kind !== 'BRIEFING');
 
   const personOptions = (allUsers ?? board.members.map((m) => m.user)).map((u) => ({
     id: u.id,
@@ -1379,16 +1543,16 @@ function NotesPanel({
 
       <Card className="p-4 sm:p-5">
         <h2 className="mb-3 text-sm font-bold text-slate-700 dark:text-slate-200">
-          Meeting notes {board.notes.length ? `(${board.notes.length})` : ''}
+          Meeting notes {notes.length ? `(${notes.length})` : ''}
         </h2>
 
-        {board.notes.length === 0 ? (
+        {notes.length === 0 ? (
           <p className="mb-4 text-sm text-slate-400 dark:text-slate-500">
             Nothing noted yet — decisions, blockers and follow-ups go here.
           </p>
         ) : (
           <ul className="mb-4 space-y-3.5">
-            {board.notes.map((n) => {
+            {notes.map((n) => {
               const mine = n.author.id === user?.id;
               return (
                 <li key={n.id} className="flex gap-2.5">
@@ -1522,14 +1686,28 @@ function NotesPanel({
 }
 
 const PersonIcon = (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+  <svg
+    width="13"
+    height="13"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.5"
+  >
     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
     <circle cx="12" cy="7" r="4" />
   </svg>
 );
 
 const ProjectIcon = (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+  <svg
+    width="13"
+    height="13"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.5"
+  >
     <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
     <path d="M3 9h18" />
     <path d="M9 21V9" />
@@ -1608,7 +1786,9 @@ function TagDropdown({
                   }}
                   className="flex w-full items-center gap-2 truncate rounded px-2 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-[#2a2a2a]"
                 >
-                  {o.avatarUser ? <Avatar user={o.avatarUser} size="sm" className="h-5 w-5 text-[9px]" /> : null}
+                  {o.avatarUser ? (
+                    <Avatar user={o.avatarUser} size="sm" className="h-5 w-5 text-[9px]" />
+                  ) : null}
                   {o.name}
                 </button>
               </li>
