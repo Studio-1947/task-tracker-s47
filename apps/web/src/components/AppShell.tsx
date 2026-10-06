@@ -9,6 +9,7 @@ import { Button } from './ui';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationCenter } from './NotificationCenter';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
+import { ChatLauncher } from './ChatLauncher';
 
 const nav = [
   {
@@ -588,6 +589,7 @@ export function AppShell() {
           </div>
         </main>
       </div>
+      <ChatLauncher />
     </div>
   );
 }

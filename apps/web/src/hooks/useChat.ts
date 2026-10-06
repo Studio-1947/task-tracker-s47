@@ -25,6 +25,36 @@ import { connectSocket, emitAck, getSocket } from '../lib/socket';
 import { useAuth } from '../stores/auth';
 import { useChatUi } from '../stores/chat';
 
+let lastNotificationToneAt = 0;
+
+/** Plays a short, unobtrusive notification tone without requiring an audio asset. */
+function playNotificationTone(): void {
+  const now = Date.now();
+  if (now - lastNotificationToneAt < 600) return;
+  lastNotificationToneAt = now;
+
+  try {
+    const audioWindow = window as typeof window & { webkitAudioContext?: typeof AudioContext };
+    const AudioContextClass = audioWindow.AudioContext ?? audioWindow.webkitAudioContext;
+    if (!AudioContextClass) return;
+    const context = new AudioContextClass();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(880, context.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(1175, context.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.0001, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.07, context.currentTime + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.2);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.21);
+    oscillator.addEventListener('ended', () => void context.close());
+  } catch {
+    // Browsers can block sound until the user has interacted with the page.
+  }
+}
+
 export interface MessagesPage {
   items: ChatMessage[];
   hasMore: boolean;
@@ -333,6 +363,7 @@ export function useChatBridge(): void {
       upsertMessage(qc, message);
       bumpConversation(qc, message, myIdRef.current, ui.getState().activeConversationId);
       ui.getState().clearTyping(message.conversationId, message.sender.id);
+      if (message.sender.id !== myIdRef.current) playNotificationTone();
     };
     const onMessageUpdate = ({ message }: MessageEvent) => upsertMessage(qc, message);
     const onMessageDelete = ({ conversationId, messageId }: MessageDeletedEvent) =>
