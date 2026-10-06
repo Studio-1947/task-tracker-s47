@@ -56,3 +56,57 @@ export function ProgressBar({
     </div>
   );
 }
+
+export function ProgressPie({
+  progress,
+  size = 40,
+  compact = false,
+}: {
+  progress: BoardProgress;
+  size?: number;
+  compact?: boolean;
+}) {
+  const { total, done, inProgress, percent } = progress;
+  const donePct = total === 0 ? 0 : (done / total) * 100;
+  const wipPct = total === 0 ? 0 : (inProgress / total) * 100;
+
+  // Emerald for done, amber for wip, slate for remaining.
+  const gradient = `conic-gradient(
+    #10b981 0% ${donePct}%, 
+    #fbbf24 ${donePct}% ${donePct + wipPct}%, 
+    #f1f5f9 ${donePct + wipPct}% 100%
+  )`;
+  const darkGradient = `conic-gradient(
+    #10b981 0% ${donePct}%, 
+    #f59e0b ${donePct}% ${donePct + wipPct}%, 
+    #262626 ${donePct + wipPct}% 100%
+  )`;
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex flex-col text-right">
+        <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{percent}%</span>
+        {!compact && (
+          <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
+            {done}/{total} done
+          </span>
+        )}
+      </div>
+      <div 
+        className="relative flex items-center justify-center rounded-full"
+        style={{ width: size, height: size }}
+      >
+        <div 
+          className="absolute inset-0 rounded-full dark:hidden"
+          style={{ background: gradient }}
+        />
+        <div 
+          className="absolute inset-0 rounded-full hidden dark:block"
+          style={{ background: darkGradient }}
+        />
+        {/* Inner circle to make it a donut */}
+        <div className="absolute inset-[3px] rounded-full bg-white dark:bg-[#161616]" />
+      </div>
+    </div>
+  );
+}

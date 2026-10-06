@@ -11,7 +11,7 @@ import {
 import { Avatar } from './Avatar';
 import { BoardCardComposer } from './BoardCardComposer';
 import { BoardItemCard } from './BoardItemCard';
-import { ProgressBar } from './ProgressBar';
+import { ProgressBar, ProgressPie } from './ProgressBar';
 import { EmptyState } from './ui';
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -90,7 +90,7 @@ export function MemberSwimlanes({
           {rows.map((m) => (
             <div key={m.user.id} className="flex border-b border-slate-100 last:border-b-0 dark:border-[#2a2a2a]">
               {/* pinned identity, mood and progress */}
-              <div className="sticky left-0 z-10 w-44 shrink-0 border-r border-slate-100 bg-white px-3 py-3 sm:w-52 dark:border-[#2a2a2a] dark:bg-[#1c1c1c]">
+              <div className="sticky left-0 z-10 w-36 shrink-0 border-r border-slate-100 bg-white p-2 sm:w-44 dark:border-[#2a2a2a] dark:bg-[#1c1c1c]">
                 <div className="flex items-center gap-2">
                   <Avatar user={m.user} size="sm" />
                   <div className="min-w-0 flex-1">
@@ -113,17 +113,12 @@ export function MemberSwimlanes({
                     )}
                   </div>
                 </div>
-                <div className="mt-2">
-                  <ProgressBar progress={m.progress} size="sm" showLabel={false} />
-                  <p className="mt-1 text-[10px] font-medium text-slate-400 dark:text-slate-500">
-                    {m.progress.total === 0 ? (
-                      <span className="text-amber-600 dark:text-amber-450">Nothing planned</span>
-                    ) : (
-                      <>
-                        {m.progress.done}/{m.progress.total} done · {m.progress.percent}%
-                      </>
-                    )}
-                  </p>
+                <div className="mt-1 flex items-center justify-end">
+                  {m.progress.total === 0 ? (
+                    <span className="text-[9px] font-medium text-amber-600 dark:text-amber-450 mr-auto">Nothing planned</span>
+                  ) : (
+                    <ProgressPie progress={m.progress} size={28} />
+                  )}
                 </div>
               </div>
 

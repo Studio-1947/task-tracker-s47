@@ -40,7 +40,7 @@ import { BoardProjectChip } from '../components/BoardProjectChip';
 import { MeetingItemDrawer } from '../components/MeetingItemDrawer';
 import { MeetingTaskDrawer } from '../components/MeetingTaskDrawer';
 import { MemberSwimlanes } from '../components/MemberSwimlanes';
-import { ProgressBar } from '../components/ProgressBar';
+import { ProgressBar, ProgressPie } from '../components/ProgressBar';
 import { TeamProgressCards, TeamProgressStrip } from '../components/TeamProgress';
 import { ProjectLanes } from '../components/ProjectLanes';
 import { Button, Card, EmptyState, ErrorState, Spinner } from '../components/ui';
@@ -1235,13 +1235,7 @@ function TeamPanel({
                         </p>
                       )}
                     </div>
-                    <span className="text-lg font-bold text-slate-700 dark:text-slate-200">
-                      {m.progress.percent}%
-                    </span>
-                  </div>
-
-                  <div className="mt-3">
-                    <ProgressBar progress={m.progress} />
+                    <ProgressPie progress={m.progress} size={32} />
                   </div>
 
                   <div className="mt-3 grid grid-cols-2 gap-3">
@@ -1329,6 +1323,7 @@ function BriefingPanel({
 }) {
   const createBriefing = useCreateBoardNote();
   const [draft, setDraft] = useState('');
+  const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
   const briefings = board.notes.filter((note) => note.kind === 'BRIEFING');
 
   const post = () => {
@@ -1377,7 +1372,7 @@ function BriefingPanel({
                 </div>
                 {items.length ? (
                   <ul className="mt-2 space-y-1.5">
-                    {items.slice(0, 4).map((item) => (
+                    {items.slice(0, expandedDays[day] ? items.length : 4).map((item) => (
                       <li
                         key={item.id}
                         className="truncate text-xs text-slate-600 dark:text-slate-300"
@@ -1387,8 +1382,21 @@ function BriefingPanel({
                         {item.title}
                       </li>
                     ))}
-                    {items.length > 4 ? (
-                      <li className="text-[11px] text-slate-400">+{items.length - 4} more</li>
+                    {!expandedDays[day] && items.length > 4 ? (
+                      <li 
+                        className="text-[11px] text-slate-400 cursor-pointer hover:text-indigo-500 transition-colors select-none font-medium"
+                        onClick={() => setExpandedDays(prev => ({ ...prev, [day]: true }))}
+                      >
+                        +{items.length - 4}
+                      </li>
+                    ) : null}
+                    {expandedDays[day] && items.length > 4 ? (
+                      <li 
+                        className="text-[11px] text-slate-400 cursor-pointer hover:text-indigo-500 transition-colors select-none font-medium"
+                        onClick={() => setExpandedDays(prev => ({ ...prev, [day]: false }))}
+                      >
+                        - show less
+                      </li>
                     ) : null}
                   </ul>
                 ) : (
