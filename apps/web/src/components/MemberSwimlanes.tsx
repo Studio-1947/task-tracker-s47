@@ -90,7 +90,7 @@ export function MemberSwimlanes({
           {rows.map((m) => (
             <div key={m.user.id} className="flex border-b border-slate-100 last:border-b-0 dark:border-[#2a2a2a]">
               {/* pinned identity, mood and progress */}
-              <div className="sticky left-0 z-10 w-36 shrink-0 border-r border-slate-100 bg-white p-2 sm:w-44 dark:border-[#2a2a2a] dark:bg-[#1c1c1c]">
+              <div className="sticky left-0 z-10 w-28 shrink-0 border-r border-slate-100 bg-white p-2 sm:w-36 dark:border-[#2a2a2a] dark:bg-[#1c1c1c]">
                 <div className="flex items-center gap-2">
                   <Avatar user={m.user} size="sm" />
                   <div className="min-w-0 flex-1">
@@ -113,7 +113,7 @@ export function MemberSwimlanes({
                     )}
                   </div>
                 </div>
-                <div className="mt-1 flex items-center justify-end">
+                <div className="mt-2 flex items-center justify-start">
                   {m.progress.total === 0 ? (
                     <span className="text-[9px] font-medium text-amber-600 dark:text-amber-450 mr-auto">Nothing planned</span>
                   ) : (

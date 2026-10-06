@@ -84,16 +84,8 @@ export function ProgressPie({
 
   return (
     <div className="flex items-center gap-2">
-      <div className="flex flex-col text-right">
-        <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{percent}%</span>
-        {!compact && (
-          <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
-            {done}/{total} done
-          </span>
-        )}
-      </div>
       <div 
-        className="relative flex items-center justify-center rounded-full"
+        className="relative flex items-center justify-center rounded-full shrink-0"
         style={{ width: size, height: size }}
       >
         <div 
@@ -106,6 +98,14 @@ export function ProgressPie({
         />
         {/* Inner circle to make it a donut */}
         <div className="absolute inset-[3px] rounded-full bg-white dark:bg-[#161616]" />
+      </div>
+      <div className="flex flex-col text-left">
+        <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{percent}%</span>
+        {!compact && (
+          <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
+            {done}/{total} done
+          </span>
+        )}
       </div>
     </div>
   );
