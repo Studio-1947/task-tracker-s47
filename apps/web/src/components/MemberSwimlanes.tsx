@@ -11,7 +11,7 @@ import {
 import { Avatar } from './Avatar';
 import { BoardCardComposer } from './BoardCardComposer';
 import { BoardItemCard } from './BoardItemCard';
-import { ProgressBar, ProgressPie } from './ProgressBar';
+import { ProgressPie } from './ProgressBar';
 import { EmptyState } from './ui';
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
