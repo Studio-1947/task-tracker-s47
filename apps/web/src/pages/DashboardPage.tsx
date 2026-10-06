@@ -9,11 +9,13 @@ import {
   type UpcomingDeadline,
   type WorkloadEntry,
   type WorkspacePerformance,
+  type ReviewQueueItem,
 } from '@task-tracker/shared';
 import {
   useAdminDashboard,
   useMemberDashboard,
 } from '../hooks/useDashboard';
+import { useReviewQueue } from '../hooks/useTasks';
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import { useAuth } from '../stores/auth';
 import { useWorkspaceContext } from '../stores/workspace-context';
@@ -513,6 +515,56 @@ function OverdueTaskListCard({ items, total }: { items: OverdueTaskRow[]; total:
   );
 }
 
+function PendingReviewsCard({ items }: { items: ReviewQueueItem[] }) {
+  const total = items.length;
+  const previewItems = items.slice(0, 5);
+  
+  return (
+    <Card className="p-6 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-455 dark:text-slate-400">
+          Pending reviews
+        </h2>
+        {total > 0 ? (
+          <span className="rounded-full bg-amber-100 dark:bg-amber-950/30 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-400 animate-pulse">
+            {total}
+          </span>
+        ) : null}
+      </div>
+      {items.length === 0 ? (
+        <p className="text-sm text-slate-400 dark:text-slate-400 py-2">No pending reviews.</p>
+      ) : (
+        <div className="space-y-3">
+          {previewItems.map((t) => (
+            <Link
+              key={t.submissionId}
+              to={`/workspaces/${t.workspaceId}?task=${t.taskId}`}
+              className="flex items-center gap-4 rounded-xl border border-slate-100 bg-white/50 dark:border-slate-800/40 dark:bg-slate-900/30 p-3.5 hover:border-amber-500 dark:hover:border-amber-500/50 hover:shadow-md hover:shadow-amber-500/[0.02] hover:-translate-y-0.5 transition-all duration-150"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  {t.taskTitle}
+                </p>
+                <p className="mt-1 text-xs text-slate-450 dark:text-slate-400 font-medium">
+                  <span className="font-mono bg-slate-100 dark:bg-slate-800/80 px-1 py-0.5 rounded text-[10px] mr-1">
+                    {t.taskRef}
+                  </span>{' '}
+                  · {t.workspaceName} · submitted by {t.submitter.name}
+                </p>
+              </div>
+            </Link>
+          ))}
+          {total > previewItems.length ? (
+            <Link to="/reviews" className="block pt-1 text-xs text-indigo-500 hover:underline">
+              View all {total} pending reviews &rarr;
+            </Link>
+          ) : null}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function UpcomingDeadlinesCard({ items }: { items: UpcomingDeadline[] }) {
   return (
     <Card className="p-6 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
@@ -587,6 +639,11 @@ function AdminView() {
     workspaceContextIds[0] || requestedWorkspace || filters.workspaceId || firstWorkspace;
   const hasWorkspaceScope = workspaceContextIds.length > 0;
   const metricFilters: MetricFilters = { ...filters, workspaceId: selectedWorkspaceId };
+  
+  const { data: reviewQueue } = useReviewQueue();
+  const visibleReviewQueue = (reviewQueue ?? []).filter(
+    (item) => workspaceContextIds.length === 0 || workspaceContextIds.includes(item.workspaceId),
+  );
   const changeFilters = (next: MetricFilters) => {
     setFilters(next);
     if (next.workspaceId !== selectedWorkspaceId) {
@@ -614,10 +671,26 @@ function AdminView() {
           <AtRiskCard overdueCount={data.overdueTasks} noDeadlineCount={data.noDeadlineTasks} upcoming={data.upcomingDeadlines} />
           <UpcomingDeadlinesCard items={data.upcomingDeadlines} />
         </div>
-        <div id="overdue-list" className="scroll-mt-20">
-          <OverdueTaskListCard items={data.overdueTaskList} total={data.overdueTasks} />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div id="overdue-list" className="scroll-mt-20">
+            <OverdueTaskListCard items={data.overdueTaskList} total={data.overdueTasks} />
+          </div>
+          <div id="pending-reviews" className="scroll-mt-20">
+            <PendingReviewsCard items={visibleReviewQueue} />
+          </div>
         </div>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+          <Stat
+            label="Pending reviews"
+            value={visibleReviewQueue.length}
+            tone={visibleReviewQueue.length > 0 ? 'danger' : undefined}
+            to="/reviews"
+            scope={
+              hasWorkspaceScope
+                ? 'Selected workspace(s) queue'
+                : 'All workspaces pending reviews'
+            }
+          />
           <Stat
             label="Overdue commitments"
             value={data.overdueTasks}
