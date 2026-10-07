@@ -248,7 +248,7 @@ export class DashboardService {
           COALESCE(
             ${tasks.currentEstimateMinutes},
             ${tasks.baselineEstimateMinutes},
-            CASE ${tasks.size}
+            CASE ${tasks.size}::text
               WHEN 'MINI' THEN 10
               WHEN 'SMALL' THEN 20
               WHEN 'MEDIUM' THEN 35
