@@ -138,7 +138,7 @@ export function LineChart({ points }: { points: WeeklyCompletionPoint[] }) {
  * Horizontal bar list (label | track | value) — generalization of the
  * StatusBreakdown row pattern. Values are direct-labeled.
  */
-export function HBarList({ items }: { items: { key: string; label: ReactNode; value: number }[] }) {
+export function HBarList({ items }: { items: { key: string; label: ReactNode; value: number; displayValue?: ReactNode }[] }) {
   const max = Math.max(1, ...items.map((i) => i.value));
   return (
     <div className="space-y-3.5">
@@ -151,7 +151,7 @@ export function HBarList({ items }: { items: { key: string; label: ReactNode; va
               style={{ width: `${Math.round((item.value / max) * 100)}%` }}
             />
           </div>
-          <span className="w-8 shrink-0 text-right text-xs font-bold text-slate-500 dark:text-slate-400">{item.value}</span>
+          <span className="w-auto shrink-0 text-right text-xs font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">{item.displayValue ?? item.value}</span>
         </div>
       ))}
     </div>

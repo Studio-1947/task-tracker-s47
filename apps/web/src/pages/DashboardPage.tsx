@@ -185,31 +185,40 @@ function WeeklyCompletionCard({ points }: { points: AdminData['weeklyCompletion'
 }
 
 function TeamWorkloadCard({ entries }: { entries: WorkloadEntry[] }) {
+  const sortedEntries = [...entries].sort((a, b) => b.totalEstimatedMinutes - a.totalEstimatedMinutes);
+
   return (
     <Card className="p-6 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
       <h2 className="mb-4 text-xs font-bold uppercase tracking-wider text-slate-455 dark:text-slate-400">
         Team workload (open tasks assigned)
       </h2>
-      {entries.length === 0 ? (
+      {sortedEntries.length === 0 ? (
         <p className="text-sm text-slate-400 dark:text-slate-400 py-2">No tasks assigned yet.</p>
       ) : (
         <HBarList
-          items={entries.map((e) => ({
-            key: e.user.id,
-            value: e.openTasks,
-            label: (
-              <span className="flex min-w-0 items-center gap-2.5">
-                <Avatar
-                  user={e.user}
-                  size="sm"
-                  className="ring-2 ring-slate-100 dark:ring-slate-800/40"
-                />
-                <span className="truncate text-sm font-semibold text-slate-700 dark:text-slate-200">
-                  {e.user.name}
-                </span>
-              </span>
-            ),
-          }))}
+          items={sortedEntries.map((e) => {
+            const hours = Math.floor(e.totalEstimatedMinutes / 60);
+            const mins = e.totalEstimatedMinutes % 60;
+            const timeStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+
+            return {
+              key: e.user.id,
+              value: e.totalEstimatedMinutes || e.openTasks,
+              displayValue: `${e.openTasks} tasks (${timeStr})`,
+              label: (
+                <Link to={`/meetings?assignee=${e.user.id}`} className="flex min-w-0 items-center gap-2.5 hover:opacity-80 transition-opacity">
+                  <Avatar
+                    user={e.user}
+                    size="sm"
+                    className="ring-2 ring-slate-100 dark:ring-slate-800/40"
+                  />
+                  <span className="truncate text-sm font-semibold text-slate-700 dark:text-slate-200">
+                    {e.user.name}
+                  </span>
+                </Link>
+              ),
+            };
+          })}
         />
       )}
     </Card>

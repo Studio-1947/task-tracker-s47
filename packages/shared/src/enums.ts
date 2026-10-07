@@ -50,6 +50,7 @@ export type Priority = (typeof Priority)[keyof typeof Priority];
 export const PRIORITIES = Object.values(Priority);
 
 export const TaskSize = {
+  MINI: 'MINI',
   SMALL: 'SMALL',
   MEDIUM: 'MEDIUM',
   LARGE: 'LARGE',
@@ -58,6 +59,7 @@ export type TaskSize = (typeof TaskSize)[keyof typeof TaskSize];
 export const TASK_SIZES = Object.values(TaskSize);
 
 export const TASK_SIZE_LABELS: Record<TaskSize, string> = {
+  MINI: 'Mini task (5–10 min)',
   SMALL: 'Short task (≤ 20 min)',
   MEDIUM: 'Medium task (> 20–50 min)',
   LARGE: 'Big task (> 50–100 min)',
@@ -65,6 +67,7 @@ export const TASK_SIZE_LABELS: Record<TaskSize, string> = {
 
 /** Default effort forecast associated with the work-scale selector. */
 export const TASK_SIZE_ESTIMATE_MINUTES: Record<TaskSize, number> = {
+  MINI: 10,
   SMALL: 20,
   MEDIUM: 35,
   LARGE: 75,

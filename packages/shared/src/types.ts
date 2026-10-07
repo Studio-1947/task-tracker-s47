@@ -330,6 +330,7 @@ export interface WeeklyCompletionPoint {
 export interface WorkloadEntry {
   user: UserRef;
   openTasks: number;
+  totalEstimatedMinutes: number;
 }
 
 /** Per-workspace ("office") rollup for the admin performance table. */

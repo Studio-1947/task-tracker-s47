@@ -122,8 +122,13 @@ export function MeetingBoardPage() {
     workspaceId: string;
     boardItemId?: string;
   } | null>(null);
-  const [ownerFilter, setOwnerFilter] = useState<'all' | 'mine' | 'selected'>('all');
-  const [watchedMemberIds, setWatchedMemberIds] = useState<string[]>([]);
+  const [ownerFilter, setOwnerFilter] = useState<'all' | 'mine' | 'selected'>(() => {
+    return searchParams.has('assignee') ? 'selected' : 'all';
+  });
+  const [watchedMemberIds, setWatchedMemberIds] = useState<string[]>(() => {
+    const assignee = searchParams.get('assignee');
+    return assignee ? [assignee] : [];
+  });
   const [projectFilter, setProjectFilter] = useState<ProjectFilter>('all');
   const [viewMode, setViewMode] = useState<ViewMode>(
     () => (localStorage.getItem('tt.meetings-view') as ViewMode | null) ?? 'day',

@@ -244,6 +244,19 @@ export class DashboardService {
         email: users.email,
         avatarKey: users.avatarKey,
         c: count(),
+        totalEst: sql<number>`sum(
+          COALESCE(
+            ${tasks.currentEstimateMinutes},
+            ${tasks.baselineEstimateMinutes},
+            CASE ${tasks.size}
+              WHEN 'MINI' THEN 10
+              WHEN 'SMALL' THEN 20
+              WHEN 'MEDIUM' THEN 35
+              WHEN 'LARGE' THEN 75
+              ELSE 0
+            END
+          )
+        )`,
       })
       .from(taskAssignees)
       .innerJoin(tasks, eq(tasks.id, taskAssignees.taskId))
@@ -262,6 +275,7 @@ export class DashboardService {
     return rows.map((r) => ({
       user: { id: r.id, name: r.name, email: r.email, avatarKey: r.avatarKey },
       openTasks: Number(r.c),
+      totalEstimatedMinutes: Number(r.totalEst ?? 0),
     }));
   }
 
