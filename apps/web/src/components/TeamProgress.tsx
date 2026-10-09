@@ -11,7 +11,17 @@ export function TeamProgressStrip({ board }: { board: MeetingBoardDetail }) {
   if (teams.length === 0) return null;
   return (
     <div className="mt-4" data-team-strip>
-      <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Progress by team</div>
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Progress by team</div>
+        <div className="group relative flex items-center justify-center">
+          <span className="cursor-help rounded-full bg-slate-200 text-[10px] font-bold text-slate-500 w-4 h-4 inline-flex items-center justify-center dark:bg-[#2a2a2a] dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">?</span>
+          <div className="absolute left-1/2 bottom-full mb-2 w-64 -translate-x-1/2 scale-95 opacity-0 pointer-events-none transition-all group-hover:scale-100 group-hover:opacity-100 group-hover:pointer-events-auto z-50 rounded-lg bg-slate-900 p-3 text-xs text-slate-200 shadow-xl dark:bg-slate-800 border border-slate-700">
+            <p className="font-bold mb-1 text-white">Cross-team tasks</p>
+            <p className="text-slate-300 leading-relaxed">If a task involves members from multiple teams, it is counted in each team's progress, but only counted once in the overall "Everyone" total. This means team totals may sum up to more than the overall total.</p>
+            <div className="absolute -bottom-1.5 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 bg-slate-900 dark:bg-slate-800 border-b border-r border-slate-700"></div>
+          </div>
+        </div>
+      </div>
       <ul className="grid gap-x-6 gap-y-2.5 sm:grid-cols-2 xl:grid-cols-3">
         {teams.map((t) => (
           <li key={t.team?.id ?? 'none'} data-team-row={t.team?.id ?? 'none'}>
