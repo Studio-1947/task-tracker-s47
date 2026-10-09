@@ -1,6 +1,6 @@
 {
-  "id": "c4557e6c-4d96-46dc-a2ce-ec1bed14cc92",
-  "prevId": "17253f1c-62fa-46cb-9b51-47ee631b3a8a",
+  "id": "5b2f11a5-b2af-4ad7-ab72-b91a7ff72114",
+  "prevId": "c4557e6c-4d96-46dc-a2ce-ec1bed14cc92",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3302,6 +3302,142 @@
       "uniqueConstraints": {
         "attendance_user_date_uq": {
           "name": "attendance_user_date_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "user_id",
+            "work_date"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.comp_off_requests": {
+      "name": "comp_off_requests",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "work_date": {
+          "name": "work_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "varchar(1000)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "earned_days": {
+          "name": "earned_days",
+          "type": "numeric(5, 1)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "leave_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PENDING'"
+        },
+        "reviewed_by_id": {
+          "name": "reviewed_by_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reviewed_at": {
+          "name": "reviewed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "review_note": {
+          "name": "review_note",
+          "type": "varchar(1000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "comp_off_status_idx": {
+          "name": "comp_off_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "comp_off_requests_user_id_users_id_fk": {
+          "name": "comp_off_requests_user_id_users_id_fk",
+          "tableFrom": "comp_off_requests",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "comp_off_requests_reviewed_by_id_users_id_fk": {
+          "name": "comp_off_requests_reviewed_by_id_users_id_fk",
+          "tableFrom": "comp_off_requests",
+          "tableTo": "users",
+          "columnsFrom": [
+            "reviewed_by_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "comp_off_user_date_uq": {
+          "name": "comp_off_user_date_uq",
           "nullsNotDistinct": false,
           "columns": [
             "user_id",
