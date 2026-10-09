@@ -1,4 +1,4 @@
-CREATE TABLE "comp_off_requests" (
+CREATE TABLE IF NOT EXISTS "comp_off_requests" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" uuid NOT NULL,
 	"work_date" date NOT NULL,
@@ -14,8 +14,14 @@ CREATE TABLE "comp_off_requests" (
 );
 --> statement-breakpoint
 ALTER TABLE "organisation_policies" ALTER COLUMN "late_grace_minutes" SET DEFAULT 10;--> statement-breakpoint
-ALTER TABLE "attendance_records" ADD COLUMN "automatic_half_day_leave_id" uuid;--> statement-breakpoint
-ALTER TABLE "comp_off_requests" ADD CONSTRAINT "comp_off_requests_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "comp_off_requests" ADD CONSTRAINT "comp_off_requests_reviewed_by_id_users_id_fk" FOREIGN KEY ("reviewed_by_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "comp_off_status_idx" ON "comp_off_requests" USING btree ("status");--> statement-breakpoint
-ALTER TABLE "attendance_records" ADD CONSTRAINT "attendance_records_automatic_half_day_leave_id_leave_requests_id_fk" FOREIGN KEY ("automatic_half_day_leave_id") REFERENCES "public"."leave_requests"("id") ON DELETE set null ON UPDATE no action;
+ALTER TABLE "attendance_records" ADD COLUMN IF NOT EXISTS "automatic_half_day_leave_id" uuid;--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "comp_off_requests" ADD CONSTRAINT "comp_off_requests_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "comp_off_requests" ADD CONSTRAINT "comp_off_requests_reviewed_by_id_users_id_fk" FOREIGN KEY ("reviewed_by_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "comp_off_status_idx" ON "comp_off_requests" USING btree ("status");--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "attendance_records" ADD CONSTRAINT "attendance_records_automatic_half_day_leave_id_leave_requests_id_fk" FOREIGN KEY ("automatic_half_day_leave_id") REFERENCES "public"."leave_requests"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
