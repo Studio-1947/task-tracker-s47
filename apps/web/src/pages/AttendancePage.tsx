@@ -136,6 +136,27 @@ export function AttendancePage() {
         { element: '#tour-corr-filter', popover: { title: 'Filter Corrections', description: 'Filter corrections by status to manage your backlog.', side: 'bottom' } },
         { element: '#tour-corr-list', popover: { title: 'Approve or Reject', description: 'Review why someone is requesting a time correction. Approving will permanently overwrite their punch record for that day.', side: 'top' } }
       ];
+    } else if (tab === 'calendar') {
+      steps = [
+        { element: '#tour-cal-settings', popover: { title: 'Organisation Settings', description: 'Configure global timezone, working hours, and unpaid break limits here.', side: 'bottom' } },
+        { element: '#tour-cal-holidays', popover: { title: 'Holidays', description: 'Add individual holidays or bulk upload a PDF to mark non-working days for the whole company.', side: 'top' } }
+      ];
+    } else if (tab === 'policy') {
+      steps = [
+        { element: '#tour-policy-doc', popover: { title: 'Policy Document', description: 'Upload and enforce attendance guidelines. Team members will be able to download and review this document.', side: 'bottom' } }
+      ];
+    } else if (tab === 'payroll') {
+      steps = [
+        { element: '#tour-payroll-export', popover: { title: 'Payroll Export', description: 'Generate a consolidated CSV file containing all approved leaves and total working hours, ready for your payroll provider.', side: 'bottom' } }
+      ];
+    } else if (tab === 'availability') {
+      steps = [
+        { element: '#tour-avail-calendar', popover: { title: 'Team Calendar', description: 'A consolidated view of approved leaves across the entire team to help you plan staffing.', side: 'bottom' } }
+      ];
+    } else if (tab === 'timing') {
+      steps = [
+        { element: '#tour-timing-late', popover: { title: 'Late & Overtime', description: 'Review who consistently arrives late or stays past their shift. Helps identify burnout or attendance issues.', side: 'bottom' } }
+      ];
     }
 
     if (steps.length > 0) {
@@ -1646,4 +1667,4 @@ function CorrectionsReviewTab() {
     </div>
   );
 }
-
+
