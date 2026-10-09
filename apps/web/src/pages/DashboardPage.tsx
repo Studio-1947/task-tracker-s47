@@ -24,7 +24,7 @@ import { useWorkspaceContext } from '../stores/workspace-context';
 import { ApiRequestError } from '../lib/api';
 import { Avatar } from '../components/Avatar';
 import { MetricFilterBar, MetricsPanel, type MetricFilters } from '../components/MetricsPanel';
-import { HBarList, LineChart, DonutChart } from '../components/charts';
+import { LineChart } from '../components/charts';
 import { Badge, Card, ErrorState, Spinner } from '../components/ui';
 import {
   describeAudit,
@@ -188,7 +188,7 @@ function WeeklyCompletionCard({ points }: { points: AdminData['weeklyCompletion'
 
 function TeamWorkloadCard({ entries }: { entries: WorkloadEntry[] }) {
   const sortedEntries = [...entries].sort((a, b) => b.totalEstimatedMinutes - a.totalEstimatedMinutes);
-  const maxWorkload = sortedEntries.length > 0 ? (sortedEntries[0].totalEstimatedMinutes || sortedEntries[0].openTasks) : 1;
+  const maxWorkload = sortedEntries.length > 0 ? (sortedEntries[0]?.totalEstimatedMinutes || sortedEntries[0]?.openTasks || 1) : 1;
 
   return (
     <Card className="p-6 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">

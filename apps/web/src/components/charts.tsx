@@ -208,7 +208,7 @@ export function DonutChart({
           );
         })}
       </svg>
-      {hover !== null && (
+      {hover !== null && data[hover] && (
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-4 animate-fade-in">
           <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold truncate w-full uppercase tracking-wider">
             {data[hover].label}
