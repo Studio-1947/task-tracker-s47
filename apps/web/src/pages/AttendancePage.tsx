@@ -5,6 +5,8 @@ import { useAuth } from '../stores/auth';
 import { ApiRequestError } from '../lib/api';
 import { useUsers } from '../hooks/useUsers';
 import { Avatar } from '../components/Avatar';
+import { driver } from 'driver.js';
+import 'driver.js/dist/driver.css';
 import { PolicyTab } from '../components/PolicyTab';
 import { PayrollTab } from '../components/PayrollTab';
 import { TeamAvailabilityTab } from '../components/TeamAvailabilityTab';
@@ -98,9 +100,57 @@ export function AttendancePage() {
     ...(!isAdmin && availabilityAccess?.allowed ? ([{ key: 'corrections', label: 'Attendance Corrections' }] as { key: Tab; label: string }[]) : []),
   ];
 
+  
+  const startTour = () => {
+    let steps: any[] = [];
+    if (tab === 'me') {
+      steps = [
+        { element: '#tour-checkin', popover: { title: 'Check In/Out', description: 'Use this button to record your daily attendance. The system captures your timestamp and approximate location automatically.' } },
+        { element: '#tour-calendar', popover: { title: 'Attendance Calendar', description: 'See your complete monthly history at a glance. Weekends and approved holidays are automatically highlighted.' } },
+        { element: '#tour-timing', popover: { title: 'Timing History', description: 'A breakdown of your exact punches for the last 7 days.' } }
+      ];
+    } else if (tab === 'types') {
+      steps = [
+        { element: '#tour-accrual', popover: { title: 'Monthly Accrual', description: 'Instead of an annual lump-sum, enter how many days employees earn each month. Set to 0 if you use a fixed annual default.', side: 'bottom', align: 'start' } },
+        { element: '#tour-carry', popover: { title: 'Carry Forward Max', description: 'At the end of the year, this is the maximum number of unused days that can roll over into the new year. Enter 0 for no rollover.', side: 'bottom', align: 'start' } },
+        { element: '#tour-expire', popover: { title: 'Expiry Months', description: 'If days roll over, how many months do they have to use them before they lapse? (e.g., 3 means they expire March 31st). Leave blank for never.', side: 'bottom', align: 'start' } },
+        { element: '#tour-policy', popover: { title: 'Carry Policy', description: 'Choose whether balances lapse after reaching the max cap, carry over completely without a cap, or just reset to 0 every Jan 1st.', side: 'bottom', align: 'start' } }
+      ];
+    } else if (tab === 'approvals') {
+      steps = [
+        { element: '#tour-filter', popover: { title: 'Status Filter', description: 'Toggle between Pending, Approved, and Declined leave requests.', side: 'bottom' } },
+        { element: '#tour-reqs', popover: { title: 'Leave Requests', description: 'Review requests from your team. If a request causes a staffing clash, the system will warn you in orange.', side: 'top' } }
+      ];
+    } else if (tab === 'allotments') {
+      steps = [
+        { element: '#tour-user-select', popover: { title: 'Select Member', description: 'Pick an employee to view or modify their leave balances.', side: 'bottom' } },
+        { element: '#tour-balances', popover: { title: 'Allotments', description: 'Override the default number of days granted for this specific user. This overrides the company-wide default balance.', side: 'top' } }
+      ];
+    } else if (tab === 'team') {
+      steps = [
+        { element: '#tour-log-date', popover: { title: 'Select Date', description: 'Pick any date to view the attendance log for the entire team.', side: 'bottom' } },
+        { element: '#tour-log-punches', popover: { title: 'Team Punches', description: 'See exactly when team members checked in and out, and their total hours for the day.', side: 'top' } }
+      ];
+    } else if (tab === 'corrections') {
+      steps = [
+        { element: '#tour-corr-filter', popover: { title: 'Filter Corrections', description: 'Filter corrections by status to manage your backlog.', side: 'bottom' } },
+        { element: '#tour-corr-list', popover: { title: 'Approve or Reject', description: 'Review why someone is requesting a time correction. Approving will permanently overwrite their punch record for that day.', side: 'top' } }
+      ];
+    }
+
+    if (steps.length > 0) {
+      driver({ showProgress: true, steps }).drive();
+    } else {
+      alert("A tour is not available for this tab yet.");
+    }
+  };
+
   return (
     <div className="animate-fade-in">
-      <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">Attendance</h1>
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">Attendance</h1>
+        <button type="button" onClick={startTour} className="rounded-lg border border-indigo-200 text-indigo-600 hover:bg-indigo-50 px-4 py-2 text-sm font-semibold dark:border-indigo-500/30 dark:text-indigo-400 dark:hover:bg-indigo-500/10 transition-colors">✨ Take a Tour</button>
+      </div>
 
       <div className="mt-5 flex gap-1.5 overflow-x-auto border-b border-slate-150 dark:border-slate-800 pb-px">
         {tabs.map((t) => (
@@ -143,7 +193,7 @@ function MyAttendanceTab() {
   return (
     <div className="space-y-6">
       <CheckInCard onOpenCorrection={() => setShowCorrection(true)} />
-      <MyTimingHistory />
+      <div id="tour-timing"><MyTimingHistory /></div>
       <BalancesRow />
       <MonthCalendar onCorrect={() => setShowCorrection(true)} />
       <MyCorrectionsSection onOpenCorrection={() => setShowCorrection(true)} />
@@ -982,21 +1032,21 @@ function LeaveTypesTab() {
               <Input type="number" min={0} max={365} value={defaultBalance} onChange={(e) => setDefaultBalance(Number(e.target.value))} />
             </div>
             <div className="w-24">
-              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Accrual</label>
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400" id="tour-accrual">Accrual <span className="cursor-help opacity-70" title="Days automatically credited on the 1st of each month (0 = fixed yearly days)">ⓘ</span></label>
               <Input type="number" min={0} max={31} step="0.25" value={accrualPerMonth} onChange={(e) => setAccrualPerMonth(Number(e.target.value))} />
             </div>
             <div className="w-24">
-              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Carry max</label>
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400" id="tour-carry">Carry max <span className="cursor-help opacity-70" title="Maximum number of unused days that can roll over into the next year">ⓘ</span></label>
               <Input type="number" min={0} max={365} step="0.5" value={carryForwardMax} onChange={(e) => setCarryForwardMax(Number(e.target.value))} />
             </div>
             <div className="w-24">
-              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Expire(mo)</label>
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400" id="tour-expire">Expire(mo) <span className="cursor-help opacity-70" title="How many months into the new year before carried-over days expire (blank = never)">ⓘ</span></label>
               <Input type="number" min={1} max={24} placeholder="never" value={expiryMonths} onChange={(e) => setExpiryMonths(e.target.value)} />
             </div>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="w-32">
-              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Carry Policy</label>
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400" id="tour-policy">Carry Policy <span className="cursor-help opacity-70" title="Lapse: Rolls over up to max. Carry All: Entire balance rolls over. No Carry: Resets to 0.">ⓘ</span></label>
               <select className="w-full rounded-md border border-slate-300 dark:border-slate-700 px-3 py-2.5 text-sm bg-white dark:bg-[#252525] dark:text-white" value={carryForwardPolicy} onChange={(e) => setCarryForwardPolicy(e.target.value as CarryForwardPolicyType)}>
                 <option value="LAPSE_AFTER_YEAR">Lapse</option>
                 <option value="NO_CARRY_FORWARD">No Carry</option>
