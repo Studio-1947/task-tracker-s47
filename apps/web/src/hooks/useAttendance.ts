@@ -15,6 +15,8 @@ import type {
   ReviewLeaveRequestInput,
   SetLeaveBalancesInput,
   UpdateLeaveTypeInput,
+  CreateCompOffRequestInput,
+  ReviewCompOffRequestInput,
 } from '@task-tracker/shared';
 import { http } from '../lib/api';
 
@@ -269,5 +271,54 @@ export function useCanViewTeamAvailability() {
     queryKey: ['attendance', 'team-availability', 'access'],
     queryFn: () => http.get<{ allowed: boolean }>('/attendance/team-availability/access'),
     staleTime: 5 * 60_000,
+  });
+}
+
+/* ── Comp Off Requests ── */
+export interface CompOffItem {
+  id: string;
+  workDate: string;
+  reason: string;
+  earnedDays: string;
+  status: string;
+  createdAt: string;
+  user?: { id: string; name: string; email?: string; avatarKey?: string | null };
+}
+
+export function useMyCompOffs() {
+  return useQuery({
+    queryKey: ['attendance', 'comp-off', 'me'],
+    queryFn: () => http.get<CompOffItem[]>('/attendance/comp-off/me'),
+  });
+}
+
+export function useListAllCompOffs(status?: string) {
+  return useQuery({
+    queryKey: ['attendance', 'comp-off', 'all', status ?? 'ALL'],
+    queryFn: () => http.get<CompOffItem[]>(`/attendance/comp-off${status ? `?status=${status}` : ''}`),
+  });
+}
+
+export function useRequestCompOff() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateCompOffRequestInput) =>
+      http.post<CompOffItem>('/attendance/comp-off', input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['attendance', 'comp-off'] });
+    },
+  });
+}
+
+export function useReviewCompOff() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: ReviewCompOffRequestInput }) =>
+      http.post<{ success: boolean }>(`/attendance/comp-off/${id}/review`, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['attendance', 'comp-off'] });
+      qc.invalidateQueries({ queryKey: ['leaves'] });
+      qc.invalidateQueries({ queryKey: ['leave-types'] });
+    },
   });
 }

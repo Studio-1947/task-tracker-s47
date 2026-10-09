@@ -20,6 +20,12 @@ import { PDFParse } from 'pdf-parse';
 import {
   Role,
   attendancePunchSchema,
+  
+  createCompOffRequestSchema,
+  reviewCompOffRequestSchema,
+  type CreateCompOffRequestInput,
+  type ReviewCompOffRequestInput,
+
   createCorrectionSchema,
   reviewCorrectionSchema,
   createLeaveRequestSchema,
@@ -279,4 +285,36 @@ export class AttendanceController {
   reopenPayroll(@Param('id', ParseUUIDPipe) id: string, @CurrentUser('id') actorId: string, @Body(new ZodValidationPipe(payrollDecisionSchema)) body: { note: string }) {
     return this.attendance.reopenPayrollStatement(id, actorId, body.note);
   }
+
+
+  /* ── Comp Off Requests ── */
+  @Post('attendance/comp-off')
+  requestCompOff(
+    @CurrentUser('id') userId: string,
+    @Body(new ZodValidationPipe(createCompOffRequestSchema)) body: CreateCompOffRequestInput,
+  ) {
+    return this.attendance.requestCompOff(userId, body);
+  }
+
+  @Get('attendance/comp-off/me')
+  myCompOffs(@CurrentUser('id') userId: string) {
+    return this.attendance.listCompOffs(userId);
+  }
+
+  @Get('attendance/comp-off')
+  @Roles(Role.ADMIN)
+  listAllCompOffs(@Query('status') status?: string) {
+    return this.attendance.listAllCompOffs(status);
+  }
+
+  @Post('attendance/comp-off/:id/review')
+  @Roles(Role.ADMIN)
+  reviewCompOff(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') reviewerId: string,
+    @Body(new ZodValidationPipe(reviewCompOffRequestSchema)) body: ReviewCompOffRequestInput,
+  ) {
+    return this.attendance.reviewCompOff(id, reviewerId, body);
+  }
+
 }

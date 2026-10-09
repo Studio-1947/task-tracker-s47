@@ -16,7 +16,7 @@ import type {
   AttendanceWithUser,
   AttendanceTimingItem,
   AttendanceTimingOverview,
-  CreateLeaveRequestInput,
+  CreateLeaveRequestInput, CreateCompOffRequestInput, ReviewCompOffRequestInput,
   CreateLeaveTypeInput,
   GeoPoint,
   LeaveBalance,
@@ -34,6 +34,9 @@ import { DRIZZLE, type Database } from '../database/database.module';
 import { CalendarService } from '../calendar/calendar.service';
 import { TasksService } from '../tasks/tasks.service';
 import {
+  
+  compOffRequests,
+
   attendanceRecords,
   attendanceCorrections,
   organisationPolicies,
@@ -993,6 +996,113 @@ export class AttendanceService {
     if (current.status !== 'APPROVED') throw new BadRequestException('Only approved statements can be reopened');
     const [updated] = await this.db.update(payrollStatements).set({ status: 'DRAFT', preparedById: actorId, reviewedById: null, approvedById: null, reviewedAt: null, approvedAt: null, reopenedReason: reason, updatedAt: new Date() }).where(eq(payrollStatements.id, id)).returning();
     return updated;
+  }
+
+
+  /* ── Comp Off Requests ── */
+  async requestCompOff(userId: string, input: CreateCompOffRequestInput) {
+    const [existing] = await this.db
+      .select()
+      .from(compOffRequests)
+      .where(and(eq(compOffRequests.userId, userId), eq(compOffRequests.workDate, input.workDate)));
+
+    if (existing) {
+      throw new BadRequestException('A compensatory off request already exists for this date');
+    }
+
+    const [created] = await this.db
+      .insert(compOffRequests)
+      .values({
+        userId,
+        workDate: input.workDate,
+        reason: input.reason,
+        earnedDays: input.earnedDays.toString(),
+      })
+      .returning();
+
+    return created;
+  }
+
+  async listCompOffs(userId: string) {
+    return this.db
+      .select()
+      .from(compOffRequests)
+      .where(eq(compOffRequests.userId, userId))
+      .orderBy(desc(compOffRequests.createdAt));
+  }
+
+  async listAllCompOffs(status?: string) {
+    return this.db.select({
+      id: compOffRequests.id,
+      workDate: compOffRequests.workDate,
+      reason: compOffRequests.reason,
+      earnedDays: compOffRequests.earnedDays,
+      status: compOffRequests.status,
+      createdAt: compOffRequests.createdAt,
+      user: {
+        id: users.id,
+        name: users.name,
+      }
+    }).from(compOffRequests).innerJoin(users, eq(compOffRequests.userId, users.id))
+      .where(status ? eq(compOffRequests.status, status as any) : undefined)
+      .orderBy(desc(compOffRequests.createdAt));
+  }
+
+  async reviewCompOff(id: string, reviewerId: string, input: ReviewCompOffRequestInput) {
+    const [request] = await this.db.select().from(compOffRequests).where(eq(compOffRequests.id, id));
+    if (!request) throw new NotFoundException('Comp-off request not found');
+    if (request.status !== 'PENDING') throw new BadRequestException('Request is already reviewed');
+
+    await this.db.transaction(async (tx) => {
+      // Update status
+      await tx
+        .update(compOffRequests)
+        .set({
+          status: input.status,
+          reviewedById: reviewerId,
+          reviewNote: input.note,
+          reviewedAt: new Date(),
+        })
+        .where(eq(compOffRequests.id, id));
+
+      if (input.status === 'APPROVED') {
+        // Find or create "Compensatory Off" leave type
+        let [compType] = await tx.select().from(leaveTypes).where(eq(leaveTypes.name, 'Compensatory Off'));
+        if (!compType) {
+          [compType] = await tx.insert(leaveTypes).values({
+            name: 'Compensatory Off',
+            color: '#10b981', // green
+            defaultBalance: 0,
+            carryForwardPolicy: 'LAPSE_AFTER_YEAR',
+            approvalRequired: 'MANAGER_APPROVAL',
+            entitlementUnit: 'DAYS',
+          }).returning();
+        }
+
+        // Add earned days to user's balance
+        const [existingBalance] = await tx
+          .select()
+          .from(leaveBalances)
+          .where(and(eq(leaveBalances.userId, request.userId), eq(leaveBalances.leaveTypeId, compType.id)));
+
+        if (existingBalance) {
+          await tx
+            .update(leaveBalances)
+            .set({ allotted: existingBalance.allotted + parseFloat(request.earnedDays) })
+            .where(eq(leaveBalances.id, existingBalance.id));
+        } else {
+          await tx
+            .insert(leaveBalances)
+            .values({
+              userId: request.userId,
+              leaveTypeId: compType.id,
+              allotted: compType.defaultBalance + parseFloat(request.earnedDays),
+            });
+        }
+      }
+    });
+
+    return { success: true };
   }
 
 }

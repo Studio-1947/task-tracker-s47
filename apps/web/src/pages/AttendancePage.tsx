@@ -40,6 +40,11 @@ import {
   useReviewCorrection,
   useImportLeavePolicyPdf,
   type AttendanceCorrectionItem,
+  useMyCompOffs,
+  useListAllCompOffs,
+  useRequestCompOff,
+  useReviewCompOff,
+  type CompOffItem,
 } from '../hooks/useAttendance';
 
 /* ── helpers ── */
@@ -74,7 +79,7 @@ const statusTone: Record<string, 'slate' | 'green' | 'amber'> = {
   CANCELLED: 'slate',
 };
 
-type Tab = 'me' | 'approvals' | 'corrections' | 'types' | 'allotments' | 'team' | 'policy' | 'payroll' | 'calendar' | 'availability' | 'timing';
+type Tab = 'me' | 'approvals' | 'corrections' | 'compoffs' | 'types' | 'allotments' | 'team' | 'policy' | 'payroll' | 'calendar' | 'availability' | 'timing';
 
 export function AttendancePage() {
   const { user } = useAuth();
@@ -87,6 +92,7 @@ export function AttendancePage() {
     ...(isAdmin
       ? ([
           { key: 'approvals', label: 'Leave Approvals' },
+          { key: 'compoffs', label: 'Comp Offs' },
           { key: 'corrections', label: 'Attendance Corrections' },
           { key: 'types', label: 'Leave Types' },
           { key: 'allotments', label: 'Allotments' },
@@ -130,6 +136,11 @@ export function AttendancePage() {
       steps = [
         { element: '#tour-log-date', popover: { title: 'Select Date', description: 'Pick any date to view the attendance log for the entire team.', side: 'bottom' } },
         { element: '#tour-log-punches', popover: { title: 'Team Punches', description: 'See exactly when team members checked in and out, and their total hours for the day.', side: 'top' } }
+      ];
+    } else if (tab === 'compoffs') {
+      steps = [
+        { element: '#tour-compoff-filter', popover: { title: 'Filter Comp Offs', description: 'Filter requests by status to manage your backlog.', side: 'bottom' } },
+        { element: '#tour-compoff-list', popover: { title: 'Approve or Reject', description: 'Review why someone is requesting a compensatory off. Approving will automatically credit their balance.', side: 'top' } }
       ];
     } else if (tab === 'corrections') {
       steps = [
@@ -192,6 +203,7 @@ export function AttendancePage() {
 
       <div className="mt-6">
         {tab === 'me' ? <MyAttendanceTab /> : null}
+        {tab === 'compoffs' ? <CompOffsReviewTab /> : null}
         {tab === 'approvals' ? <ApprovalsTab /> : null}
         {tab === 'corrections' ? <CorrectionsReviewTab /> : null}
         {tab === 'types' ? <LeaveTypesTab /> : null}
@@ -211,6 +223,7 @@ export function AttendancePage() {
 function MyAttendanceTab() {
   const [showRequest, setShowRequest] = useState(false);
   const [showCorrection, setShowCorrection] = useState(false);
+  const [showCompOff, setShowCompOff] = useState(false);
   return (
     <div className="space-y-6">
       <CheckInCard onOpenCorrection={() => setShowCorrection(true)} />
@@ -218,6 +231,7 @@ function MyAttendanceTab() {
       <BalancesRow />
       <MonthCalendar onCorrect={() => setShowCorrection(true)} />
       <MyCorrectionsSection onOpenCorrection={() => setShowCorrection(true)} />
+      <MyCompOffsSection onOpenRequest={() => setShowCompOff(true)} />
       <section>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">My leave history &amp; deductions</h2>
@@ -229,6 +243,7 @@ function MyAttendanceTab() {
       </section>
       {showRequest ? <RequestLeaveModal onClose={() => setShowRequest(false)} /> : null}
       {showCorrection ? <RequestCorrectionModal onClose={() => setShowCorrection(false)} /> : null}
+      {showCompOff ? <RequestCompOffModal onClose={() => setShowCompOff(false)} /> : null}
     </div>
   );
 }
@@ -1667,4 +1682,211 @@ function CorrectionsReviewTab() {
     </div>
   );
 }
-
+
+
+/* ── Comp Off ── */
+function MyCompOffsSection({ onOpenRequest }: { onOpenRequest: () => void }) {
+  const { data: compOffs, isLoading } = useMyCompOffs();
+  
+  return (
+    <section>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">My Comp Offs</h2>
+        <Button className="py-2 px-4 text-xs" onClick={onOpenRequest}>
+          Request Comp Off
+        </Button>
+      </div>
+      {isLoading ? (
+        <div className="flex justify-center p-4"><Spinner /></div>
+      ) : !compOffs?.length ? (
+        <EmptyState title="No comp off requests" hint="You haven't requested any compensatory off days yet." icon="⭐" />
+      ) : (
+        <div className="space-y-3">
+          {compOffs.map(c => (
+            <Card key={c.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-semibold text-slate-900 dark:text-white">{fmtDate(c.workDate)}</span>
+                  <Badge tone={statusTone[c.status] || 'slate'}>{c.status}</Badge>
+                </div>
+                <div className="text-sm text-slate-500 dark:text-slate-400">
+                  <span className="font-medium">Earned:</span> {c.earnedDays} day(s)
+                </div>
+                <div className="text-sm text-slate-600 dark:text-slate-300 mt-1 max-w-lg">{c.reason}</div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function RequestCompOffModal({ onClose }: { onClose: () => void }) {
+  const { mutate: request, isPending, error } = useRequestCompOff();
+  const [date, setDate] = useState(ymd(new Date()));
+  const [reason, setReason] = useState('');
+  const [earnedDays, setEarnedDays] = useState('1.0');
+
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    request(
+      { workDate: date, reason, earnedDays: parseFloat(earnedDays) },
+      { onSuccess: () => onClose() }
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
+      <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-xl overflow-hidden border border-slate-200 dark:border-slate-800">
+        <form onSubmit={onSubmit} className="p-6">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-6">Request Compensatory Off</h2>
+          {error && <div className="mb-4"><ErrorState message={error?.message || String(error)} /></div>}
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Worked Date</label>
+              <Input type="date" required value={date} onChange={e => setDate(e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Earned Days</label>
+              <select 
+                value={earnedDays}
+                onChange={e => setEarnedDays(e.target.value)}
+                className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              >
+                <option value="0.5">0.5 (Half Day)</option>
+                <option value="1.0">1.0 (Full Day)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Reason</label>
+              <textarea 
+                required
+                rows={3}
+                className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                placeholder="Explain the extra work performed..."
+                value={reason}
+                onChange={e => setReason(e.target.value)}
+              />
+            </div>
+          </div>
+          
+          <div className="mt-8 flex justify-end gap-3">
+            <Button type="button" variant="ghost" onClick={onClose} disabled={isPending}>Cancel</Button>
+            <Button type="submit" disabled={isPending}>Submit Request</Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function CompOffsReviewTab() {
+  const [status, setStatus] = useState<string>('PENDING');
+  const { data: compOffs, isLoading } = useListAllCompOffs(status === 'ALL' ? undefined : status);
+  const [reviewing, setReviewing] = useState<CompOffItem | null>(null);
+
+  return (
+    <div className="space-y-6">
+      <div id="tour-compoff-filter" className="flex items-center gap-3 bg-white dark:bg-slate-900 p-2 border border-slate-200 dark:border-slate-800 rounded-xl inline-flex shadow-sm">
+        {['PENDING', 'APPROVED', 'DECLINED', 'ALL'].map(s => (
+          <button
+            key={s}
+            onClick={() => setStatus(s)}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${status === s ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400' : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/50'}`}
+          >
+            {s === 'ALL' ? 'All' : s.charAt(0) + s.slice(1).toLowerCase()}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center p-12"><Spinner /></div>
+      ) : !compOffs?.length ? (
+        <EmptyState title="No requests found" hint="There are no compensatory off requests matching this filter." icon="📭" />
+      ) : (
+        <div id="tour-compoff-list" className="space-y-3">
+          {compOffs.map(c => (
+            <Card key={c.id} className="p-5 flex flex-col md:flex-row md:items-start justify-between gap-5 transition-shadow hover:shadow-md">
+              <div className="flex gap-4">
+                <Avatar user={{ id: c.user?.id || '?', name: c.user?.name || 'Unknown', avatarKey: c.user?.avatarKey }} size="lg" />
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-bold text-slate-900 dark:text-white text-base">{c.user?.name}</span>
+                    <Badge tone={statusTone[c.status] || 'slate'}>{c.status}</Badge>
+                  </div>
+                  <div className="text-sm text-slate-600 dark:text-slate-400 font-medium mb-2">
+                    Worked on <span className="text-slate-800 dark:text-slate-200">{fmtDate(c.workDate)}</span> to earn <span className="text-slate-800 dark:text-slate-200">{c.earnedDays} day(s)</span>
+                  </div>
+                  <div className="text-sm text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800/80 mt-2 max-w-2xl leading-relaxed">
+                    "{c.reason}"
+                  </div>
+                </div>
+              </div>
+              
+              {c.status === 'PENDING' && (
+                <div className="flex items-center gap-2 self-start">
+                  <Button variant="ghost" className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-900 dark:text-emerald-400 dark:hover:bg-emerald-900/30" onClick={() => setReviewing({ ...c, status: 'APPROVED' })}>Approve</Button>
+                  <Button variant="ghost" className="border-rose-200 text-rose-700 hover:bg-rose-50 dark:border-rose-900 dark:text-rose-400 dark:hover:bg-rose-900/30" onClick={() => setReviewing({ ...c, status: 'DECLINED' })}>Decline</Button>
+                </div>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {reviewing && <ReviewCompOffModal req={reviewing} intent={reviewing.status as any} onClose={() => setReviewing(null)} />}
+    </div>
+  );
+}
+
+function ReviewCompOffModal({ req, intent, onClose }: { req: CompOffItem, intent: 'APPROVED' | 'DECLINED', onClose: () => void }) {
+  const { mutate, isPending, error } = useReviewCompOff();
+  const [note, setNote] = useState('');
+
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    mutate(
+      { id: req.id, input: { status: intent, note: note || undefined } },
+      { onSuccess: () => onClose() }
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
+      <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-xl overflow-hidden border border-slate-200 dark:border-slate-800">
+        <form onSubmit={onSubmit} className="p-6">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
+            {intent === 'APPROVED' ? 'Approve Comp Off' : 'Decline Comp Off'}
+          </h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+            You are about to <strong className={intent === 'APPROVED' ? 'text-emerald-600' : 'text-rose-600'}>{intent.toLowerCase()}</strong> this request from {req.user?.name}.
+            {intent === 'APPROVED' && ' This will immediately credit their leave balance.'}
+          </p>
+          
+          {error && <div className="mb-4"><ErrorState message={error?.message || String(error)} /></div>}
+          
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Add a note (optional)</label>
+            <textarea 
+              rows={3}
+              className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              placeholder="Why are you making this decision?"
+              value={note}
+              onChange={e => setNote(e.target.value)}
+            />
+          </div>
+          
+          <div className="mt-8 flex justify-end gap-3">
+            <Button type="button" variant="ghost" onClick={onClose} disabled={isPending}>Cancel</Button>
+            <Button type="submit" disabled={isPending} className={intent === 'APPROVED' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'}>
+              Confirm
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+

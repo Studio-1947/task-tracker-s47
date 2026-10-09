@@ -220,3 +220,30 @@ export const payrollStatements = pgTable('payroll_statements', {
   index('payroll_statements_month_status_idx').on(t.month, t.status),
 ]);
 
+
+
+export const compOffRequests = pgTable(
+  'comp_off_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    workDate: date('work_date').notNull(),
+    reason: varchar('reason', { length: 1000 }).notNull(),
+    earnedDays: numeric('earned_days', { precision: 5, scale: 1 }).notNull(),
+    status: leaveStatusEnum('status').notNull().default('PENDING'),
+    reviewedById: uuid('reviewed_by_id').references(() => users.id, { onDelete: 'set null' }),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    reviewNote: varchar('review_note', { length: 1000 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('comp_off_user_date_uq').on(t.userId, t.workDate),
+    index('comp_off_status_idx').on(t.status),
+  ],
+);
+
+export type CompOffRequestRow = typeof compOffRequests.$inferSelect;
+export type NewCompOffRequestRow = typeof compOffRequests.$inferInsert;

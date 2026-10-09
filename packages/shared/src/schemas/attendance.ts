@@ -140,3 +140,21 @@ export const payrollDecisionSchema = z.object({ note: z.string().trim().min(1).m
 export const createPayrollDraftSchema = z.object({ userId: z.string().uuid(), month: payrollMonthSchema });
 export type CreatePayrollDraftInput = z.infer<typeof createPayrollDraftSchema>;
 
+
+
+/* ── Comp Off Requests ── */
+export const createCompOffRequestSchema = z
+  .object({
+    workDate: z.string().date(),
+    reason: z.string().max(1000).min(1),
+    earnedDays: z.number().min(0.5).max(1.0).step(0.5),
+  });
+export type CreateCompOffRequestInput = z.infer<typeof createCompOffRequestSchema>;
+
+export const reviewCompOffRequestSchema = z
+  .object({
+    status: z.enum(['APPROVED', 'DECLINED']),
+    note: z.string().max(1000).optional(),
+  })
+  .strict();
+export type ReviewCompOffRequestInput = z.infer<typeof reviewCompOffRequestSchema>;

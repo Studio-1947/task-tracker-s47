@@ -337,6 +337,13 @@
       "when": 1812500000000,
       "tag": "0047_automatic_half_day_earned_leave",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1791545675582,
+      "tag": "0048_light_chat",
+      "breakpoints": true
     }
   ]
 }
