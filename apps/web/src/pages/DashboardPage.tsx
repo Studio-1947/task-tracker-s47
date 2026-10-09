@@ -660,19 +660,20 @@ function ApprovedLeaveCalendar({ leaves }: { leaves: LeaveRequestItem[] }) {
         <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{cursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
         <button type="button" onClick={() => move(1)} aria-label="Next leave month" className="rounded-md px-2 py-1 text-xs font-bold text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800">Next</button>
       </div>
-      <div className="grid grid-cols-7 gap-px overflow-hidden rounded-xl border border-slate-100 bg-slate-100 dark:border-slate-800 dark:bg-slate-800">
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => <div key={day} className="bg-slate-50 px-1 py-2 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:bg-slate-900/60">{day}</div>)}
+      <div className="grid grid-cols-7 gap-1.5 text-center">
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => <div key={day} className="pb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">{day}</div>)}
         {cells.map((day, index) => {
-          if (day === null) return <div key={`blank-${index}`} className="min-h-24 bg-white/70 dark:bg-[#1e1e1e]" />;
+          if (day === null) return <div key={`blank-${index}`} className="min-h-24" />;
           const key = `${month}-${String(day).padStart(2, '0')}`;
           const entries = byDate.get(key) ?? [];
           return (
-            <div key={key} className={`min-h-24 bg-white p-1.5 dark:bg-[#1e1e1e] ${key === localDate() ? 'ring-1 ring-inset ring-indigo-500' : ''}`}>
-              <div className="mb-1 text-[10px] font-bold text-slate-400">{day}</div>
+            <div key={key} className={`min-h-24 rounded-lg border p-1.5 text-left transition-colors ${key === localDate() ? 'border-indigo-400 ring-1 ring-indigo-400/20 dark:border-indigo-500/60' : 'border-slate-100 bg-white/50 dark:border-slate-800/60 dark:bg-slate-900/20'}`}>
+              <div className={`mb-1 text-xs font-bold ${key === localDate() ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>{day}</div>
               <div className="space-y-1">
                 {entries.slice(0, 3).map((leave) => (
-                  <div key={leave.id} title={`${leave.user.name} - ${leave.typeName}${leave.reason ? `: ${leave.reason}` : ''}`} className="truncate rounded px-1 py-0.5 text-[10px] font-semibold text-slate-700 dark:text-slate-200" style={{ backgroundColor: `${leave.color ?? '#6366f1'}24`, borderLeft: `2px solid ${leave.color ?? '#6366f1'}` }}>
-                    {leave.user.name} - {leave.typeName}{leave.halfDay ? ' (1/2)' : ''}
+                  <div key={leave.id} title={`${leave.user.name} - ${leave.typeName}${leave.reason ? `: ${leave.reason}` : ''}`} className="flex items-center gap-1 rounded px-1 py-0.5 text-[10px] font-semibold text-slate-700 dark:text-slate-200" style={{ backgroundColor: `${leave.color ?? '#6366f1'}24`, borderLeft: `2px solid ${leave.color ?? '#6366f1'}` }}>
+                    <Avatar user={leave.user} size="sm" className="h-4 w-4 text-[7px]" />
+                    <span className="truncate">{leave.user.name} - {leave.typeName}{leave.halfDay ? ' (1/2)' : ''}</span>
                   </div>
                 ))}
                 {entries.length > 3 ? <div className="px-1 text-[10px] font-semibold text-slate-400">+{entries.length - 3} more</div> : null}
