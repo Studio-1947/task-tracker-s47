@@ -331,6 +331,7 @@ export interface WorkloadEntry {
   user: UserRef;
   openTasks: number;
   totalEstimatedMinutes: number;
+  predominantSize?: import('./enums').TaskSize | null;
 }
 
 /** Per-workspace ("office") rollup for the admin performance table. */

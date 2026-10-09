@@ -244,6 +244,7 @@ export class DashboardService {
         email: users.email,
         avatarKey: users.avatarKey,
         c: count(),
+        predominantSize: sql<string>`mode() within group (order by ${tasks.size})`,
         totalEst: sql<number>`sum(
           COALESCE(
             ${tasks.currentEstimateMinutes},
@@ -276,6 +277,7 @@ export class DashboardService {
       user: { id: r.id, name: r.name, email: r.email, avatarKey: r.avatarKey },
       openTasks: Number(r.c),
       totalEstimatedMinutes: Number(r.totalEst ?? 0),
+      predominantSize: (r.predominantSize as import('@task-tracker/shared').TaskSize) || null,
     }));
   }
 

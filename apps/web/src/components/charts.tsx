@@ -157,3 +157,68 @@ export function HBarList({ items }: { items: { key: string; label: ReactNode; va
     </div>
   );
 }
+
+/**
+ * Donut chart showing relative distribution with hover states.
+ */
+export function DonutChart({
+  data,
+  size = 160,
+  thickness = 24,
+}: {
+  data: { label: string; value: number; color: string; displayValue?: string }[];
+  size?: number;
+  thickness?: number;
+}) {
+  const total = data.reduce((sum, d) => sum + d.value, 0);
+  if (total === 0) return null;
+
+  let currentOffset = 0;
+  const center = size / 2;
+  const radius = (size - thickness) / 2;
+  const circumference = 2 * Math.PI * radius;
+
+  const [hover, setHover] = useState<number | null>(null);
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="transform -rotate-90 overflow-visible">
+        {data.map((d, i) => {
+          if (d.value === 0) return null;
+          const strokeLength = (d.value / total) * circumference;
+          const offset = currentOffset;
+          currentOffset += strokeLength;
+
+          return (
+            <circle
+              key={i}
+              cx={center}
+              cy={center}
+              r={radius}
+              fill="transparent"
+              stroke={d.color}
+              strokeWidth={hover === i ? thickness + 4 : thickness}
+              strokeDasharray={`${Math.max(0, strokeLength - 1)} ${circumference}`}
+              strokeDashoffset={-offset}
+              className="transition-all duration-200 cursor-pointer"
+              style={{ opacity: hover === null || hover === i ? 1 : 0.3 }}
+              onMouseEnter={() => setHover(i)}
+              onMouseLeave={() => setHover(null)}
+            />
+          );
+        })}
+      </svg>
+      {hover !== null && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-4 animate-fade-in">
+          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold truncate w-full uppercase tracking-wider">
+            {data[hover].label}
+          </span>
+          <span className="text-sm font-extrabold text-slate-800 dark:text-slate-100">
+            {data[hover].displayValue ?? data[hover].value}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+

@@ -24,7 +24,7 @@ import { useWorkspaceContext } from '../stores/workspace-context';
 import { ApiRequestError } from '../lib/api';
 import { Avatar } from '../components/Avatar';
 import { MetricFilterBar, MetricsPanel, type MetricFilters } from '../components/MetricsPanel';
-import { HBarList, LineChart } from '../components/charts';
+import { HBarList, LineChart, DonutChart } from '../components/charts';
 import { Badge, Card, ErrorState, Spinner } from '../components/ui';
 import {
   describeAudit,
@@ -188,40 +188,63 @@ function WeeklyCompletionCard({ points }: { points: AdminData['weeklyCompletion'
 
 function TeamWorkloadCard({ entries }: { entries: WorkloadEntry[] }) {
   const sortedEntries = [...entries].sort((a, b) => b.totalEstimatedMinutes - a.totalEstimatedMinutes);
+  const maxWorkload = sortedEntries.length > 0 ? (sortedEntries[0].totalEstimatedMinutes || sortedEntries[0].openTasks) : 1;
 
   return (
     <Card className="p-6 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#1e1e1e] dark:to-[#181818]">
-      <h2 className="mb-4 text-xs font-bold uppercase tracking-wider text-slate-455 dark:text-slate-400">
-        Team workload (open tasks assigned)
-      </h2>
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-455 dark:text-slate-400">
+          Team workload (open tasks assigned)
+        </h2>
+        <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+          Scale: Estimated Time
+        </span>
+      </div>
       {sortedEntries.length === 0 ? (
         <p className="text-sm text-slate-400 dark:text-slate-400 py-2">No tasks assigned yet.</p>
       ) : (
-        <HBarList
-          items={sortedEntries.map((e) => {
+        <div className="space-y-4">
+          {sortedEntries.map((e) => {
             const hours = Math.floor(e.totalEstimatedMinutes / 60);
             const mins = e.totalEstimatedMinutes % 60;
             const timeStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+            
+            const value = e.totalEstimatedMinutes || e.openTasks;
+            const percent = maxWorkload === 0 ? 0 : Math.min(100, Math.round((value / maxWorkload) * 100));
 
-            return {
-              key: e.user.id,
-              value: e.totalEstimatedMinutes || e.openTasks,
-              displayValue: `${e.openTasks} tasks (${timeStr})`,
-              label: (
-                <Link to={`/meetings?assignee=${e.user.id}`} className="flex min-w-0 items-center gap-2.5 hover:opacity-80 transition-opacity">
-                  <Avatar
-                    user={e.user}
-                    size="sm"
-                    className="ring-2 ring-slate-100 dark:ring-slate-800/40"
-                  />
-                  <span className="truncate text-sm font-semibold text-slate-700 dark:text-slate-200">
-                    {e.user.name}
-                  </span>
+            const gradient = `conic-gradient(#6366f1 0% ${percent}%, #f1f5f9 ${percent}% 100%)`;
+            const darkGradient = `conic-gradient(#4f46e5 0% ${percent}%, #262626 ${percent}% 100%)`;
+
+            return (
+              <div key={e.user.id} className="flex items-center gap-4">
+                <Link to={`/meetings?assignee=${e.user.id}`} className="flex min-w-0 items-center gap-3 w-40 shrink-0 hover:opacity-80 transition-opacity">
+                  <Avatar user={e.user} size="sm" className="ring-2 ring-slate-100 dark:ring-slate-800/40" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-700 dark:text-slate-200">
+                      {e.user.name}
+                    </p>
+                  </div>
                 </Link>
-              ),
-            };
+                
+                <div className="flex-1" />
+
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <div className="relative flex items-center justify-center rounded-full shrink-0" style={{ width: 36, height: 36 }}>
+                    <div className="absolute inset-0 rounded-full dark:hidden" style={{ background: gradient }} />
+                    <div className="absolute inset-0 rounded-full hidden dark:block" style={{ background: darkGradient }} />
+                    <div className="absolute inset-[3px] rounded-full bg-white dark:bg-[#181818]" />
+                  </div>
+                  <div className="flex flex-col text-left">
+                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{percent}%</span>
+                    <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
+                      {e.openTasks} tasks ({timeStr}){e.predominantSize ? ` • Mostly ${e.predominantSize.toLowerCase()}` : ''}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
           })}
-        />
+        </div>
       )}
     </Card>
   );
