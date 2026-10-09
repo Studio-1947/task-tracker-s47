@@ -629,9 +629,67 @@ function localDate(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
+function dateKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function ApprovedLeaveCalendar({ leaves }: { leaves: LeaveRequestItem[] }) {
+  const [cursor, setCursor] = useState(() => new Date());
+  const month = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`;
+  const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+  const daysInMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
+  const byDate = new Map<string, LeaveRequestItem[]>();
+  for (const leave of leaves) {
+    const start = new Date(`${leave.startDate}T00:00:00`);
+    const end = new Date(`${leave.endDate}T00:00:00`);
+    for (const day = new Date(start); day <= end; day.setDate(day.getDate() + 1)) {
+      const key = dateKey(day);
+      byDate.set(key, [...(byDate.get(key) ?? []), leave]);
+    }
+  }
+  const cells: Array<number | null> = [
+    ...Array<null>(first.getDay()).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
+  ];
+  const move = (delta: number) => setCursor((d) => new Date(d.getFullYear(), d.getMonth() + delta, 1));
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <button type="button" onClick={() => move(-1)} aria-label="Previous leave month" className="rounded-md px-2 py-1 text-xs font-bold text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800">Previous</button>
+        <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{cursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
+        <button type="button" onClick={() => move(1)} aria-label="Next leave month" className="rounded-md px-2 py-1 text-xs font-bold text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800">Next</button>
+      </div>
+      <div className="grid grid-cols-7 gap-px overflow-hidden rounded-xl border border-slate-100 bg-slate-100 dark:border-slate-800 dark:bg-slate-800">
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => <div key={day} className="bg-slate-50 px-1 py-2 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:bg-slate-900/60">{day}</div>)}
+        {cells.map((day, index) => {
+          if (day === null) return <div key={`blank-${index}`} className="min-h-24 bg-white/70 dark:bg-[#1e1e1e]" />;
+          const key = `${month}-${String(day).padStart(2, '0')}`;
+          const entries = byDate.get(key) ?? [];
+          return (
+            <div key={key} className={`min-h-24 bg-white p-1.5 dark:bg-[#1e1e1e] ${key === localDate() ? 'ring-1 ring-inset ring-indigo-500' : ''}`}>
+              <div className="mb-1 text-[10px] font-bold text-slate-400">{day}</div>
+              <div className="space-y-1">
+                {entries.slice(0, 3).map((leave) => (
+                  <div key={leave.id} title={`${leave.user.name} - ${leave.typeName}${leave.reason ? `: ${leave.reason}` : ''}`} className="truncate rounded px-1 py-0.5 text-[10px] font-semibold text-slate-700 dark:text-slate-200" style={{ backgroundColor: `${leave.color ?? '#6366f1'}24`, borderLeft: `2px solid ${leave.color ?? '#6366f1'}` }}>
+                    {leave.user.name} - {leave.typeName}{leave.halfDay ? ' (1/2)' : ''}
+                  </div>
+                ))}
+                {entries.length > 3 ? <div className="px-1 text-[10px] font-semibold text-slate-400">+{entries.length - 3} more</div> : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-[11px] text-slate-400">Each entry shows the person and leave type. Hover an entry to see its reason.</p>
+    </div>
+  );
+}
+
 /** Approved leave is operational information, so this is rendered only from the admin dashboard. */
 function ApprovedLeaveCard({ leaves, isLoading }: { leaves: LeaveRequestItem[] | undefined; isLoading: boolean }) {
   const today = localDate();
+  const [view, setView] = useState<'list' | 'calendar'>('list');
   const upcoming = (leaves ?? [])
     .filter((leave) => leave.endDate >= today)
     .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.user.name.localeCompare(b.user.name));
@@ -643,14 +701,20 @@ function ApprovedLeaveCard({ leaves, isLoading }: { leaves: LeaveRequestItem[] |
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-455 dark:text-slate-400">Approved leave</h2>
           <p className="mt-1 text-xs text-slate-400 dark:text-slate-400">People currently away or scheduled to be away.</p>
         </div>
-        <Link to="/attendance" className="shrink-0 text-xs font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">
-          Manage leave
-        </Link>
+        <div className="flex items-center gap-3">
+          <div className="flex rounded-lg bg-slate-100 p-0.5 text-xs font-semibold dark:bg-slate-800">
+            <button type="button" onClick={() => setView('list')} className={`rounded-md px-2.5 py-1 ${view === 'list' ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-700 dark:text-indigo-300' : 'text-slate-500 dark:text-slate-400'}`}>List</button>
+            <button type="button" onClick={() => setView('calendar')} className={`rounded-md px-2.5 py-1 ${view === 'calendar' ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-700 dark:text-indigo-300' : 'text-slate-500 dark:text-slate-400'}`}>Calendar</button>
+          </div>
+          <Link to="/attendance" className="shrink-0 text-xs font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">Manage leave</Link>
+        </div>
       </div>
       {isLoading ? (
         <div className="py-4"><Spinner /></div>
       ) : upcoming.length === 0 ? (
         <p className="py-2 text-sm text-slate-400 dark:text-slate-400">No current or upcoming approved leave.</p>
+      ) : view === 'calendar' ? (
+        <ApprovedLeaveCalendar leaves={upcoming} />
       ) : (
         <ul className="max-h-80 space-y-3 overflow-y-auto pr-1">
           {upcoming.map((leave) => {
