@@ -126,6 +126,7 @@ export const attendanceRecords = pgTable(
     checkOutLat: doublePrecision('check_out_lat'),
     checkOutLng: doublePrecision('check_out_lng'),
     checkOutAccuracy: doublePrecision('check_out_accuracy'),
+    automaticHalfDayLeaveId: uuid('automatic_half_day_leave_id').references(() => leaveRequests.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -179,7 +180,7 @@ export const organisationPolicies = pgTable('organisation_policies', {
   casualLeaveMonthly: numeric('casual_leave_monthly', { precision: 5, scale: 2 }).notNull().default('1'),
   paidLeaveNames: jsonb('paid_leave_names').$type<string[]>().notNull().default(['Earned Leave', 'Casual Leave', 'Sick Leave']),
   halfDayEnabled: boolean('half_day_enabled').notNull().default(true),
-  lateGraceMinutes: integer('late_grace_minutes').notNull().default(15),
+  lateGraceMinutes: integer('late_grace_minutes').notNull().default(10),
   /** Most of a workspace team that may be on approved leave on one day; 100 disables the control. */
   maxConcurrentLeavePercent: integer('max_concurrent_leave_percent').notNull().default(100),
   unresolvedCorrectionTreatment: varchar('unresolved_correction_treatment', { length: 16 }).notNull().default('EXCLUDE'),

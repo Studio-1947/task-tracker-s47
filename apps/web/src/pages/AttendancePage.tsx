@@ -28,6 +28,8 @@ import {
   useReviewLeave,
   useSetUserBalances,
   useTeamLog,
+  useMyAttendanceTiming,
+  useAttendanceTimingOverview,
   useUpdateLeaveType,
   useUserBalances,
   useMyCorrections,
@@ -70,7 +72,7 @@ const statusTone: Record<string, 'slate' | 'green' | 'amber'> = {
   CANCELLED: 'slate',
 };
 
-type Tab = 'me' | 'approvals' | 'corrections' | 'types' | 'allotments' | 'team' | 'policy' | 'payroll' | 'calendar' | 'availability';
+type Tab = 'me' | 'approvals' | 'corrections' | 'types' | 'allotments' | 'team' | 'policy' | 'payroll' | 'calendar' | 'availability' | 'timing';
 
 export function AttendancePage() {
   const { user } = useAuth();
@@ -92,7 +94,8 @@ export function AttendancePage() {
           { key: 'calendar', label: 'Organisation Calendar' },
         ] as { key: Tab; label: string }[])
       : []),
-    ...(availabilityAccess?.allowed ? ([{ key: 'availability', label: 'Team Availability' }] as { key: Tab; label: string }[]) : []),
+    ...(availabilityAccess?.allowed ? ([{ key: 'availability', label: 'Team Availability' }, { key: 'timing', label: 'Late & Overtime' }] as { key: Tab; label: string }[]) : []),
+    ...(!isAdmin && availabilityAccess?.allowed ? ([{ key: 'corrections', label: 'Attendance Corrections' }] as { key: Tab; label: string }[]) : []),
   ];
 
   return (
@@ -123,6 +126,7 @@ export function AttendancePage() {
         {tab === 'types' ? <LeaveTypesTab /> : null}
         {tab === 'allotments' ? <AllotmentsTab /> : null}
         {tab === 'availability' ? <TeamAvailabilityTab /> : null}
+        {tab === 'timing' ? <TimingOverviewTab /> : null}
         {tab === 'team' ? <TeamLogTab /> : null}
         {tab === 'policy' ? <PolicyTab /> : null}
         {tab === 'payroll' ? <PayrollTab /> : null}
@@ -139,12 +143,13 @@ function MyAttendanceTab() {
   return (
     <div className="space-y-6">
       <CheckInCard onOpenCorrection={() => setShowCorrection(true)} />
+      <MyTimingHistory />
       <BalancesRow />
       <MonthCalendar onCorrect={() => setShowCorrection(true)} />
       <MyCorrectionsSection onOpenCorrection={() => setShowCorrection(true)} />
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">My leave requests</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">My leave history &amp; deductions</h2>
           <Button className="py-2 px-4 text-xs" onClick={() => setShowRequest(true)}>
             Request leave
           </Button>
@@ -239,6 +244,11 @@ function CheckInCard({ onOpenCorrection }: { onOpenCorrection?: () => void }) {
           </div>
         </div>
       ) : null}
+      {rec?.automaticHalfDayLeave ? (
+        <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-medium text-indigo-800 dark:border-indigo-500/30 dark:bg-indigo-950/30 dark:text-indigo-200">
+          Half-day Earned Leave recorded automatically because today’s check-in was after 2:00 PM.
+        </div>
+      ) : null}
       {error ? <p className="mt-3 text-sm font-medium text-red-600 dark:text-red-400">{error}</p> : null}
       <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
         Your location is captured at check-in/out when you allow it — admins can see it. Denying still records the time.
@@ -253,6 +263,83 @@ function Punch({ label, value, loc }: { label: string; value: string; loc: { lat
       <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">{label}</div>
       <div className="mt-0.5 text-lg font-bold tabular-nums text-slate-800 dark:text-slate-100">{value}</div>
       {loc ? <MapLink lat={loc.lat} lng={loc.lng} /> : null}
+    </div>
+  );
+}
+
+const minutesLabel = (minutes: number) => `${Math.floor(minutes / 60)}h ${pad2(minutes % 60)}m`;
+
+/** Personal-only history: employees can always see exactly which days were late or overtime. */
+function MyTimingHistory() {
+  const [cursor, setCursor] = useState(() => new Date());
+  const month = `${cursor.getFullYear()}-${pad2(cursor.getMonth() + 1)}`;
+  const { data, isLoading } = useMyAttendanceTiming(month);
+  const late = (data ?? []).filter((row) => row.lateMinutes > 0);
+  const overtime = (data ?? []).filter((row) => row.overtimeMinutes > 0);
+  const move = (delta: number) => setCursor((d) => new Date(d.getFullYear(), d.getMonth() + delta, 1));
+
+  return (
+    <Card className="p-4 sm:p-5">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-bold text-slate-700 dark:text-slate-200">My late &amp; overtime</h2>
+          <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">Late after your start time plus the organisation grace period. Overtime starts after end time plus that grace period.</p>
+        </div>
+        <div className="flex items-center gap-1">
+          <IconBtn label="Previous month" onClick={() => move(-1)} d="M15 18l-6-6 6-6" />
+          <span className="min-w-22 text-center text-xs font-semibold text-slate-600 dark:text-slate-300">{cursor.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</span>
+          <IconBtn label="Next month" onClick={() => move(1)} d="M9 18l6-6-6-6" />
+        </div>
+      </div>
+      {isLoading ? <Spinner /> : (
+        <>
+          <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <TimingMetric label="Late days" value={late.length} tone="amber" />
+            <TimingMetric label="Late time" value={minutesLabel(late.reduce((n, r) => n + r.lateMinutes, 0))} tone="amber" />
+            <TimingMetric label="Overtime days" value={overtime.length} tone="indigo" />
+            <TimingMetric label="Overtime" value={minutesLabel(overtime.reduce((n, r) => n + r.overtimeMinutes, 0))} tone="indigo" />
+          </div>
+          {(data ?? []).length === 0 ? <p className="py-2 text-sm text-slate-400">No attendance records this month.</p> : (
+            <div className="max-h-56 overflow-auto">
+              <table className="w-full text-xs">
+                <thead className="text-left uppercase tracking-wider text-slate-400"><tr><th className="py-2">Date</th><th>Check in</th><th>Check out</th><th>Late</th><th>Overtime</th></tr></thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  {data!.map((row) => <tr key={row.id} className="text-slate-600 dark:text-slate-300"><td className="py-2 font-medium">{fmtDate(row.workDate)}{row.automaticHalfDayLeave ? <span className="ml-1.5 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[9px] font-bold text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">½ EL</span> : null}</td><td>{fmtTime(row.checkInAt)}</td><td>{row.checkOutAt ? fmtTime(row.checkOutAt) : 'Working'}</td><td className={row.lateMinutes ? 'font-semibold text-amber-600 dark:text-amber-400' : ''}>{row.lateMinutes ? minutesLabel(row.lateMinutes) : '—'}</td><td className={row.overtimeMinutes ? 'font-semibold text-indigo-600 dark:text-indigo-400' : ''}>{row.overtimeMinutes ? minutesLabel(row.overtimeMinutes) : '—'}</td></tr>)}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
+function TimingMetric({ label, value, tone }: { label: string; value: string | number; tone: 'amber' | 'indigo' }) {
+  const cls = tone === 'amber' ? 'text-amber-600 dark:text-amber-400' : 'text-indigo-600 dark:text-indigo-400';
+  return <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900/40"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p><p className={`mt-1 text-lg font-bold tabular-nums ${cls}`}>{value}</p></div>;
+}
+
+/** Admins see the whole organisation; workspace managers receive only their managed-team records from the API. */
+function TimingOverviewTab() {
+  const [cursor, setCursor] = useState(() => new Date());
+  const month = `${cursor.getFullYear()}-${pad2(cursor.getMonth() + 1)}`;
+  const { data, isLoading, error } = useAttendanceTimingOverview(month, true);
+  const move = (delta: number) => setCursor((d) => new Date(d.getFullYear(), d.getMonth() + delta, 1));
+  if (isLoading) return <Spinner />;
+  if (error || !data) return <ErrorState message="Could not load late and overtime records." />;
+  return (
+    <div className="space-y-5">
+      <Card className="p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div><h2 className="text-sm font-bold text-slate-700 dark:text-slate-200">Late &amp; overtime overview</h2><p className="mt-0.5 text-xs text-slate-400">Your permitted team scope only.</p></div>
+          <div className="flex items-center gap-1"><IconBtn label="Previous month" onClick={() => move(-1)} d="M15 18l-6-6 6-6" /><span className="min-w-24 text-center text-sm font-semibold text-slate-700 dark:text-slate-200">{cursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span><IconBtn label="Next month" onClick={() => move(1)} d="M9 18l6-6-6-6" /></div>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4"><TimingMetric label="Late days" value={data.lateDays} tone="amber" /><TimingMetric label="Late time" value={minutesLabel(data.lateMinutes)} tone="amber" /><TimingMetric label="Overtime days" value={data.overtimeDays} tone="indigo" /><TimingMetric label="Overtime" value={minutesLabel(data.overtimeMinutes)} tone="indigo" /></div>
+      </Card>
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead className="bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:bg-slate-900/40"><tr><th className="px-4 py-3">Person</th><th className="px-3 py-3">Date</th><th className="px-3 py-3">Check in</th><th className="px-3 py-3">Check out</th><th className="px-3 py-3">Late</th><th className="px-4 py-3">Overtime</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">{data.records.map((row) => <tr key={row.id}><td className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-200"><span className="flex items-center gap-2"><Avatar user={row.user} size="sm" />{row.user.name}</span></td><td className="px-3 py-3 text-slate-500">{fmtDate(row.workDate)}{row.automaticHalfDayLeave ? <span className="ml-1.5 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[9px] font-bold text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">½ EL</span> : null}</td><td className="px-3 py-3">{fmtTime(row.checkInAt)}</td><td className="px-3 py-3">{row.checkOutAt ? fmtTime(row.checkOutAt) : <span className="text-amber-600">Working</span>}</td><td className="px-3 py-3 font-semibold text-amber-600 dark:text-amber-400">{row.lateMinutes ? minutesLabel(row.lateMinutes) : '—'}</td><td className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400">{row.overtimeMinutes ? minutesLabel(row.overtimeMinutes) : '—'}</td></tr>)}{data.records.length === 0 ? <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">No attendance records this month.</td></tr> : null}</tbody></table></div>
+      </Card>
     </div>
   );
 }
@@ -479,6 +566,7 @@ function MyLeavesList() {
               <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: l.color ?? '#6366f1' }} />
               <span className="font-semibold text-slate-800 dark:text-slate-100">{l.typeName}</span>
               <Badge tone={statusTone[l.status]}>{l.status}</Badge>
+              {l.reason?.startsWith('Automatically recorded: check-in after 2:00 PM.') ? <Badge tone="amber">Automatic deduction</Badge> : null}
             </div>
             <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               {l.startDate === l.endDate ? fmtDate(l.startDate) : `${fmtDate(l.startDate)} → ${fmtDate(l.endDate)}`}

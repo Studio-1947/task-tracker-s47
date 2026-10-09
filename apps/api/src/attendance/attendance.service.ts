@@ -14,6 +14,8 @@ import type {
   AttendanceRecordItem,
   AttendanceToday,
   AttendanceWithUser,
+  AttendanceTimingItem,
+  AttendanceTimingOverview,
   CreateLeaveRequestInput,
   CreateLeaveTypeInput,
   GeoPoint,
@@ -89,6 +91,7 @@ export class AttendanceService {
       workDate: r.workDate,
       checkInAt: r.checkInAt.toISOString(),
       checkOutAt: r.checkOutAt ? r.checkOutAt.toISOString() : null,
+      automaticHalfDayLeave: !!r.automaticHalfDayLeaveId,
       checkInLocation: this.geo(r.checkInLat, r.checkInLng, r.checkInAccuracy),
       checkOutLocation: this.geo(r.checkOutLat, r.checkOutLng, r.checkOutAccuracy),
     };
@@ -235,7 +238,7 @@ export class AttendanceService {
     if (await this.findToday(userId)) {
       throw new ConflictException('You have already checked in today');
     }
-    const [row] = await this.db
+    const [created] = await this.db
       .insert(attendanceRecords)
       .values({
         userId,
@@ -246,7 +249,43 @@ export class AttendanceService {
         checkInAccuracy: geo.accuracy ?? null,
       })
       .returning();
-    return this.toAttendance(row!);
+    const row = await this.recordAutomaticHalfDayLeave(created!);
+    return this.toAttendance(row);
+  }
+
+  /** Creates one linked, approved half-day Earned Leave when the punch is after 2:00 PM. */
+  private async recordAutomaticHalfDayLeave(record: AttendanceRow): Promise<AttendanceRow> {
+    const [calendar, types] = await Promise.all([
+      this.calendar.get(),
+      this.db.select().from(leaveTypes).where(eq(leaveTypes.isActive, true)),
+    ]);
+    const group = await this.calendar.scheduleGroupFor(record.userId, record.workDate);
+    const timezone = group?.timezone ?? calendar.settings?.timezone ?? 'Asia/Kolkata';
+    const afterCutoff = this.clockMinutes(record.checkInAt, timezone) > 14 * 60;
+    if (record.automaticHalfDayLeaveId) {
+      if (afterCutoff) return record;
+      await this.db.delete(leaveRequests).where(eq(leaveRequests.id, record.automaticHalfDayLeaveId));
+      const [updated] = await this.db.update(attendanceRecords).set({ automaticHalfDayLeaveId: null, updatedAt: new Date() }).where(eq(attendanceRecords.id, record.id)).returning();
+      return updated!;
+    }
+    if (!afterCutoff) return record;
+    const earned = types.find((type) => type.name.trim().toLowerCase() === 'earned leave');
+    if (!earned || await this.calendar.leaveUnits(record.workDate, record.workDate, true) === 0) return record;
+    const [existingLeave] = await this.db.select({ id: leaveRequests.id }).from(leaveRequests)
+      .where(and(eq(leaveRequests.userId, record.userId), eq(leaveRequests.status, 'APPROVED'), lte(leaveRequests.startDate, record.workDate), gte(leaveRequests.endDate, record.workDate)))
+      .limit(1);
+    if (existingLeave) return record;
+    if (earned.defaultBalance > 0 || Number(earned.accrualPerMonth) > 0) {
+      const balance = (await this.balancesFor(record.userId, record.workDate)).find((b) => b.leaveTypeId === earned.id);
+      if (balance && balance.remaining < 0.5) return record;
+    }
+    const [leave] = await this.db.insert(leaveRequests).values({
+      userId: record.userId, leaveTypeId: earned.id, startDate: record.workDate, endDate: record.workDate,
+      halfDay: true, days: '0.5', reason: 'Automatically recorded: check-in after 2:00 PM.',
+      status: 'APPROVED', reviewedAt: new Date(), reviewNote: 'Automatic half-day Earned Leave deduction from attendance punch.',
+    }).returning({ id: leaveRequests.id });
+    const [updated] = await this.db.update(attendanceRecords).set({ automaticHalfDayLeaveId: leave!.id, updatedAt: new Date() }).where(eq(attendanceRecords.id, record.id)).returning();
+    return updated!;
   }
 
   async checkOut(userId: string, geo: AttendancePunchInput): Promise<AttendanceRecordItem> {
@@ -307,6 +346,60 @@ export class AttendanceService {
       ...this.toAttendance(rec),
       user: { id: u.id, name: u.name, email: u.email, avatarKey: u.avatarKey },
     }));
+  }
+
+  private clockMinutes(at: Date, timezone: string): number {
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(at);
+    const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 0);
+    const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? 0);
+    return hour * 60 + minute;
+  }
+
+  private async timingFor(record: AttendanceRow): Promise<AttendanceTimingItem> {
+    const [policy, calendar, group] = await Promise.all([
+      this.getOrganisationPolicy(),
+      this.calendar.get(),
+      this.calendar.scheduleGroupFor(record.userId, record.workDate),
+    ]);
+    const timezone = group?.timezone ?? calendar.settings?.timezone ?? policy?.timezone ?? 'Asia/Kolkata';
+    const scheduledStartMinute = group?.startMinute ?? calendar.settings?.startMinute ?? 600;
+    const scheduledEndMinute = group?.endMinute ?? calendar.settings?.endMinute ?? 1140;
+    const grace = policy?.lateGraceMinutes ?? 10;
+    const checkInMinute = this.clockMinutes(record.checkInAt, timezone);
+    const checkOutMinute = record.checkOutAt ? this.clockMinutes(record.checkOutAt, timezone) : null;
+    return {
+      ...this.toAttendance(record),
+      scheduledStartMinute,
+      scheduledEndMinute,
+      lateMinutes: Math.max(0, checkInMinute - (scheduledStartMinute + grace)),
+      overtimeMinutes: checkOutMinute === null ? 0 : Math.max(0, checkOutMinute - (scheduledEndMinute + grace)),
+      workedMinutes: record.checkOutAt ? Math.max(0, Math.round((record.checkOutAt.getTime() - record.checkInAt.getTime()) / 60_000)) : null,
+    };
+  }
+
+  async myTiming(userId: string, month: string): Promise<AttendanceTimingItem[]> {
+    const { start, end } = monthRange(month);
+    const rows = await this.db.select().from(attendanceRecords).where(and(eq(attendanceRecords.userId, userId), gte(attendanceRecords.workDate, start), lt(attendanceRecords.workDate, end))).orderBy(attendanceRecords.workDate);
+    return Promise.all(rows.map((row) => this.timingFor(row)));
+  }
+
+  async timingOverview(month: string, actor: { id: string; role: string }): Promise<AttendanceTimingOverview> {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new BadRequestException('month must use YYYY-MM');
+    const scope = await this.availabilityScope(actor);
+    if (scope === null) throw new ForbiddenException('Only administrators and workspace managers can view attendance timing');
+    const { start, end } = monthRange(month);
+    const rows = await this.db.select({ rec: attendanceRecords, u: users }).from(attendanceRecords).innerJoin(users, eq(users.id, attendanceRecords.userId))
+      .where(and(gte(attendanceRecords.workDate, start), lt(attendanceRecords.workDate, end), scope === 'ALL' ? undefined : inArray(attendanceRecords.userId, scope)))
+      .orderBy(desc(attendanceRecords.workDate), attendanceRecords.checkInAt);
+    const records = await Promise.all(rows.map(async ({ rec, u }) => ({ ...(await this.timingFor(rec)), user: { id: u.id, name: u.name, email: u.email, avatarKey: u.avatarKey } })));
+    return {
+      month,
+      records,
+      lateDays: records.filter((r) => r.lateMinutes > 0).length,
+      lateMinutes: records.reduce((sum, r) => sum + r.lateMinutes, 0),
+      overtimeDays: records.filter((r) => r.overtimeMinutes > 0).length,
+      overtimeMinutes: records.reduce((sum, r) => sum + r.overtimeMinutes, 0),
+    };
   }
 
   /* ── leave requests ── */
@@ -646,6 +739,14 @@ export class AttendanceService {
     }));
   }
 
+  /** Administrators see all corrections; workspace managers only see their managed members. */
+  async listCorrectionsForActor(actor: { id: string; role: string }, status?: string) {
+    const scope = await this.availabilityScope(actor);
+    if (scope === null) throw new ForbiddenException('Only administrators and workspace managers can manage corrections');
+    const corrections = await this.listCorrections(undefined, status);
+    return scope === 'ALL' ? corrections : corrections.filter((correction) => scope.includes(correction.user.id));
+  }
+
   async reviewCorrection(id: string, reviewerId: string, input: { status: 'APPROVED' | 'REJECTED'; note?: string }) {
     const [corr] = await this.db.select().from(attendanceCorrections).where(eq(attendanceCorrections.id, id)).limit(1);
     if (!corr) throw new NotFoundException('Correction request not found');
@@ -664,27 +765,41 @@ export class AttendanceService {
       .where(eq(attendanceCorrections.id, id));
 
     if (input.status === 'APPROVED') {
+      let attendance: AttendanceRow;
       if (corr.attendanceRecordId) {
-        await this.db
+        const [updated] = await this.db
           .update(attendanceRecords)
           .set({
             checkInAt: corr.proposedCheckInAt,
             checkOutAt: corr.proposedCheckOutAt,
             updatedAt: now,
           })
-          .where(eq(attendanceRecords.id, corr.attendanceRecordId));
+          .where(eq(attendanceRecords.id, corr.attendanceRecordId))
+          .returning();
+        attendance = updated!;
       } else {
-        await this.db.insert(attendanceRecords).values({
+        const [created] = await this.db.insert(attendanceRecords).values({
           userId: corr.userId,
           workDate: corr.workDate,
           checkInAt: corr.proposedCheckInAt,
           checkOutAt: corr.proposedCheckOutAt,
-        });
+        }).returning();
+        attendance = created!;
       }
+      await this.recordAutomaticHalfDayLeave(attendance);
     }
 
     const [updated] = await this.listCorrections(undefined, undefined);
     return updated;
+  }
+
+  async reviewCorrectionForActor(id: string, actor: { id: string; role: string }, input: { status: 'APPROVED' | 'REJECTED'; note?: string }) {
+    const scope = await this.availabilityScope(actor);
+    if (scope === null) throw new ForbiddenException('Only administrators and workspace managers can manage corrections');
+    const [correction] = await this.db.select({ userId: attendanceCorrections.userId }).from(attendanceCorrections).where(eq(attendanceCorrections.id, id)).limit(1);
+    if (!correction) throw new NotFoundException('Correction request not found');
+    if (scope !== 'ALL' && !scope.includes(correction.userId)) throw new ForbiddenException('You can only manage corrections for your workspace members');
+    return this.reviewCorrection(id, actor.id, input);
   }
 
   /**

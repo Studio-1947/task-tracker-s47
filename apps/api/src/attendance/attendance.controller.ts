@@ -143,6 +143,16 @@ export class AttendanceController {
     return this.attendance.teamLog(date);
   }
 
+  @Get('attendance/timing/me')
+  myTiming(@CurrentUser('id') userId: string, @Query('month') month?: string) {
+    return this.attendance.myTiming(userId, month ?? new Date().toISOString().slice(0, 7));
+  }
+
+  @Get('attendance/timing/overview')
+  timingOverview(@Query('month') month: string | undefined, @CurrentUser() user: RequestUser) {
+    return this.attendance.timingOverview(month ?? new Date().toISOString().slice(0, 7), user);
+  }
+
   /* ── leave requests ── */
   @Post('leaves')
   createLeave(
@@ -221,19 +231,17 @@ export class AttendanceController {
   }
 
   @Get('attendance/corrections')
-  @Roles(Role.ADMIN)
-  listCorrections(@Query('status') status?: string) {
-    return this.attendance.listCorrections(undefined, status);
+  listCorrections(@Query('status') status: string | undefined, @CurrentUser() user: RequestUser) {
+    return this.attendance.listCorrectionsForActor(user, status);
   }
 
   @Post('attendance/corrections/:id/review')
-  @Roles(Role.ADMIN)
   reviewCorrection(
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser('id') reviewerId: string,
+    @CurrentUser() user: RequestUser,
     @Body(new ZodValidationPipe(reviewCorrectionSchema)) body: ReviewCorrectionInput,
   ) {
-    return this.attendance.reviewCorrection(id, reviewerId, body);
+    return this.attendance.reviewCorrectionForActor(id, user, body);
   }
 
   @Get('admin/organisation-policy')
@@ -272,4 +280,3 @@ export class AttendanceController {
     return this.attendance.reopenPayrollStatement(id, actorId, body.note);
   }
 }
-

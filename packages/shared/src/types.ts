@@ -543,6 +543,8 @@ export interface AttendanceRecordItem {
   workDate: string;
   checkInAt: string;
   checkOutAt: string | null;
+  /** True when a check-in after 2:00 PM automatically recorded a half-day of Earned Leave. */
+  automaticHalfDayLeave: boolean;
   checkInLocation: GeoPoint | null;
   checkOutLocation: GeoPoint | null;
 }
@@ -550,6 +552,28 @@ export interface AttendanceRecordItem {
 /** Admin team-log row: an attendance record plus the member it belongs to. */
 export interface AttendanceWithUser extends AttendanceRecordItem {
   user: UserRef;
+}
+
+/** Attendance times evaluated against the person's scheduled start and end time. */
+export interface AttendanceTimingItem extends AttendanceRecordItem {
+  scheduledStartMinute: number;
+  scheduledEndMinute: number;
+  lateMinutes: number;
+  overtimeMinutes: number;
+  workedMinutes: number | null;
+}
+
+export interface AttendanceTimingWithUser extends AttendanceTimingItem {
+  user: UserRef;
+}
+
+export interface AttendanceTimingOverview {
+  month: string;
+  records: AttendanceTimingWithUser[];
+  lateDays: number;
+  lateMinutes: number;
+  overtimeDays: number;
+  overtimeMinutes: number;
 }
 
 /** Today's punch state for the check-in/out button. */

@@ -323,6 +323,20 @@
       "when": 1791380405662,
       "tag": "0045_outgoing_ultimatum",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1812400000000,
+      "tag": "0046_attendance_timing_grace",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1812500000000,
+      "tag": "0047_automatic_half_day_earned_leave",
+      "breakpoints": true
     }
   ]
 }

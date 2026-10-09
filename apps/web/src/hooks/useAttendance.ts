@@ -5,6 +5,8 @@ import type {
   AttendanceRecordItem,
   AttendanceToday,
   AttendanceWithUser,
+  AttendanceTimingItem,
+  AttendanceTimingOverview,
   CreateLeaveRequestInput,
   CreateLeaveTypeInput,
   LeaveBalance,
@@ -81,12 +83,29 @@ export function useTeamLog(date: string) {
   });
 }
 
+export function useMyAttendanceTiming(month: string) {
+  return useQuery({
+    queryKey: ['attendance', 'timing', 'me', month],
+    queryFn: () => http.get<AttendanceTimingItem[]>(`/attendance/timing/me?month=${month}`),
+  });
+}
+
+export function useAttendanceTimingOverview(month: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['attendance', 'timing', 'overview', month],
+    queryFn: () => http.get<AttendanceTimingOverview>(`/attendance/timing/overview?month=${month}`),
+    enabled,
+  });
+}
+
 export function useCheckIn() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (geo: AttendancePunchInput) => http.post<AttendanceRecordItem>('/attendance/check-in', geo),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['attendance'] });
+      qc.invalidateQueries({ queryKey: ['leaves'] });
+      qc.invalidateQueries({ queryKey: ['leave-types'] });
     },
   });
 }

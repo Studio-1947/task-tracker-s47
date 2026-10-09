@@ -126,7 +126,7 @@ export const organisationPolicySchema = z.object({
   casualLeaveMonthly: z.number().min(0).max(31).default(1),
   paidLeaveNames: z.array(z.string().trim().min(1).max(60)).default(['Earned Leave', 'Casual Leave', 'Sick Leave']),
   halfDayEnabled: z.boolean().default(true),
-  lateGraceMinutes: z.number().int().min(0).max(240).default(15),
+  lateGraceMinutes: z.number().int().min(0).max(240).default(10),
   maxConcurrentLeavePercent: z.number().int().min(1).max(100).default(100),
   unresolvedCorrectionTreatment: z.literal('EXCLUDE').default('EXCLUDE'),
   noReviewerDonePolicy: z.enum(['ALLOW', 'SMALL_ONLY', 'REQUIRE_REVIEWER']).default('ALLOW'),

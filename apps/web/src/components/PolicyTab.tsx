@@ -15,7 +15,7 @@ const FIELDS: Array<{ key: 'deadlineLeadMinutes' | 'reviewTargetMinutes' | 'upda
   { key: 'deadlineLeadMinutes', label: 'Deadline reminder lead (minutes)', hint: 'How long before a due date the owner and reviewer are reminded.', min: 0, max: 10080 },
   { key: 'reviewTargetMinutes', label: 'Review target (working minutes)', hint: 'A pending review older than this triggers a review-overdue reminder. 480 = one working day.', min: 1, max: 10080 },
   { key: 'updateThresholdMinutes', label: 'Update threshold (working minutes)', hint: 'An in-progress task with no progress update for this long triggers an update-overdue reminder. 960 = two working days; leave, blocked and awaiting-review time is excluded.', min: 1, max: 20160 },
-  { key: 'lateGraceMinutes', label: 'Late check-in grace (minutes)', hint: 'Check-ins within this many minutes of the start are not late.', min: 0, max: 240 },
+  { key: 'lateGraceMinutes', label: 'Check-in & overtime grace (minutes)', hint: 'Check-ins within this many minutes of the start are not late; overtime starts this many minutes after the scheduled end.', min: 0, max: 240 },
   { key: 'maxConcurrentLeavePercent', label: 'Most of a team on leave at once (%)', hint: '100 turns the staffing check off. Below that, approving leave that would exceed it needs an explained override.', min: 1, max: 100 },
   { key: 'simplifiedReviewMaxMinutes', label: 'Largest task that may skip review (minutes)', hint: 'Used only when the rule below is "Small tasks only".', min: 1, max: 1440 },
 ];
